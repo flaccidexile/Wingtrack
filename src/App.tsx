@@ -72,7 +72,7 @@ export default function App() {
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <p style={{ fontSize: 10, color: 'var(--sidebar-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '6px 8px 10px', fontFamily: 'DM Mono' }}>Operations</p>
+          <p style={{ fontSize: 10, color: 'var(--sidebar-muted)', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '6px 8px 10px', fontFamily: 'DM Mono', fontWeight: 600 }}>Operations</p>
           {NAV.map(({ id, label, icon: Icon }) => {
             const active = page === id
             return (
@@ -82,9 +82,9 @@ export default function App() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '9px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                  background: active ? 'rgba(196,122,46,0.15)' : 'transparent',
+                  background: active ? 'rgba(240,155,58,0.18)' : 'transparent',
                   color: active ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
-                  fontFamily: 'DM Sans', fontSize: 13, fontWeight: active ? 600 : 400,
+                  fontFamily: 'DM Sans', fontSize: 13, fontWeight: active ? 600 : 500,
                   transition: 'all 0.15s', textAlign: 'left', width: '100%',
                   borderLeft: active ? '2px solid var(--sidebar-active)' : '2px solid transparent',
                 }}

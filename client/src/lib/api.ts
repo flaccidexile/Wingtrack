@@ -7,8 +7,17 @@ const API_BASE = import.meta.env.VITE_API_URL ?? '/api'
  * Get the current Supabase access token for Express API auth.
  */
 async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
+  const { data: { session } } = await supabase.auth.getSession()
+  let token = session?.access_token
+
+  // If session is expired or expires within 60s, refresh it
+  if (session?.expires_at && session.expires_at * 1000 < Date.now() + 60000) {
+    const { data: refreshData } = await supabase.auth.refreshSession()
+    if (refreshData?.session?.access_token) {
+      token = refreshData.session.access_token
+    }
+  }
+
   if (!token) throw new Error('Not authenticated')
   return { Authorization: `Bearer ${token}` }
 }
