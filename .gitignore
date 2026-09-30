@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+dist/
+.cache/
+
+# Environment secrets — NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+client/dist/
+server/dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# pnpm
+pnpm-lock.yaml
+.pnpm-store/
+
+# Figma Make internals
+.figma/

@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+:root {
+  --background: #f5efe6;
+  --foreground: #1c1007;
+  --card: #fdfaf6;
+  --card-foreground: #1c1007;
+  --primary: #9b5e28;
+  --primary-foreground: #fdfaf6;
+  --secondary: #ecddd0;
+  --secondary-foreground: #4a2e12;
+  --muted: #e8ddd0;
+  --muted-foreground: #7a5c3e;
+  --accent: #c47a2e;
+  --accent-foreground: #fdfaf6;
+  --border: #ddd0c0;
+  --ring: #c47a2e;
+  --radius: 6px;
+  --sidebar: #1c0f06;
+  --sidebar-foreground: #e8d5bc;
+  --sidebar-muted: #8a6040;
+  --sidebar-active: #c47a2e;
+  --sidebar-hover: #2e1a0e;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Fraunces', serif;
+}
+
+code, .mono {
+  font-family: 'DM Mono', monospace;
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--primary); }
