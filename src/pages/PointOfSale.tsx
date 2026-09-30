@@ -99,36 +99,36 @@ export default function PointOfSale() {
         <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px' }}>
           {cart.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--sidebar-muted)' }}>
-              <span style={{ fontSize: 32, display: 'block', marginBottom: 10 }}>🛒</span>
-              <p style={{ fontSize: 12 }}>No items yet</p>
-              <p style={{ fontSize: 11, marginTop: 4 }}>Tap menu items to add</p>
+              <span style={{ fontSize: 32, display: 'block', marginBottom: 10, opacity: 0.85 }}>🛒</span>
+              <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--sidebar-foreground)' }}>No items yet</p>
+              <p style={{ fontSize: 11, marginTop: 4, color: 'var(--sidebar-muted)' }}>Tap menu items to add</p>
             </div>
           ) : cart.map(item => (
-            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
               <span style={{ fontSize: 18 }}>{item.emoji}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--sidebar-foreground)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
-                <p style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--sidebar-active)', marginTop: 1 }}>₱{(item.price * item.qty).toLocaleString()}</p>
+                <p style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--sidebar-active)', marginTop: 1, fontWeight: 500 }}>₱{(item.price * item.qty).toLocaleString()}</p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <button onClick={() => updateQty(item.id, -1)} style={{ width: 22, height: 22, borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'var(--sidebar-foreground)', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                <span style={{ fontSize: 12, fontFamily: 'DM Mono', color: 'var(--sidebar-foreground)', minWidth: 14, textAlign: 'center' }}>{item.qty}</span>
-                <button onClick={() => updateQty(item.id, 1)} style={{ width: 22, height: 22, borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'var(--sidebar-foreground)', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                <button onClick={() => updateQty(item.id, -1)} style={{ width: 22, height: 22, borderRadius: 4, border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.05)', color: 'var(--sidebar-foreground)', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                <span style={{ fontSize: 12, fontFamily: 'DM Mono', color: 'var(--sidebar-foreground)', minWidth: 14, textAlign: 'center', fontWeight: 600 }}>{item.qty}</span>
+                <button onClick={() => updateQty(item.id, 1)} style={{ width: 22, height: 22, borderRadius: 4, border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.05)', color: 'var(--sidebar-foreground)', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
               </div>
             </div>
           ))}
         </div>
 
         {/* Totals + checkout */}
-        <div style={{ padding: '16px 20px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ padding: '16px 20px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           <div style={{ marginBottom: 14 }}>
             {[['Subtotal', `₱${subtotal.toLocaleString()}`], ['VAT (12%)', `₱${tax.toLocaleString()}`]].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                 <span style={{ fontSize: 12, color: 'var(--sidebar-muted)' }}>{k}</span>
-                <span style={{ fontSize: 12, fontFamily: 'DM Mono', color: 'var(--sidebar-foreground)' }}>{v}</span>
+                <span style={{ fontSize: 12, fontFamily: 'DM Mono', color: 'var(--sidebar-foreground)', fontWeight: 500 }}>{v}</span>
               </div>
             ))}
-            <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '10px 0' }} />
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '10px 0' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--sidebar-foreground)', fontFamily: 'Fraunces' }}>Total</span>
               <span style={{ fontSize: 16, fontFamily: 'DM Mono', fontWeight: 700, color: 'var(--sidebar-active)' }}>₱{total.toLocaleString()}</span>
@@ -140,8 +140,8 @@ export default function PointOfSale() {
             {['Cash', 'GCash', 'Card'].map(m => (
               <button key={m} onClick={() => setMethod(m)} style={{
                 flex: 1, padding: '7px 4px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                border: `1px solid ${method === m ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.1)'}`,
-                background: method === m ? 'rgba(196,122,46,0.2)' : 'transparent',
+                border: `1px solid ${method === m ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.18)'}`,
+                background: method === m ? 'rgba(240,155,58,0.22)' : 'rgba(255,255,255,0.04)',
                 color: method === m ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
               }}>{m}</button>
             ))}
@@ -152,15 +152,15 @@ export default function PointOfSale() {
             onClick={() => setCart([])}
             style={{
               width: '100%', padding: '12px', borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: cart.length ? 'pointer' : 'not-allowed',
-              background: cart.length ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.05)',
-              color: cart.length ? '#1c0f06' : 'rgba(255,255,255,0.2)',
+              background: cart.length ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.08)',
+              color: cart.length ? '#1c0f06' : 'rgba(255,255,255,0.45)',
               border: 'none', fontFamily: 'Fraunces', transition: 'all 0.15s',
             }}
           >
             {cart.length ? `Charge ₱${total.toLocaleString()}` : 'Add items to continue'}
           </button>
           {cart.length > 0 && (
-            <button onClick={() => setCart([])} style={{ width: '100%', marginTop: 8, padding: '8px', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, fontSize: 12, color: 'var(--sidebar-muted)', cursor: 'pointer' }}>
+            <button onClick={() => setCart([])} style={{ width: '100%', marginTop: 8, padding: '8px', background: 'transparent', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 6, fontSize: 12, color: 'var(--sidebar-muted)', cursor: 'pointer' }}>
               Void Order
             </button>
           )}

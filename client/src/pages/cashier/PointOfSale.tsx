@@ -154,8 +154,8 @@ export default function PointOfSale() {
             <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 600, color: 'var(--sidebar-foreground)' }}>Current Order</h2>
             <p style={{ fontSize: 13, color: 'var(--sidebar-muted)', marginTop: 2, fontFamily: 'DM Mono' }}>{cart.length} item{cart.length !== 1 ? 's' : ''}</p>
           </div>
-          <div style={{ textAlign: 'right', background: 'rgba(255,255,255,0.05)', padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)' }}>
-            <span style={{ fontSize: 11, color: 'var(--sidebar-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', fontFamily: 'DM Mono' }}>Cashier</span>
+          <div style={{ textAlign: 'right', background: 'rgba(255,255,255,0.08)', padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.14)' }}>
+            <span style={{ fontSize: 11, color: 'var(--sidebar-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', fontFamily: 'DM Mono', fontWeight: 500 }}>Cashier</span>
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--sidebar-active)' }}>{profile?.full_name ?? 'Staff'}</span>
           </div>
         </div>
@@ -163,32 +163,32 @@ export default function PointOfSale() {
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 18px' }}>
           {cart.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--sidebar-muted)' }}>
-              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', margin: '0 auto 14px', opacity: 0.4 }}>
+              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', margin: '0 auto 14px', opacity: 0.75 }}>
                 <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
                 <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
               </svg>
-              <p style={{ fontSize: 14 }}>No items yet</p>
-              <p style={{ fontSize: 12, marginTop: 5, opacity: 0.6 }}>Tap menu items to add</p>
+              <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--sidebar-foreground)' }}>No items yet</p>
+              <p style={{ fontSize: 13, marginTop: 5, color: 'var(--sidebar-muted)' }}>Tap menu items to add</p>
             </div>
           ) : cart.map(item => (
-            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--sidebar-foreground)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
-                <p style={{ fontSize: 14, fontFamily: 'DM Mono', color: 'var(--sidebar-active)', marginTop: 3 }}>&#8369;{(item.price * item.qty).toLocaleString()}</p>
+                <p style={{ fontSize: 14, fontFamily: 'DM Mono', color: 'var(--sidebar-active)', marginTop: 3, fontWeight: 500 }}>&#8369;{(item.price * item.qty).toLocaleString()}</p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button id={`cart-dec-${item.id}`} onClick={() => updateQty(item.id, -1)} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'var(--sidebar-foreground)', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
-                <span style={{ fontSize: 14, fontFamily: 'DM Mono', color: 'var(--sidebar-foreground)', minWidth: 22, textAlign: 'center' }}>{item.qty}</span>
-                <button id={`cart-inc-${item.id}`} onClick={() => updateQty(item.id, 1)} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'var(--sidebar-foreground)', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                <button id={`cart-dec-${item.id}`} onClick={() => updateQty(item.id, -1)} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.05)', color: 'var(--sidebar-foreground)', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
+                <span style={{ fontSize: 14, fontFamily: 'DM Mono', color: 'var(--sidebar-foreground)', minWidth: 22, textAlign: 'center', fontWeight: 600 }}>{item.qty}</span>
+                <button id={`cart-inc-${item.id}`} onClick={() => updateQty(item.id, 1)} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.05)', color: 'var(--sidebar-foreground)', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
               </div>
             </div>
           ))}
         </div>
 
         {/* Totals & Checkout */}
-        <div style={{ padding: '14px 20px 18px', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+        <div style={{ padding: '14px 20px 18px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
           {error && (
-            <div style={{ background: 'rgba(185,28,28,0.2)', border: '1px solid rgba(185,28,28,0.4)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#fca5a5', marginBottom: 10 }}>
+            <div style={{ background: 'rgba(185,28,28,0.25)', border: '1px solid rgba(185,28,28,0.5)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#fca5a5', marginBottom: 10 }}>
               {error}
             </div>
           )}
@@ -197,10 +197,10 @@ export default function PointOfSale() {
             {[['Subtotal', `\u20B1${subtotal.toLocaleString()}`], ['VAT (12%)', `\u20B1${vat.toLocaleString()}`]].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
                 <span style={{ fontSize: 13, color: 'var(--sidebar-muted)' }}>{k}</span>
-                <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--sidebar-foreground)' }}>{v}</span>
+                <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--sidebar-foreground)', fontWeight: 500 }}>{v}</span>
               </div>
             ))}
-            <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '10px 0' }} />
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '10px 0' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--sidebar-foreground)', fontFamily: 'Fraunces' }}>Total</span>
               <span style={{ fontSize: 19, fontFamily: 'DM Mono', fontWeight: 700, color: 'var(--sidebar-active)' }}>&#8369;{total.toLocaleString()}</span>
@@ -209,6 +209,7 @@ export default function PointOfSale() {
 
           {/* Notes */}
           <textarea
+            className="sidebar-textarea"
             placeholder="Order notes (optional)..."
             value={notes}
             onChange={e => setNotes(e.target.value)}
@@ -216,8 +217,8 @@ export default function PointOfSale() {
             style={{
               width: '100%', resize: 'none', marginBottom: 12,
               padding: '10px 12px', borderRadius: 6, height: 40,
-              border: '1px solid rgba(255,255,255,0.1)',
-              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.15)',
+              background: 'rgba(255,255,255,0.06)',
               color: 'var(--sidebar-foreground)',
               fontSize: 13, fontFamily: 'DM Sans', outline: 'none',
             }}
@@ -232,8 +233,8 @@ export default function PointOfSale() {
                 onClick={() => setMethod(m)}
                 style={{
                   flex: 1, padding: '9px 4px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  border: `1px solid ${method === m ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.1)'}`,
-                  background: method === m ? 'rgba(196,122,46,0.2)' : 'transparent',
+                  border: `1px solid ${method === m ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.18)'}`,
+                  background: method === m ? 'rgba(240,155,58,0.22)' : 'rgba(255,255,255,0.04)',
                   color: method === m ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
                   textTransform: 'capitalize',
                 }}
@@ -250,8 +251,8 @@ export default function PointOfSale() {
             style={{
               width: '100%', padding: '14px', borderRadius: 8, fontSize: 16, fontWeight: 700,
               cursor: cart.length && !checkoutLoading ? 'pointer' : 'not-allowed',
-              background: cart.length ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.05)',
-              color: cart.length ? '#1c0f06' : 'rgba(255,255,255,0.2)',
+              background: cart.length ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.08)',
+              color: cart.length ? '#1c0f06' : 'rgba(255,255,255,0.45)',
               border: 'none', fontFamily: 'Fraunces', transition: 'all 0.15s',
             }}
           >
@@ -266,7 +267,9 @@ export default function PointOfSale() {
             <button
               id="btn-void"
               onClick={handleVoid}
-              style={{ width: '100%', marginTop: 8, padding: '9px', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, fontSize: 13, color: 'var(--sidebar-muted)', cursor: 'pointer' }}
+              style={{ width: '100%', marginTop: 8, padding: '9px', background: 'transparent', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 6, fontSize: 13, color: 'var(--sidebar-muted)', cursor: 'pointer' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#fca5a5'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(252,165,165,0.3)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-muted)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.14)' }}
             >
               Void Order
             </button>

@@ -124,7 +124,7 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
 
       {/* Nav */}
       <nav style={{ flex: 1, minHeight: 0, padding: '18px 14px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
-        <p style={{ fontSize: 12, color: 'var(--sidebar-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '4px 12px 14px', fontFamily: 'DM Mono' }}>
+        <p style={{ fontSize: 12, color: 'var(--sidebar-muted)', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '4px 12px 14px', fontFamily: 'DM Mono', fontWeight: 600 }}>
           Operations
         </p>
         {visibleNav.map(({ id, label, icon: Icon }) => {
@@ -137,9 +137,9 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
               style={{
                 display: 'flex', alignItems: 'center', gap: 14,
                 padding: '13px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: active ? 'rgba(196,122,46,0.15)' : 'transparent',
+                background: active ? 'rgba(240,155,58,0.18)' : 'transparent',
                 color: active ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
-                fontFamily: 'DM Sans', fontSize: 16, fontWeight: active ? 600 : 400,
+                fontFamily: 'DM Sans', fontSize: 16, fontWeight: active ? 600 : 500,
                 transition: 'all 0.15s', textAlign: 'left', width: '100%',
                 borderLeft: active ? '3px solid var(--sidebar-active)' : '3px solid transparent',
               }}
@@ -164,7 +164,7 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
       </nav>
 
       {/* User + Sign Out */}
-      <div style={{ padding: '18px 14px', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+      <div style={{ padding: '18px 14px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 12px', borderRadius: 8 }}>
           <div
             style={{
@@ -180,7 +180,7 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
             <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--sidebar-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {profile?.full_name ?? 'Staff'}
             </p>
-            <p style={{ fontSize: 12, color: 'var(--sidebar-muted)' }}>
+            <p style={{ fontSize: 12, color: 'var(--sidebar-muted)', fontWeight: 500 }}>
               {role ? roleLabel[role] : ''}
             </p>
           </div>
@@ -190,17 +190,19 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
           onClick={signOut}
           style={{
             width: '100%', marginTop: 10, padding: '11px', background: 'transparent',
-            border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
+            border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8,
             fontSize: 14, color: 'var(--sidebar-muted)', cursor: 'pointer',
-            fontFamily: 'DM Sans', transition: 'all 0.15s',
+            fontFamily: 'DM Sans', fontWeight: 500, transition: 'all 0.15s',
           }}
           onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.background = 'rgba(185,28,28,0.12)'
+            (e.currentTarget as HTMLElement).style.background = 'rgba(185,28,28,0.16)'
             ;(e.currentTarget as HTMLElement).style.color = '#fca5a5'
+            ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(252,165,165,0.3)'
           }}
           onMouseLeave={e => {
             (e.currentTarget as HTMLElement).style.background = 'transparent'
             ;(e.currentTarget as HTMLElement).style.color = 'var(--sidebar-muted)'
+            ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.14)'
           }}
         >
           Sign Out
