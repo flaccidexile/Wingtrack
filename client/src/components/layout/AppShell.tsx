@@ -25,8 +25,8 @@ export default function AppShell() {
   return (
     <div style={{ display: 'flex', height: '100dvh', overflow: 'hidden' }}>
       <Sidebar page={page} setPage={setPage} />
-      <main style={{ flex: 1, overflow: 'auto', height: '100dvh', background: 'var(--background)' }}>
-        <div className="fade-in" key={page}>
+      <main style={{ flex: 1, overflow: page === 'pos' ? 'hidden' : 'auto', height: '100dvh', background: 'var(--background)' }}>
+        <div className="fade-in" key={page} style={{ height: '100%', minHeight: '100%', display: page === 'pos' ? 'flex' : 'block', flexDirection: 'column' }}>
           {page === 'dashboard'  && <Dashboard />}
           {page === 'pos'        && <PointOfSale />}
           {page === 'orders'     && <OrdersList />}

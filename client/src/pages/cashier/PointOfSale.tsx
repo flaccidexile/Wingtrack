@@ -130,9 +130,9 @@ export default function PointOfSale() {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 420px', height: '100%', maxHeight: '100dvh', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', width: '100%', height: '100%', minHeight: '100dvh', maxHeight: '100dvh', overflow: 'hidden' }}>
       {/* Menu Panel */}
-      <div style={{ padding: '28px 32px', overflow: 'auto', height: '100%', minHeight: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, padding: '28px 32px', overflowY: 'auto', height: '100%' }}>
         <div style={{ marginBottom: 22 }}>
           <h1 style={{ fontFamily: 'Fraunces', fontSize: 30, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Point of Sale</h1>
           <p style={{ fontSize: 15, color: 'var(--muted-foreground)' }}>
@@ -204,7 +204,22 @@ export default function PointOfSale() {
       </div>
 
       {/* Cart Panel */}
-      <div style={{ background: 'var(--sidebar)', display: 'flex', flexDirection: 'column', height: '100%', maxHeight: '100dvh', borderLeft: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+      <div
+        style={{
+          width: 420,
+          minWidth: 420,
+          maxWidth: 420,
+          flexShrink: 0,
+          background: 'var(--sidebar)',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          minHeight: '100%',
+          maxHeight: '100dvh',
+          borderLeft: '1px solid rgba(255,255,255,0.06)',
+          overflow: 'hidden',
+        }}
+      >
         <div style={{ padding: '18px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
             <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 600, color: 'var(--sidebar-foreground)' }}>Current Order</h2>
