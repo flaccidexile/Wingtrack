@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { apiCheckout } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
-import type { Product, ProductCategory, CartItem } from '@/types'
+import type { Product, ProductCategory, CartItem, Order } from '@/types'
+import ReceiptModal from '@/components/receipt/ReceiptModal'
 
 const CATS = ['All', 'Wings', 'Combos', 'Sides', 'Drinks']
 
@@ -10,12 +12,15 @@ export default function PointOfSale() {
   const { profile } = useAuth()
   const [products, setProducts] = useState<Product[]>([])
   const [cat, setCat] = useState('All')
+  const [search, setSearch] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
   const [method, setMethod] = useState<'cash' | 'gcash' | 'card'>('cash')
   const [notes, setNotes] = useState('')
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutSuccess, setCheckoutSuccess] = useState(false)
   const [orderNum, setOrderNum] = useState<number | null>(null)
+  const [completedOrder, setCompletedOrder] = useState<Order | null>(null)
+  const [showReceipt, setShowReceipt] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -32,9 +37,9 @@ export default function PointOfSale() {
 
   useEffect(() => { fetchProducts() }, [fetchProducts])
 
-  const filtered = cat === 'All'
-    ? products
-    : products.filter(p => (p.category as unknown as ProductCategory)?.name === cat)
+  const filtered = products
+    .filter(p => cat === 'All' || (p.category as unknown as ProductCategory)?.name === cat)
+    .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
 
   const addItem = (item: Product) => {
     setCart(prev => {
@@ -49,20 +54,42 @@ export default function PointOfSale() {
   }
 
   const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0)
-  const vat      = Math.round(subtotal * 0.12)
-  const total    = subtotal + vat
+  const vat      = Math.round(subtotal * 0.12 * 100) / 100
+  const total    = Math.round((subtotal + vat) * 100) / 100
 
   async function handleCheckout() {
     if (cart.length === 0 || !profile) return
     setCheckoutLoading(true)
     setError(null)
+    const currentCart = [...cart]
     try {
       const result = await apiCheckout({
-        items: cart.map(c => ({ product_id: c.id, quantity: c.qty })),
+        items: currentCart.map(c => ({ product_id: c.id, quantity: c.qty })),
         payment_method: method,
         notes,
       })
       setOrderNum(result.order_number)
+      setCompletedOrder({
+        id: result.id,
+        order_number: result.order_number,
+        cashier_id: profile.id,
+        status: 'completed',
+        payment_method: method,
+        subtotal,
+        vat_amount: vat,
+        total_amount: total,
+        notes,
+        created_at: new Date().toISOString(),
+        order_items: currentCart.map(c => ({
+          id: c.id,
+          order_id: result.id,
+          product_id: c.id,
+          product_name: c.name,
+          unit_price: c.price,
+          quantity: c.qty,
+          line_total: c.price * c.qty,
+        })),
+      })
       setCheckoutSuccess(true)
       setCart([])
       setNotes('')
@@ -81,6 +108,8 @@ export default function PointOfSale() {
   function dismissSuccess() {
     setCheckoutSuccess(false)
     setOrderNum(null)
+    setCompletedOrder(null)
+    setShowReceipt(false)
   }
 
   return (
@@ -94,23 +123,33 @@ export default function PointOfSale() {
           </p>
         </div>
 
-        {/* Category tabs */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 22, flexWrap: 'wrap' }}>
-          {CATS.map(c => (
-            <button
-              key={c}
-              id={`pos-cat-${c.toLowerCase()}`}
-              onClick={() => setCat(c)}
-              style={{
-                padding: '9px 20px', borderRadius: 24, fontSize: 14, fontWeight: 500, cursor: 'pointer',
-                border: '1px solid var(--border)', transition: 'all 0.15s',
-                background: cat === c ? 'var(--primary)' : 'var(--card)',
-                color: cat === c ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
-              }}
-            >
-              {c}
-            </button>
-          ))}
+        {/* Search & Category filter */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 22, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            id="pos-search"
+            className="input"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search products..."
+            style={{ width: 220, padding: '9px 14px', fontSize: 13 }}
+          />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {CATS.map(c => (
+              <button
+                key={c}
+                id={`pos-cat-${c.toLowerCase()}`}
+                onClick={() => setCat(c)}
+                style={{
+                  padding: '8px 18px', borderRadius: 24, fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                  border: '1px solid var(--border)', transition: 'all 0.15s',
+                  background: cat === c ? 'var(--primary)' : 'var(--card)',
+                  color: cat === c ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                }}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading ? (
@@ -277,10 +316,26 @@ export default function PointOfSale() {
         </div>
       </div>
 
-      {/* Success Modal */}
-      {checkoutSuccess && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div className="card fade-in" style={{ padding: '36px 32px', maxWidth: 380, textAlign: 'center' }}>
+      {/* Success Modal — rendered via portal to escape transform containing block */}
+      {checkoutSuccess && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) dismissSuccess() }}
+        >
+          <div className="card fade-in" style={{ padding: '36px 32px', maxWidth: 400, width: '90%', textAlign: 'center', boxShadow: '0 25px 60px rgba(0,0,0,0.3)' }}>
             <div style={{ width: 58, height: 58, borderRadius: '50%', background: '#e8f5e9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12"/>
@@ -288,13 +343,39 @@ export default function PointOfSale() {
             </div>
             <h2 style={{ fontFamily: 'Fraunces', fontSize: 22, fontWeight: 700, color: 'var(--foreground)', marginBottom: 8 }}>Payment Received</h2>
             <p style={{ fontSize: 14, color: 'var(--muted-foreground)', marginBottom: 4 }}>Order #{orderNum} completed</p>
-            <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 24 }}>Inventory has been updated automatically.</p>
-            <button id="btn-new-order" className="btn-primary" onClick={dismissSuccess} style={{ width: '100%', padding: '13px', fontSize: 15 }}>
-              New Order
-            </button>
+            <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 22 }}>Inventory has been updated automatically.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button
+                id="btn-pos-print-receipt"
+                onClick={() => setShowReceipt(true)}
+                style={{
+                  width: '100%', padding: '12px', fontSize: 14, fontWeight: 600,
+                  borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)',
+                  color: 'var(--foreground)', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 6 2 18 2 18 9"/>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                  <rect x="6" y="14" width="12" height="8"/>
+                </svg>
+                View / Print Receipt
+              </button>
+              <button id="btn-new-order" className="btn-primary" onClick={dismissSuccess} style={{ width: '100%', padding: '13px', fontSize: 15 }}>
+                New Order
+              </button>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Printable Receipt Modal */}
+      {showReceipt && completedOrder && (
+        <ReceiptModal order={completedOrder} onClose={() => setShowReceipt(false)} />
       )}
     </div>
   )
 }
+

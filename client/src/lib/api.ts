@@ -96,3 +96,111 @@ export async function apiDeactivateStaff(staffId: string) {
   }
   return res.json()
 }
+
+/**
+ * PATCH /api/staff/:id/reactivate (Admin only)
+ */
+export async function apiReactivateStaff(staffId: string) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/staff/${staffId}/reactivate`, {
+    method: 'PATCH',
+    headers,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to reactivate staff' }))
+    throw new Error(err.message ?? 'Failed to reactivate staff')
+  }
+  return res.json()
+}
+
+/**
+ * PATCH /api/staff/update-password (Authenticated users)
+ */
+export async function apiUpdatePassword(password: string) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/staff/update-password`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ password }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to update password' }))
+    throw new Error(err.message ?? 'Failed to update password')
+  }
+  return res.json()
+}
+
+/**
+ * GET /api/orders (Cashier or Admin)
+ */
+export async function apiGetOrders() {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/orders`, {
+    method: 'GET',
+    headers,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to fetch orders' }))
+    throw new Error(err.message ?? 'Failed to fetch orders')
+  }
+  return res.json()
+}
+
+/**
+ * POST /api/orders/:id/void (Cashier or Admin)
+ */
+export async function apiVoidOrder(orderId: string, reason?: string) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/orders/${orderId}/void`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ reason }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to void order' }))
+    throw new Error(err.message ?? 'Failed to void order')
+  }
+  return res.json()
+}
+
+/**
+ * GET /api/inventory/movements (Admin or Inventory Personnel)
+ */
+export async function apiGetInventoryMovements() {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/inventory/movements`, {
+    method: 'GET',
+    headers,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to fetch inventory movements' }))
+    throw new Error(err.message ?? 'Failed to fetch inventory movements')
+  }
+  return res.json()
+}
+
+/**
+ * POST /api/inventory (Admin or Inventory Personnel)
+ */
+export async function apiCreateInventoryItem(payload: {
+  name: string
+  category: string
+  unit: string
+  stock_qty?: number
+  min_stock_level?: number
+  unit_cost?: number
+  supplier?: string
+}) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/inventory`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to create inventory item' }))
+    throw new Error(err.message ?? 'Failed to create inventory item')
+  }
+  return res.json()
+}
+

@@ -33,15 +33,55 @@ export default function Analytics() {
 
       const orders: Order[] = data ?? []
 
-      // Monthly aggregation
-      const monthMap: Record<string, { revenue: number; orders: number }> = {}
-      for (const o of orders) {
-        const key = new Date(o.created_at).toLocaleDateString('en-PH', { month: 'short', year: '2-digit' })
-        if (!monthMap[key]) monthMap[key] = { revenue: 0, orders: 0 }
-        monthMap[key].revenue += Number(o.total_amount)
-        monthMap[key].orders += 1
+      // Chronological aggregation based on period
+      if (period === 'Last 30 Days') {
+        const dayMap = new Map<string, { label: string; revenue: number; orders: number; timestamp: number }>()
+        for (let i = 29; i >= 0; i--) {
+          const d = new Date(now.getTime() - i * 86400000)
+          const key = d.toISOString().split('T')[0]
+          const label = d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
+          dayMap.set(key, { label, revenue: 0, orders: 0, timestamp: d.getTime() })
+        }
+        for (const o of orders) {
+          const key = new Date(o.created_at).toISOString().split('T')[0]
+          const existing = dayMap.get(key)
+          if (existing) {
+            existing.revenue += Number(o.total_amount)
+            existing.orders += 1
+          }
+        }
+        setMonthlyData(
+          Array.from(dayMap.values())
+            .sort((a, b) => a.timestamp - b.timestamp)
+            .map(item => ({ month: item.label, revenue: Math.round(item.revenue * 100) / 100, orders: item.orders }))
+        )
+      } else {
+        const monthMap = new Map<string, { label: string; revenue: number; orders: number; timestamp: number }>()
+        const monthsCount = period === 'Last 6 Months' ? 6 : 12
+        for (let i = monthsCount - 1; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+          const label = d.toLocaleDateString('en-PH', { month: 'short', year: '2-digit' })
+          monthMap.set(key, { label, revenue: 0, orders: 0, timestamp: d.getTime() })
+        }
+        for (const o of orders) {
+          const d = new Date(o.created_at)
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+          const existing = monthMap.get(key)
+          if (existing) {
+            existing.revenue += Number(o.total_amount)
+            existing.orders += 1
+          } else {
+            const label = d.toLocaleDateString('en-PH', { month: 'short', year: '2-digit' })
+            monthMap.set(key, { label, revenue: Number(o.total_amount), orders: 1, timestamp: d.getTime() })
+          }
+        }
+        setMonthlyData(
+          Array.from(monthMap.values())
+            .sort((a, b) => a.timestamp - b.timestamp)
+            .map(item => ({ month: item.label, revenue: Math.round(item.revenue * 100) / 100, orders: item.orders }))
+        )
       }
-      setMonthlyData(Object.entries(monthMap).map(([month, v]) => ({ month, ...v })))
 
       // Category breakdown
       const catMap: Record<string, number> = {}

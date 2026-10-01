@@ -1,26 +1,26 @@
 import { useState } from 'react'
 
 const MENU = [
-  { id: 1, name: 'Classic Buffalo Wings', price: 199, cat: 'Wings', emoji: '🍗' },
-  { id: 2, name: 'Honey Garlic Wings', price: 199, cat: 'Wings', emoji: '🍯' },
-  { id: 3, name: 'Spicy Sriracha Wings', price: 199, cat: 'Wings', emoji: '🌶️' },
-  { id: 4, name: 'BBQ Smokey Wings', price: 199, cat: 'Wings', emoji: '🔥' },
-  { id: 5, name: 'Lemon Pepper Wings', price: 199, cat: 'Wings', emoji: '🍋' },
-  { id: 6, name: 'BBQ Combo Platter', price: 299, cat: 'Combos', emoji: '🍽️' },
-  { id: 7, name: 'Party Bucket (20pcs)', price: 599, cat: 'Combos', emoji: '🪣' },
-  { id: 8, name: 'Family Feast Set', price: 749, cat: 'Combos', emoji: '👨‍👩‍👧' },
-  { id: 9, name: 'Loaded Fries', price: 80, cat: 'Sides', emoji: '🍟' },
-  { id: 10, name: 'Coleslaw', price: 55, cat: 'Sides', emoji: '🥗' },
-  { id: 11, name: 'Garlic Rice', price: 45, cat: 'Sides', emoji: '🍚' },
-  { id: 12, name: 'Corn on the Cob', price: 60, cat: 'Sides', emoji: '🌽' },
-  { id: 13, name: 'Iced Tea', price: 45, cat: 'Drinks', emoji: '🧋' },
-  { id: 14, name: 'Bottomless Soda', price: 65, cat: 'Drinks', emoji: '🥤' },
-  { id: 15, name: 'Mineral Water', price: 30, cat: 'Drinks', emoji: '💧' },
+  { id: 1, name: 'Classic Buffalo Wings', price: 199, cat: 'Wings' },
+  { id: 2, name: 'Honey Garlic Wings', price: 199, cat: 'Wings' },
+  { id: 3, name: 'Spicy Sriracha Wings', price: 199, cat: 'Wings' },
+  { id: 4, name: 'BBQ Smokey Wings', price: 199, cat: 'Wings' },
+  { id: 5, name: 'Lemon Pepper Wings', price: 199, cat: 'Wings' },
+  { id: 6, name: 'BBQ Combo Platter', price: 299, cat: 'Combos' },
+  { id: 7, name: 'Party Bucket (20pcs)', price: 599, cat: 'Combos' },
+  { id: 8, name: 'Family Feast Set', price: 749, cat: 'Combos' },
+  { id: 9, name: 'Loaded Fries', price: 80, cat: 'Sides' },
+  { id: 10, name: 'Coleslaw', price: 55, cat: 'Sides' },
+  { id: 11, name: 'Garlic Rice', price: 45, cat: 'Sides' },
+  { id: 12, name: 'Corn on the Cob', price: 60, cat: 'Sides' },
+  { id: 13, name: 'Iced Tea', price: 45, cat: 'Drinks' },
+  { id: 14, name: 'Bottomless Soda', price: 65, cat: 'Drinks' },
+  { id: 15, name: 'Mineral Water', price: 30, cat: 'Drinks' },
 ]
 
 const CATS = ['All', 'Wings', 'Combos', 'Sides', 'Drinks']
 
-type CartItem = { id: number; name: string; price: number; emoji: string; qty: number }
+type CartItem = { id: number; name: string; price: number; cat: string; qty: number }
 
 export default function PointOfSale() {
   const [cat, setCat] = useState('All')
@@ -77,7 +77,7 @@ export default function PointOfSale() {
                 borderRadius: 8, padding: '14px 12px', cursor: 'pointer', textAlign: 'left',
                 transition: 'all 0.15s',
               }}>
-                <span style={{ fontSize: 24, display: 'block', marginBottom: 8 }}>{item.emoji}</span>
+                <span style={{ fontSize: 10, color: 'var(--muted-foreground)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'DM Mono' }}>{item.cat}</span>
                 <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground)', lineHeight: 1.3, marginBottom: 6 }}>{item.name}</p>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 13, fontFamily: 'DM Mono', fontWeight: 700, color: 'var(--primary)' }}>₱{item.price}</span>
@@ -99,13 +99,16 @@ export default function PointOfSale() {
         <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px' }}>
           {cart.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--sidebar-muted)' }}>
-              <span style={{ fontSize: 32, display: 'block', marginBottom: 10, opacity: 0.85 }}>🛒</span>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 10px', display: 'block', opacity: 0.7 }}>
+                <circle cx="9" cy="21" r="1"/>
+                <circle cx="20" cy="21" r="1"/>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+              </svg>
               <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--sidebar-foreground)' }}>No items yet</p>
               <p style={{ fontSize: 11, marginTop: 4, color: 'var(--sidebar-muted)' }}>Tap menu items to add</p>
             </div>
           ) : cart.map(item => (
             <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-              <span style={{ fontSize: 18 }}>{item.emoji}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--sidebar-foreground)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
                 <p style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--sidebar-active)', marginTop: 1, fontWeight: 500 }}>₱{(item.price * item.qty).toLocaleString()}</p>

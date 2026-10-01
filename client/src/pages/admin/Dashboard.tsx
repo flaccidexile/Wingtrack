@@ -9,8 +9,6 @@ import type { Order } from '@/types'
 interface DailyStat { day: string; revenue: number; orders: number }
 interface TopItem { name: string; qty: number; revenue: number }
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
 function KpiCard({ label, value, sub, color, trend }: { label: string; value: string; sub: string; color: string; trend: 'up' | 'down' | 'warn' }) {
   const arrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '!'
   const subColor = trend === 'up' ? '#4a7c4e' : trend === 'down' ? '#9b3a3a' : '#b84040'
@@ -78,15 +76,61 @@ export default function Dashboard() {
       const orders: Order[] = ordersRes.data ?? []
       setLowStockCount((inventoryRes.data ?? []).length)
 
-      // Build daily stats
-      const statsMap: Record<string, { revenue: number; orders: number }> = {}
-      for (const o of orders) {
-        const d = DAYS[new Date(o.created_at).getDay()]
-        if (!statsMap[d]) statsMap[d] = { revenue: 0, orders: 0 }
-        statsMap[d].revenue += Number(o.total_amount)
-        statsMap[d].orders += 1
+      // Build chronological stats
+      const statsMap = new Map<string, { label: string; revenue: number; orders: number; timestamp: number }>()
+
+      if (period === 'today') {
+        for (let h = 8; h <= 22; h += 2) {
+          const hourLabel = `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'AM' : 'PM'}`
+          const key = String(h).padStart(2, '0')
+          statsMap.set(key, { label: hourLabel, revenue: 0, orders: 0, timestamp: h })
+        }
+        for (const o of orders) {
+          const d = new Date(o.created_at)
+          const h = d.getHours()
+          const bucketHour = Math.floor(h / 2) * 2
+          const key = String(bucketHour).padStart(2, '0')
+          const existing = statsMap.get(key)
+          if (existing) {
+            existing.revenue += Number(o.total_amount)
+            existing.orders += 1
+          } else {
+            const hourLabel = `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'AM' : 'PM'}`
+            statsMap.set(String(h).padStart(2, '0'), { label: hourLabel, revenue: Number(o.total_amount), orders: 1, timestamp: h })
+          }
+        }
+      } else {
+        const numDays = period === 'week' ? 7 : 30
+        for (let i = numDays - 1; i >= 0; i--) {
+          const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
+          const dateKey = d.toISOString().split('T')[0]
+          const label = d.toLocaleDateString('en-US', period === 'week' ? { weekday: 'short', month: 'numeric', day: 'numeric' } : { month: 'short', day: 'numeric' })
+          statsMap.set(dateKey, { label, revenue: 0, orders: 0, timestamp: d.getTime() })
+        }
+
+        for (const o of orders) {
+          const dateKey = new Date(o.created_at).toISOString().split('T')[0]
+          const existing = statsMap.get(dateKey)
+          if (existing) {
+            existing.revenue += Number(o.total_amount)
+            existing.orders += 1
+          } else {
+            const d = new Date(o.created_at)
+            const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            statsMap.set(dateKey, { label, revenue: Number(o.total_amount), orders: 1, timestamp: d.getTime() })
+          }
+        }
       }
-      setDailyStats(Object.entries(statsMap).map(([day, v]) => ({ day, ...v })).reverse())
+
+      const sortedStats = Array.from(statsMap.values())
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .map(s => ({
+          day: s.label,
+          revenue: Math.round(s.revenue * 100) / 100,
+          orders: s.orders
+        }))
+
+      setDailyStats(sortedStats)
 
       // Top items
       const itemMap: Record<string, { qty: number; revenue: number }> = {}
@@ -172,7 +216,9 @@ export default function Dashboard() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                 <div>
                   <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, color: 'var(--foreground)' }}>Revenue Trend</h3>
-                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 3 }}>By day of week</p>
+                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 3 }}>
+                    {period === 'today' ? 'Hourly revenue today' : period === 'week' ? 'Past 7 days' : 'Past 30 days'}
+                  </p>
                 </div>
                 <span style={{ fontFamily: 'Fraunces', fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>
                   &#8369;{totalRevenue.toLocaleString()}

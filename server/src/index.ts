@@ -7,6 +7,7 @@ dotenv.config()
 import checkoutRouter  from './routes/checkout'
 import inventoryRouter from './routes/inventory'
 import staffRouter     from './routes/staff'
+import ordersRouter    from './routes/orders'
 
 const app  = express()
 const PORT = Number(process.env.PORT ?? 4000)
@@ -30,6 +31,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/checkout',  checkoutRouter)
 app.use('/api/inventory', inventoryRouter)
 app.use('/api/staff',     staffRouter)
+app.use('/api/orders',    ordersRouter)
 
 // ── 404 catch-all ────────────────────────────────────────────
 app.use((_req, res) => {
