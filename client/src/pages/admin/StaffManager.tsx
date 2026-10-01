@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { apiCreateStaff, apiDeactivateStaff, apiReactivateStaff } from '@/lib/api'
 import type { StaffProfile, StaffRole } from '@/types'
@@ -22,6 +23,16 @@ export default function StaffManager() {
   const [form, setForm] = useState({ full_name: '', email: '', password: '', role: 'cashier' as StaffRole })
   const [formError, setFormError] = useState<string | null>(null)
   const [formLoading, setFormLoading] = useState(false)
+
+  useEffect(() => {
+    if (showModal) {
+      const prev = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = prev
+      }
+    }
+  }, [showModal])
 
   async function fetchStaff() {
     const { data } = await supabase
@@ -174,15 +185,26 @@ export default function StaffManager() {
       )}
 
       {/* Add Staff Modal */}
-      {showModal && (
+      {showModal && typeof document !== 'undefined' && createPortal(
         <div
           style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(3px)',
+            WebkitBackdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 20,
           }}
           onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}
         >
-          <div className="card fade-in" style={{ width: '100%', maxWidth: 460, padding: '32px 28px' }}>
+          <div className="card fade-in" style={{ width: '100%', maxWidth: 460, padding: '32px 28px', boxShadow: '0 25px 60px rgba(0,0,0,0.35)' }}>
             <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 22 }}>
               Add Staff Member
             </h2>
@@ -190,7 +212,7 @@ export default function StaffManager() {
               <div>
                 <label htmlFor="staff-name" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>Full Name</label>
                 <input
-                  id="staff-name" className="input" type="text" required
+                  id="staff-name" autoFocus className="input" type="text" required
                   placeholder="Maria Santos"
                   value={form.full_name}
                   onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
@@ -242,7 +264,8 @@ export default function StaffManager() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

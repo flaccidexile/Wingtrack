@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { apiGetOrders, apiVoidOrder } from '@/lib/api'
 import type { Order } from '@/types'
 import { useAuth } from '@/hooks/useAuth'
@@ -18,6 +19,16 @@ export default function OrdersList() {
   const [voidReason, setVoidReason] = useState('')
   const [voidLoading, setVoidLoading] = useState(false)
   const [voidError, setVoidError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (voidModalOrder) {
+      const prev = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = prev
+      }
+    }
+  }, [voidModalOrder])
 
   const fetchOrders = useCallback(async () => {
     setLoading(true)
@@ -273,20 +284,26 @@ export default function OrdersList() {
       )}
 
       {/* Void Confirmation Modal */}
-      {voidModalOrder && (
+      {voidModalOrder && typeof document !== 'undefined' && createPortal(
         <div
           style={{
             position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.5)',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(3px)',
+            WebkitBackdropFilter: 'blur(3px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 150,
+            zIndex: 9999,
+            padding: 20,
           }}
           onClick={e => { if (e.target === e.currentTarget) setVoidModalOrder(null) }}
         >
-          <div className="card fade-in" style={{ width: '100%', maxWidth: 420, padding: '26px' }}>
+          <div className="card fade-in" style={{ width: '100%', maxWidth: 420, padding: '26px', boxShadow: '0 25px 60px rgba(0,0,0,0.35)' }}>
             <h3 style={{ fontFamily: 'Fraunces', fontSize: 18, color: '#b91c1c', marginBottom: 10 }}>
               Void Order #{voidModalOrder.order_number}?
             </h3>
@@ -301,6 +318,7 @@ export default function OrdersList() {
                 </label>
                 <input
                   className="input"
+                  autoFocus
                   value={voidReason}
                   onChange={e => setVoidReason(e.target.value)}
                   placeholder="e.g. Customer cancelled, wrong item selected"
@@ -343,7 +361,8 @@ export default function OrdersList() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
