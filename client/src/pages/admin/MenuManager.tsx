@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   apiGetProducts,
   apiGetCategories,
@@ -50,6 +51,16 @@ export default function MenuManager() {
     setBanner({ type, message })
     setTimeout(() => setBanner(null), 4000)
   }
+
+  useEffect(() => {
+    if (showItemModal || showCategoryModal) {
+      const prev = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = prev
+      }
+    }
+  }, [showItemModal, showCategoryModal])
 
   const loadData = useCallback(async () => {
     try {
@@ -633,17 +644,21 @@ export default function MenuManager() {
       )}
 
       {/* ===================== ADD / EDIT FOOD ITEM MODAL ===================== */}
-      {showItemModal && (
+      {showItemModal && typeof document !== 'undefined' && createPortal(
         <div
           style={{
             position: 'fixed',
-            inset: 0,
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
             background: 'rgba(0,0,0,0.65)',
             backdropFilter: 'blur(3px)',
+            WebkitBackdropFilter: 'blur(3px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1000,
+            zIndex: 9999,
             padding: 20,
           }}
           onClick={e => {
@@ -658,7 +673,7 @@ export default function MenuManager() {
               maxHeight: '90vh',
               overflowY: 'auto',
               padding: '28px 30px',
-              boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.35)',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
@@ -671,6 +686,7 @@ export default function MenuManager() {
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setShowItemModal(false)}
                 style={{ background: 'transparent', border: 'none', fontSize: 22, color: 'var(--muted-foreground)', cursor: 'pointer' }}
               >
@@ -686,6 +702,7 @@ export default function MenuManager() {
                 </label>
                 <input
                   className="input"
+                  autoFocus
                   required
                   placeholder="e.g. Garlic Butter Parmesan Wings (6pcs)"
                   value={formName}
@@ -889,21 +906,26 @@ export default function MenuManager() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ===================== ADD CATEGORY MODAL ===================== */}
-      {showCategoryModal && (
+      {showCategoryModal && typeof document !== 'undefined' && createPortal(
         <div
           style={{
             position: 'fixed',
-            inset: 0,
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
             background: 'rgba(0,0,0,0.6)',
             backdropFilter: 'blur(3px)',
+            WebkitBackdropFilter: 'blur(3px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1100,
+            zIndex: 10000,
             padding: 20,
           }}
           onClick={e => {
@@ -916,7 +938,7 @@ export default function MenuManager() {
               width: '100%',
               maxWidth: 400,
               padding: '24px 26px',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.3)',
             }}
           >
             <h3 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
@@ -933,6 +955,7 @@ export default function MenuManager() {
                 </label>
                 <input
                   className="input"
+                  autoFocus
                   required
                   placeholder="e.g. Desserts"
                   value={newCatName}
@@ -967,7 +990,8 @@ export default function MenuManager() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
