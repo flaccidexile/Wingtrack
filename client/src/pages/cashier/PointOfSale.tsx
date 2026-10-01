@@ -6,11 +6,12 @@ import { useAuth } from '@/hooks/useAuth'
 import type { Product, ProductCategory, CartItem, Order } from '@/types'
 import ReceiptModal from '@/components/receipt/ReceiptModal'
 
-const CATS = ['All', 'Wings', 'Combos', 'Sides', 'Drinks']
+const DEFAULT_CATS = ['All', 'Wings', 'Combos', 'Sides', 'Drinks']
 
 export default function PointOfSale() {
   const { profile } = useAuth()
   const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATS)
   const [cat, setCat] = useState('All')
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
@@ -25,14 +26,30 @@ export default function PointOfSale() {
   const [error, setError] = useState<string | null>(null)
 
   const fetchProducts = useCallback(async () => {
-    const { data, error: err } = await supabase
-      .from('products')
-      .select('*, category:product_categories(id, name, sort_order)')
-      .eq('is_available', true)
-      .order('name')
-    if (err) { setError(err.message); return }
-    setProducts((data ?? []) as Product[])
-    setLoading(false)
+    try {
+      const [prodsRes, catsRes] = await Promise.all([
+        supabase
+          .from('products')
+          .select('*, category:product_categories(id, name, sort_order)')
+          .eq('is_available', true)
+          .order('name'),
+        supabase
+          .from('product_categories')
+          .select('name')
+          .order('sort_order'),
+      ])
+
+      if (prodsRes.error) { setError(prodsRes.error.message); return }
+      setProducts((prodsRes.data ?? []) as Product[])
+
+      if (catsRes.data && catsRes.data.length > 0) {
+        setCategories(['All', ...catsRes.data.map(c => c.name)])
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load products')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { fetchProducts() }, [fetchProducts])
@@ -134,7 +151,7 @@ export default function PointOfSale() {
             style={{ width: 220, padding: '9px 14px', fontSize: 13 }}
           />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {CATS.map(c => (
+            {categories.map(c => (
               <button
                 key={c}
                 id={`pos-cat-${c.toLowerCase()}`}

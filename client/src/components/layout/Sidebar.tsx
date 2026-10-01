@@ -7,6 +7,7 @@ type Page =
   | 'dashboard'
   | 'pos'
   | 'orders'
+  | 'menu'
   | 'inventory'
   | 'analytics'
   | 'staff'
@@ -47,6 +48,15 @@ function OrdersIcon({ active }: { active: boolean }) {
     </svg>
   )
 }
+function MenuIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--sidebar-active)' : 'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/>
+      <path d="M7 2v20"/>
+      <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>
+    </svg>
+  )
+}
 function InvIcon({ active }: { active: boolean }) {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--sidebar-active)' : 'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -77,6 +87,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard',    roles: ['admin'],                               icon: DashIcon   },
   { id: 'pos',       label: 'Point of Sale', roles: ['admin', 'cashier'],                    icon: PosIcon    },
   { id: 'orders',    label: 'Transactions',  roles: ['admin', 'cashier'],                    icon: OrdersIcon },
+  { id: 'menu',      label: 'Menu Items',    roles: ['admin'],                               icon: MenuIcon   },
   { id: 'inventory', label: 'Inventory',     roles: ['admin', 'inventory_personnel'],         icon: InvIcon    },
   { id: 'analytics', label: 'Analytics',     roles: ['admin'],                               icon: AnaIcon    },
   { id: 'staff',     label: 'Staff Manager', roles: ['admin'],                               icon: StaffIcon  },

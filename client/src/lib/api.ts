@@ -204,3 +204,134 @@ export async function apiCreateInventoryItem(payload: {
   return res.json()
 }
 
+/**
+ * GET /api/products
+ */
+export async function apiGetProducts() {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/products`, {
+    method: 'GET',
+    headers,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to fetch products' }))
+    throw new Error(err.message ?? 'Failed to fetch products')
+  }
+  return res.json()
+}
+
+/**
+ * GET /api/products/categories
+ */
+export async function apiGetCategories() {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/products/categories`, {
+    method: 'GET',
+    headers,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to fetch categories' }))
+    throw new Error(err.message ?? 'Failed to fetch categories')
+  }
+  return res.json()
+}
+
+/**
+ * POST /api/products/categories (Admin only)
+ */
+export async function apiCreateCategory(name: string) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/products/categories`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ name }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to create category' }))
+    throw new Error(err.message ?? 'Failed to create category')
+  }
+  return res.json()
+}
+
+/**
+ * POST /api/products (Admin only)
+ */
+export async function apiCreateProduct(payload: {
+  name: string
+  category_id: string
+  price: number
+  is_available?: boolean
+  image_url?: string
+  recipes?: Array<{ inventory_id: string; qty_per_unit: number }>
+}) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to create product' }))
+    throw new Error(err.message ?? 'Failed to create product')
+  }
+  return res.json()
+}
+
+/**
+ * PATCH /api/products/:id (Admin only)
+ */
+export async function apiUpdateProduct(id: string, payload: {
+  name?: string
+  category_id?: string
+  price?: number
+  is_available?: boolean
+  image_url?: string
+  recipes?: Array<{ inventory_id: string; qty_per_unit: number }>
+}) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/products/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to update product' }))
+    throw new Error(err.message ?? 'Failed to update product')
+  }
+  return res.json()
+}
+
+/**
+ * PATCH /api/products/:id/toggle (Admin only)
+ */
+export async function apiToggleProductAvailability(id: string, is_available: boolean) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/products/${id}/toggle`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ is_available }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to toggle product availability' }))
+    throw new Error(err.message ?? 'Failed to toggle product availability')
+  }
+  return res.json()
+}
+
+/**
+ * DELETE /api/products/:id (Admin only)
+ */
+export async function apiDeleteProduct(id: string) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/products/${id}`, {
+    method: 'DELETE',
+    headers,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to delete product' }))
+    throw new Error(err.message ?? 'Failed to delete product')
+  }
+  return res.json()
+}
+
+

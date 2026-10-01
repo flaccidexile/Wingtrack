@@ -8,6 +8,7 @@ import checkoutRouter  from './routes/checkout'
 import inventoryRouter from './routes/inventory'
 import staffRouter     from './routes/staff'
 import ordersRouter    from './routes/orders'
+import productsRouter  from './routes/products'
 
 const app  = express()
 const PORT = Number(process.env.PORT ?? 4000)
@@ -32,6 +33,7 @@ app.use('/api/checkout',  checkoutRouter)
 app.use('/api/inventory', inventoryRouter)
 app.use('/api/staff',     staffRouter)
 app.use('/api/orders',    ordersRouter)
+app.use('/api/products',  productsRouter)
 
 // ── 404 catch-all ────────────────────────────────────────────
 app.use((_req, res) => {
