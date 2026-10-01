@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { apiAdjustInventory, apiGetInventoryMovements, apiCreateInventoryItem } from '@/lib/api'
 import type { InventoryItem, InventoryAdjustmentPayload, InventoryMovement } from '@/types'
@@ -46,6 +47,16 @@ export default function Inventory() {
   const [newItemSupplier, setNewItemSupplier] = useState('')
   const [addLoading, setAddLoading] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (adjustModal || showAddModal) {
+      const prev = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = prev
+      }
+    }
+  }, [adjustModal, showAddModal])
 
   const fetchInventory = useCallback(async () => {
     const { data, error } = await supabase
@@ -397,10 +408,26 @@ export default function Inventory() {
       )}
 
       {/* Adjust Modal */}
-      {adjustModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
-          onClick={e => { if (e.target === e.currentTarget) setAdjustModal(null) }}>
-          <div className="card fade-in" style={{ width: '100%', maxWidth: 440, padding: '30px 26px' }}>
+      {adjustModal && typeof document !== 'undefined' && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(3px)',
+            WebkitBackdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 20,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setAdjustModal(null) }}
+        >
+          <div className="card fade-in" style={{ width: '100%', maxWidth: 440, padding: '30px 26px', boxShadow: '0 25px 60px rgba(0,0,0,0.35)' }}>
             <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
               {adjustModal.type === 'restock' ? 'Restock' : adjustModal.type === 'waste' ? 'Record Waste' : 'Adjust Stock'}
             </h2>
@@ -418,7 +445,7 @@ export default function Inventory() {
               </div>
               <div>
                 <label htmlFor="adj-qty" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>Quantity ({adjustModal.item.unit})</label>
-                <input id="adj-qty" className="input" type="number" step="0.001" min="0.001" required placeholder="0.00" value={adjustQty} onChange={e => setAdjustQty(e.target.value)} style={{ padding: '11px 14px', fontSize: 14 }} />
+                <input id="adj-qty" autoFocus className="input" type="number" step="0.001" min="0.001" required placeholder="0.00" value={adjustQty} onChange={e => setAdjustQty(e.target.value)} style={{ padding: '11px 14px', fontSize: 14 }} />
               </div>
               <div>
                 <label htmlFor="adj-notes" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>Notes (optional)</label>
@@ -435,16 +462,31 @@ export default function Inventory() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Add New Item Modal */}
-      {showAddModal && (
+      {showAddModal && typeof document !== 'undefined' && createPortal(
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(3px)',
+            WebkitBackdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 20,
+          }}
           onClick={e => { if (e.target === e.currentTarget) setShowAddModal(false) }}
         >
-          <div className="card fade-in" style={{ width: '100%', maxWidth: 460, padding: '28px 26px' }}>
+          <div className="card fade-in" style={{ width: '100%', maxWidth: 460, padding: '28px 26px', boxShadow: '0 25px 60px rgba(0,0,0,0.35)' }}>
             <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
               Add New Inventory Item
             </h2>
@@ -455,7 +497,7 @@ export default function Inventory() {
             <form onSubmit={handleCreateItem} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Item Name *</label>
-                <input className="input" required value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="e.g. Garlic Parmesan Seasoning" style={{ width: '100%', padding: '9px 12px', fontSize: 13 }} />
+                <input className="input" autoFocus required value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="e.g. Garlic Parmesan Seasoning" style={{ width: '100%', padding: '9px 12px', fontSize: 13 }} />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -507,7 +549,8 @@ export default function Inventory() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
