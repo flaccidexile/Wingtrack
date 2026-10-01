@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import { apiUpdatePassword } from '@/lib/api'
 import type { StaffRole } from '@/types'
 
 type Page =
   | 'dashboard'
   | 'pos'
+  | 'orders'
   | 'inventory'
   | 'analytics'
   | 'staff'
@@ -30,6 +33,17 @@ function PosIcon({ active }: { active: boolean }) {
       <line x1="6" y1="9" x2="6" y2="9.01"/><line x1="10" y1="9" x2="10" y2="9.01"/>
       <line x1="14" y1="9" x2="14" y2="9.01"/><line x1="6" y1="13" x2="6" y2="13.01"/>
       <line x1="10" y1="13" x2="10" y2="13.01"/><line x1="14" y1="13" x2="18" y2="13"/>
+    </svg>
+  )
+}
+function OrdersIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--sidebar-active)' : 'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="16" y1="13" x2="8" y2="13"/>
+      <line x1="16" y1="17" x2="8" y2="17"/>
+      <polyline points="10 9 9 9 8 9"/>
     </svg>
   )
 }
@@ -60,11 +74,12 @@ function StaffIcon({ active }: { active: boolean }) {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard',    roles: ['admin'],                               icon: DashIcon  },
-  { id: 'pos',       label: 'Point of Sale', roles: ['admin', 'cashier'],                    icon: PosIcon   },
-  { id: 'inventory', label: 'Inventory',     roles: ['admin', 'inventory_personnel'],         icon: InvIcon   },
-  { id: 'analytics', label: 'Analytics',     roles: ['admin'],                               icon: AnaIcon   },
-  { id: 'staff',     label: 'Staff Manager', roles: ['admin'],                               icon: StaffIcon },
+  { id: 'dashboard', label: 'Dashboard',    roles: ['admin'],                               icon: DashIcon   },
+  { id: 'pos',       label: 'Point of Sale', roles: ['admin', 'cashier'],                    icon: PosIcon    },
+  { id: 'orders',    label: 'Transactions',  roles: ['admin', 'cashier'],                    icon: OrdersIcon },
+  { id: 'inventory', label: 'Inventory',     roles: ['admin', 'inventory_personnel'],         icon: InvIcon    },
+  { id: 'analytics', label: 'Analytics',     roles: ['admin'],                               icon: AnaIcon    },
+  { id: 'staff',     label: 'Staff Manager', roles: ['admin'],                               icon: StaffIcon  },
 ]
 
 interface SidebarProps {
@@ -74,6 +89,12 @@ interface SidebarProps {
 
 export default function Sidebar({ page, setPage }: SidebarProps) {
   const { profile, role, signOut } = useAuth()
+  const [showPwdModal, setShowPwdModal] = useState(false)
+  const [newPwd, setNewPwd] = useState('')
+  const [confirmPwd, setConfirmPwd] = useState('')
+  const [pwdError, setPwdError] = useState<string | null>(null)
+  const [pwdSuccess, setPwdSuccess] = useState(false)
+  const [pwdLoading, setPwdLoading] = useState(false)
 
   const visibleNav = NAV_ITEMS.filter(item => role && item.roles.includes(role))
 
@@ -87,6 +108,35 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
     ? profile.full_name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
     : '?'
 
+  async function handlePasswordChange(e: React.FormEvent) {
+    e.preventDefault()
+    setPwdError(null)
+    if (newPwd.length < 6) {
+      setPwdError('Password must be at least 6 characters.')
+      return
+    }
+    if (newPwd !== confirmPwd) {
+      setPwdError('Passwords do not match.')
+      return
+    }
+
+    setPwdLoading(true)
+    try {
+      await apiUpdatePassword(newPwd)
+      setPwdSuccess(true)
+      setTimeout(() => {
+        setShowPwdModal(false)
+        setPwdSuccess(false)
+        setNewPwd('')
+        setConfirmPwd('')
+      }, 1500)
+    } catch (err: unknown) {
+      setPwdError(err instanceof Error ? err.message : 'Failed to update password')
+    } finally {
+      setPwdLoading(false)
+    }
+  }
+
   return (
     <aside
       style={{
@@ -98,35 +148,41 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
         flexShrink: 0,
       }}
     >
-      {/* Logo */}
-      <div style={{ padding: '26px 22px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+      {/* Brand */}
+      <div style={{ padding: '26px 24px 22px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div
             style={{
-              width: 46, height: 46, borderRadius: 12,
-              background: 'rgba(196,122,46,0.15)',
-              border: '1px solid rgba(196,122,46,0.3)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 44,
+              height: 44,
+              borderRadius: 10,
+              background: 'linear-gradient(135deg, var(--sidebar-active), var(--primary))',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              boxShadow: '0 4px 12px rgba(196,122,46,0.3)',
             }}
           >
-            <InvIcon active={true} />
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1c0f06" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
           </div>
           <div>
-            <p style={{ fontFamily: 'Fraunces', fontWeight: 700, fontSize: 22, color: 'var(--sidebar-foreground)', lineHeight: 1.1 }}>
-              <span style={{ color: 'var(--sidebar-active)' }}>WING</span>TRACK
-            </p>
-            <p style={{ fontSize: 12, color: 'var(--sidebar-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 3 }}>
-              Wing's Zone
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontFamily: 'Fraunces', fontSize: 21, fontWeight: 700, color: 'var(--sidebar-foreground)', letterSpacing: '-0.01em' }}>
+                WING'S ZONE
+              </span>
+            </div>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--sidebar-active)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
+              WINGTRACK SYSTEM
+            </span>
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, minHeight: 0, padding: '18px 14px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
-        <p style={{ fontSize: 12, color: 'var(--sidebar-muted)', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '4px 12px 14px', fontFamily: 'DM Mono', fontWeight: 600 }}>
-          Operations
-        </p>
+      <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto' }}>
         {visibleNav.map(({ id, label, icon: Icon }) => {
           const active = page === id
           return (
@@ -135,17 +191,26 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
               id={`nav-${id}`}
               onClick={() => setPage(id)}
               style={{
-                display: 'flex', alignItems: 'center', gap: 14,
-                padding: '13px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: active ? 'rgba(240,155,58,0.18)' : 'transparent',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 13,
+                padding: '11px 16px',
+                borderRadius: 9,
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: 'DM Sans',
+                fontSize: 14,
+                fontWeight: active ? 600 : 500,
+                textAlign: 'left',
+                width: '100%',
+                transition: 'all 0.15s ease',
+                background: active ? 'rgba(235,165,79,0.14)' : 'transparent',
                 color: active ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
-                fontFamily: 'DM Sans', fontSize: 16, fontWeight: active ? 600 : 500,
-                transition: 'all 0.15s', textAlign: 'left', width: '100%',
-                borderLeft: active ? '3px solid var(--sidebar-active)' : '3px solid transparent',
+                position: 'relative',
               }}
               onMouseEnter={e => {
                 if (!active) {
-                  (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-hover)'
+                  (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'
                   ;(e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)'
                 }
               }}
@@ -165,33 +230,49 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
 
       {/* User + Sign Out */}
       <div style={{ padding: '18px 14px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 12px', borderRadius: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8 }}>
           <div
             style={{
-              width: 42, height: 42, borderRadius: '50%',
+              width: 40, height: 40, borderRadius: '50%',
               background: 'var(--primary)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 15, fontWeight: 700, color: '#fdfaf6', flexShrink: 0,
+              fontSize: 14, fontWeight: 700, color: '#fdfaf6', flexShrink: 0,
             }}
           >
             {initials}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--sidebar-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--sidebar-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {profile?.full_name ?? 'Staff'}
             </p>
-            <p style={{ fontSize: 12, color: 'var(--sidebar-muted)', fontWeight: 500 }}>
+            <p style={{ fontSize: 11, color: 'var(--sidebar-muted)', fontWeight: 500 }}>
               {role ? roleLabel[role] : ''}
             </p>
           </div>
+          <button
+            onClick={() => { setShowPwdModal(true); setPwdError(null); setPwdSuccess(false) }}
+            title="Change password"
+            style={{
+              background: 'transparent', border: 'none', color: 'var(--sidebar-muted)',
+              cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex', alignItems: 'center',
+            }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-muted)'}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </button>
         </div>
+
         <button
           id="btn-signout"
           onClick={signOut}
           style={{
-            width: '100%', marginTop: 10, padding: '11px', background: 'transparent',
+            width: '100%', marginTop: 8, padding: '10px', background: 'transparent',
             border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8,
-            fontSize: 14, color: 'var(--sidebar-muted)', cursor: 'pointer',
+            fontSize: 13, color: 'var(--sidebar-muted)', cursor: 'pointer',
             fontFamily: 'DM Sans', fontWeight: 500, transition: 'all 0.15s',
           }}
           onMouseEnter={e => {
@@ -208,6 +289,89 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
           Sign Out
         </button>
       </div>
+
+      {/* Change Password Modal */}
+      {showPwdModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setShowPwdModal(false) }}
+        >
+          <div className="card fade-in" style={{ width: '100%', maxWidth: 380, padding: '26px' }}>
+            <h3 style={{ fontFamily: 'Fraunces', fontSize: 18, color: 'var(--foreground)', marginBottom: 8 }}>
+              Change Your Password
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 16 }}>
+              Set a secure new password for your account.
+            </p>
+
+            <form onSubmit={handlePasswordChange} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--foreground)' }}>
+                  New Password
+                </label>
+                <input
+                  className="input"
+                  type="password"
+                  required
+                  placeholder="Min 6 characters"
+                  value={newPwd}
+                  onChange={e => setNewPwd(e.target.value)}
+                  style={{ width: '100%', padding: '9px 12px', fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--foreground)' }}>
+                  Confirm Password
+                </label>
+                <input
+                  className="input"
+                  type="password"
+                  required
+                  placeholder="Re-type new password"
+                  value={confirmPwd}
+                  onChange={e => setConfirmPwd(e.target.value)}
+                  style={{ width: '100%', padding: '9px 12px', fontSize: 13 }}
+                />
+              </div>
+
+              {pwdError && (
+                <div style={{ padding: '8px 12px', background: '#fee2e2', color: '#991b1b', borderRadius: 6, fontSize: 12 }}>
+                  {pwdError}
+                </div>
+              )}
+
+              {pwdSuccess && (
+                <div style={{ padding: '8px 12px', background: '#e8f5e9', color: '#15803d', borderRadius: 6, fontSize: 12 }}>
+                  Password updated successfully.
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowPwdModal(false)}
+                  className="btn-ghost"
+                  style={{ flex: 1, padding: '9px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={pwdLoading || pwdSuccess}
+                  style={{ flex: 1, padding: '9px' }}
+                >
+                  {pwdLoading ? 'Saving...' : 'Update'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

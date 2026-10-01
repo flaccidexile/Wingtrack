@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { apiAdjustInventory } from '@/lib/api'
-import type { InventoryItem, InventoryAdjustmentPayload } from '@/types'
+import { apiAdjustInventory, apiGetInventoryMovements, apiCreateInventoryItem } from '@/lib/api'
+import type { InventoryItem, InventoryAdjustmentPayload, InventoryMovement } from '@/types'
 
 const CATS = ['All', 'Proteins', 'Sauces', 'Sides', 'Produce', 'Cooking', 'Spices', 'Staples', 'Packaging']
 
@@ -11,32 +11,41 @@ const STATUS_STYLES: Record<string, { label: string; bg: string; color: string }
   critical: { label: 'Critical', bg: '#fce8e8', color: '#b91c1c' },
 }
 
-/** Compute stock status from quantity using the store's thresholds:
- *  >= 10  → ok (In Stock)
- *   5–9   → low
- *  <= 4   → critical
- */
-function getStockStatus(qty: number): 'ok' | 'low' | 'critical' {
-  if (qty >= 10) return 'ok'
-  if (qty >= 5)  return 'low'
-  return 'critical'
-}
-
 interface AdjustModal {
   item: InventoryItem
   type: 'restock' | 'adjustment' | 'waste'
 }
 
 export default function Inventory() {
+  const [activeTab, setActiveTab] = useState<'stock' | 'movements'>('stock')
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [cat, setCat] = useState('All')
   const [search, setSearch] = useState('')
+
+  // Adjust modal state
   const [adjustModal, setAdjustModal] = useState<AdjustModal | null>(null)
   const [adjustQty, setAdjustQty] = useState('')
   const [adjustNotes, setAdjustNotes] = useState('')
   const [adjustLoading, setAdjustLoading] = useState(false)
   const [adjustError, setAdjustError] = useState<string | null>(null)
+
+  // Movements audit log state
+  const [movements, setMovements] = useState<InventoryMovement[]>([])
+  const [movementsLoading, setMovementsLoading] = useState(false)
+  const [movementsError, setMovementsError] = useState<string | null>(null)
+
+  // Add Item modal state
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [newItemName, setNewItemName] = useState('')
+  const [newItemCat, setNewItemCat] = useState('Proteins')
+  const [newItemUnit, setNewItemUnit] = useState('kg')
+  const [newItemStock, setNewItemStock] = useState('')
+  const [newItemMin, setNewItemMin] = useState('')
+  const [newItemCost, setNewItemCost] = useState('')
+  const [newItemSupplier, setNewItemSupplier] = useState('')
+  const [addLoading, setAddLoading] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
 
   const fetchInventory = useCallback(async () => {
     const { data, error } = await supabase
@@ -48,23 +57,47 @@ export default function Inventory() {
     setLoading(false)
   }, [])
 
-  useEffect(() => { fetchInventory() }, [fetchInventory])
+  const fetchMovements = useCallback(async () => {
+    setMovementsLoading(true)
+    setMovementsError(null)
+    try {
+      const data = await apiGetInventoryMovements()
+      setMovements(data)
+    } catch (err: unknown) {
+      setMovementsError(err instanceof Error ? err.message : 'Failed to load movements')
+    } finally {
+      setMovementsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchInventory()
+  }, [fetchInventory])
+
+  useEffect(() => {
+    if (activeTab === 'movements') {
+      fetchMovements()
+    }
+  }, [activeTab, fetchMovements])
 
   // Real-time updates
   useEffect(() => {
     const channel = supabase
       .channel('inventory-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => fetchInventory())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => {
+        fetchInventory()
+        if (activeTab === 'movements') fetchMovements()
+      })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [fetchInventory])
+  }, [fetchInventory, fetchMovements, activeTab])
 
   const filtered = items
     .filter(i => cat === 'All' || i.category === cat)
     .filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
 
-  const lowCount  = items.filter(i => getStockStatus(Number(i.stock_qty)) === 'low').length
-  const critCount = items.filter(i => getStockStatus(Number(i.stock_qty)) === 'critical').length
+  const lowCount  = items.filter(i => (i.status ?? (Number(i.stock_qty) <= Number(i.min_stock_level) ? 'low' : 'ok')) === 'low').length
+  const critCount = items.filter(i => (i.status ?? (Number(i.stock_qty) <= 0.6 * Number(i.min_stock_level) ? 'critical' : 'ok')) === 'critical').length
 
   async function handleAdjust(e: React.FormEvent) {
     e.preventDefault()
@@ -92,6 +125,7 @@ export default function Inventory() {
       setAdjustQty('')
       setAdjustNotes('')
       await fetchInventory()
+      if (activeTab === 'movements') await fetchMovements()
     } catch (err: unknown) {
       setAdjustError(err instanceof Error ? err.message : 'Adjustment failed')
     } finally {
@@ -99,117 +133,265 @@ export default function Inventory() {
     }
   }
 
+  async function handleCreateItem(e: React.FormEvent) {
+    e.preventDefault()
+    setAddError(null)
+    setAddLoading(true)
+    try {
+      await apiCreateInventoryItem({
+        name: newItemName.trim(),
+        category: newItemCat,
+        unit: newItemUnit.trim(),
+        stock_qty: newItemStock ? parseFloat(newItemStock) : 0,
+        min_stock_level: newItemMin ? parseFloat(newItemMin) : 0,
+        unit_cost: newItemCost ? parseFloat(newItemCost) : 0,
+        supplier: newItemSupplier.trim() || undefined,
+      })
+      setShowAddModal(false)
+      setNewItemName('')
+      setNewItemStock('')
+      setNewItemMin('')
+      setNewItemCost('')
+      setNewItemSupplier('')
+      await fetchInventory()
+    } catch (err: unknown) {
+      setAddError(err instanceof Error ? err.message : 'Failed to add item')
+    } finally {
+      setAddLoading(false)
+    }
+  }
+
   return (
     <div style={{ padding: '28px 36px', minHeight: '100vh' }}>
       {/* Header */}
-      <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Inventory Management</h1>
+          <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
+            Inventory Management
+          </h1>
           <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
-            {items.length} items · Updates in real-time
+            {items.length} raw ingredients & packaging items · Real-time stock tracking
           </p>
         </div>
-      </div>
 
-      {/* Alert strip */}
-      {(lowCount > 0 || critCount > 0) && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-          {critCount > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderRadius: 8, background: '#fce8e8', border: '1px solid #fca5a5' }}>
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#b91c1c', display: 'inline-block' }} />
-              <span style={{ fontSize: 13, color: '#b91c1c', fontWeight: 600 }}>{critCount} item{critCount > 1 ? 's' : ''} critically low — reorder immediately</span>
-            </div>
-          )}
-          {lowCount > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderRadius: 8, background: '#fff7e6', border: '1px solid #fcd34d' }}>
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#b45309', display: 'inline-block' }} />
-              <span style={{ fontSize: 13, color: '#92400e', fontWeight: 600 }}>{lowCount} item{lowCount > 1 ? 's' : ''} below minimum stock level</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 18, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input
-          id="inv-search"
-          className="input"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search items..."
-          style={{ width: 240, padding: '10px 14px', fontSize: 14 }}
-        />
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {CATS.map(c => (
-            <button
-              key={c}
-              id={`inv-cat-${c.toLowerCase()}`}
-              onClick={() => setCat(c)}
-              style={{
-                padding: '7px 16px', borderRadius: 22, fontSize: 12, cursor: 'pointer',
-                border: '1px solid var(--border)',
-                background: cat === c ? 'var(--primary)' : 'var(--card)',
-                color: cat === c ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
-                fontWeight: cat === c ? 600 : 400,
-              }}
-            >
-              {c}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            id="btn-add-inventory-item"
+            className="btn-primary"
+            onClick={() => setShowAddModal(true)}
+            style={{ padding: '9px 16px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            + Add New Item
+          </button>
         </div>
       </div>
 
-      {/* Table */}
-      {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}>
-          <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
-        </div>
-      ) : (
-        <div className="card" style={{ overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 80px 105px 105px 115px 150px 90px 110px', gap: 0, padding: '12px 22px', borderBottom: '1px solid var(--border)' }}>
-            {['Item Name', 'Unit', 'In Stock', 'Min Level', 'Unit Cost', 'Supplier', 'Status', 'Actions'].map(h => (
-              <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
-            ))}
+      {/* Tabs: Stock vs Movement Audit */}
+      <div style={{ display: 'flex', gap: 12, borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
+        <button
+          onClick={() => setActiveTab('stock')}
+          style={{
+            padding: '10px 16px',
+            fontSize: 14,
+            fontWeight: 600,
+            background: 'transparent',
+            border: 'none',
+            borderBottom: activeTab === 'stock' ? '2px solid var(--primary)' : '2px solid transparent',
+            color: activeTab === 'stock' ? 'var(--primary)' : 'var(--muted-foreground)',
+            cursor: 'pointer',
+          }}
+        >
+          Stock Items ({items.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('movements')}
+          style={{
+            padding: '10px 16px',
+            fontSize: 14,
+            fontWeight: 600,
+            background: 'transparent',
+            border: 'none',
+            borderBottom: activeTab === 'movements' ? '2px solid var(--primary)' : '2px solid transparent',
+            color: activeTab === 'movements' ? 'var(--primary)' : 'var(--muted-foreground)',
+            cursor: 'pointer',
+          }}
+        >
+          Movement Audit Trail
+        </button>
+      </div>
+
+      {activeTab === 'stock' ? (
+        <>
+          {/* Alert strip */}
+          {(lowCount > 0 || critCount > 0) && (
+            <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+              {critCount > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderRadius: 8, background: '#fce8e8', border: '1px solid #fca5a5' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#b91c1c', display: 'inline-block' }} />
+                  <span style={{ fontSize: 13, color: '#b91c1c', fontWeight: 600 }}>{critCount} item{critCount > 1 ? 's' : ''} critically low — reorder immediately</span>
+                </div>
+              )}
+              {lowCount > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderRadius: 8, background: '#fff7e6', border: '1px solid #fcd34d' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#b45309', display: 'inline-block' }} />
+                  <span style={{ fontSize: 13, color: '#92400e', fontWeight: 600 }}>{lowCount} item{lowCount > 1 ? 's' : ''} below minimum stock level</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Filters */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              id="inv-search"
+              className="input"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search items..."
+              style={{ width: 240, padding: '10px 14px', fontSize: 14 }}
+            />
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {CATS.map(c => (
+                <button
+                  key={c}
+                  id={`inv-cat-${c.toLowerCase()}`}
+                  onClick={() => setCat(c)}
+                  style={{
+                    padding: '7px 16px', borderRadius: 22, fontSize: 12, cursor: 'pointer',
+                    border: '1px solid var(--border)',
+                    background: cat === c ? 'var(--primary)' : 'var(--card)',
+                    color: cat === c ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                    fontWeight: cat === c ? 600 : 400,
+                  }}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
           </div>
-          {filtered.map((item, i) => {
-            const status = getStockStatus(Number(item.stock_qty))
-            const s = STATUS_STYLES[status]
-            const qtyColor = status === 'ok' ? 'var(--success, #15803d)' : status === 'low' ? '#b45309' : '#b91c1c'
-            return (
-              <div
-                key={item.id}
-                style={{
-                  display: 'grid', gridTemplateColumns: '2fr 80px 105px 105px 115px 150px 90px 110px', gap: 0,
-                  padding: '14px 22px', borderBottom: i < filtered.length - 1 ? '1px solid var(--muted)' : 'none',
-                  alignItems: 'center', transition: 'background 0.1s',
-                }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--muted)'}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
-              >
-                <div>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)' }}>{item.name}</p>
-                  <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2 }}>{item.category}</p>
-                </div>
-                <span style={{ fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}>{item.unit}</span>
-                <span style={{ fontSize: 14, fontFamily: 'DM Mono', fontWeight: 700, color: qtyColor }}>{Number(item.stock_qty).toLocaleString()}</span>
-                <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>{Number(item.min_stock_level).toLocaleString()}</span>
-                <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--foreground)' }}>&#8369;{Number(item.unit_cost).toLocaleString()}</span>
-                <span style={{ fontSize: 12, color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.supplier ?? '-'}</span>
-                <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20, fontWeight: 700, background: s.bg, color: s.color, textAlign: 'center', display: 'inline-block' }}>{s.label}</span>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button
-                    id={`inv-restock-${item.id}`}
-                    onClick={() => { setAdjustModal({ item, type: 'restock' }); setAdjustQty(''); setAdjustNotes('') }}
-                    style={{ fontSize: 12, padding: '5px 11px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--primary)', cursor: 'pointer', fontWeight: 600 }}
-                  >
-                    Restock
-                  </button>
-                </div>
+
+          {/* Table */}
+          {loading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}>
+              <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+            </div>
+          ) : (
+            <div className="card" style={{ overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 80px 105px 105px 115px 150px 90px 110px', gap: 0, padding: '12px 22px', borderBottom: '1px solid var(--border)' }}>
+                {['Item Name', 'Unit', 'In Stock', 'Min Level', 'Unit Cost', 'Supplier', 'Status', 'Actions'].map(h => (
+                  <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
+                ))}
               </div>
-            )
-          })}
-          {filtered.length === 0 && (
-            <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 14 }}>No items match your filter.</div>
+              {filtered.map((item, i) => {
+                const status = item.status || (Number(item.stock_qty) <= 0.6 * Number(item.min_stock_level) ? 'critical' : Number(item.stock_qty) <= Number(item.min_stock_level) ? 'low' : 'ok')
+                const s = STATUS_STYLES[status] || STATUS_STYLES.ok
+                const qtyColor = status === 'ok' ? 'var(--success, #15803d)' : status === 'low' ? '#b45309' : '#b91c1c'
+                return (
+                  <div
+                    key={item.id}
+                    style={{
+                      display: 'grid', gridTemplateColumns: '2fr 80px 105px 105px 115px 150px 90px 110px', gap: 0,
+                      padding: '14px 22px', borderBottom: i < filtered.length - 1 ? '1px solid var(--muted)' : 'none',
+                      alignItems: 'center', transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--muted)'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                  >
+                    <div>
+                      <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)' }}>{item.name}</p>
+                      <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2 }}>{item.category}</p>
+                    </div>
+                    <span style={{ fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}>{item.unit}</span>
+                    <span style={{ fontSize: 14, fontFamily: 'DM Mono', fontWeight: 700, color: qtyColor }}>{Number(item.stock_qty).toLocaleString()}</span>
+                    <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>{Number(item.min_stock_level).toLocaleString()}</span>
+                    <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--foreground)' }}>&#8369;{Number(item.unit_cost).toLocaleString()}</span>
+                    <span style={{ fontSize: 12, color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.supplier ?? '-'}</span>
+                    <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20, fontWeight: 700, background: s.bg, color: s.color, textAlign: 'center', display: 'inline-block' }}>{s.label}</span>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        id={`inv-restock-${item.id}`}
+                        onClick={() => { setAdjustModal({ item, type: 'restock' }); setAdjustQty(''); setAdjustNotes('') }}
+                        style={{ fontSize: 12, padding: '5px 11px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--primary)', cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        Adjust
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+              {filtered.length === 0 && (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 14 }}>No items match your filter.</div>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        /* Movements Audit Table */
+        <div>
+          {movementsLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}>
+              <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+            </div>
+          ) : movementsError ? (
+            <div style={{ padding: '14px', background: '#fee2e2', color: '#b91c1c', borderRadius: 8, fontSize: 13 }}>
+              {movementsError}
+            </div>
+          ) : (
+            <div className="card" style={{ overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '150px 200px 110px 100px 140px 140px 1fr', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
+                {['Timestamp', 'Item', 'Type', 'Change', 'Before → After', 'Staff', 'Notes'].map(h => (
+                  <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
+                ))}
+              </div>
+              {movements.map((m, i) => {
+                const dateStr = new Date(m.created_at).toLocaleString('en-PH', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true,
+                })
+                const isPositive = m.qty_change > 0
+                const typeColor = m.movement_type === 'restock' ? '#15803d' : m.movement_type === 'deduction' ? '#c47a2e' : m.movement_type === 'waste' ? '#b91c1c' : '#4b5563'
+                const typeBg = m.movement_type === 'restock' ? '#e8f5e9' : m.movement_type === 'deduction' ? '#fff7ed' : m.movement_type === 'waste' ? '#fce8e8' : '#f3f4f6'
+
+                return (
+                  <div
+                    key={m.id}
+                    style={{
+                      display: 'grid', gridTemplateColumns: '150px 200px 110px 100px 140px 140px 1fr', gap: 0,
+                      padding: '12px 20px', borderBottom: i < movements.length - 1 ? '1px solid var(--muted)' : 'none',
+                      alignItems: 'center', fontSize: 13,
+                    }}
+                  >
+                    <span style={{ fontSize: 12, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>{dateStr}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{m.inventory?.name ?? 'Unknown item'}</span>
+                    <div>
+                      <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 12, background: typeBg, color: typeColor, textTransform: 'uppercase', fontWeight: 700 }}>
+                        {m.movement_type}
+                      </span>
+                    </div>
+                    <span style={{ fontFamily: 'DM Mono', fontWeight: 700, color: isPositive ? '#15803d' : '#b91c1c' }}>
+                      {isPositive ? `+${m.qty_change}` : m.qty_change} {m.inventory?.unit ?? ''}
+                    </span>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--muted-foreground)' }}>
+                      {Number(m.qty_before).toFixed(1)} → {Number(m.qty_after).toFixed(1)}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--foreground)' }}>
+                      {m.staff?.full_name ?? 'System'}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {m.notes || '-'}
+                    </span>
+                  </div>
+                )
+              })}
+              {movements.length === 0 && (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 14 }}>
+                  No inventory movements recorded yet.
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -243,12 +425,84 @@ export default function Inventory() {
                 <input id="adj-notes" className="input" type="text" placeholder="e.g. Delivery from supplier" value={adjustNotes} onChange={e => setAdjustNotes(e.target.value)} style={{ padding: '11px 14px', fontSize: 14 }} />
               </div>
               {adjustError && (
-                <div style={{ background: 'var(--danger-bg)', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--danger)' }}>{adjustError}</div>
+                <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c' }}>{adjustError}</div>
               )}
               <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
                 <button type="button" className="btn-ghost" onClick={() => setAdjustModal(null)} style={{ flex: 1, padding: '12px' }}>Cancel</button>
                 <button id="btn-save-adjustment" type="submit" className="btn-primary" disabled={adjustLoading} style={{ flex: 2, padding: '12px' }}>
                   {adjustLoading ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Item Modal */}
+      {showAddModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
+          onClick={e => { if (e.target === e.currentTarget) setShowAddModal(false) }}
+        >
+          <div className="card fade-in" style={{ width: '100%', maxWidth: 460, padding: '28px 26px' }}>
+            <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
+              Add New Inventory Item
+            </h2>
+            <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 18 }}>
+              Register a raw ingredient, side item, or packaging material.
+            </p>
+
+            <form onSubmit={handleCreateItem} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Item Name *</label>
+                <input className="input" required value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="e.g. Garlic Parmesan Seasoning" style={{ width: '100%', padding: '9px 12px', fontSize: 13 }} />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Category *</label>
+                  <select className="input" value={newItemCat} onChange={e => setNewItemCat(e.target.value)} style={{ width: '100%', padding: '9px 12px', fontSize: 13 }}>
+                    {CATS.filter(c => c !== 'All').map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Measurement Unit *</label>
+                  <input className="input" required value={newItemUnit} onChange={e => setNewItemUnit(e.target.value)} placeholder="e.g. kg, liters, pcs" style={{ width: '100%', padding: '9px 12px', fontSize: 13 }} />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Initial Stock Qty</label>
+                  <input className="input" type="number" step="0.01" min="0" value={newItemStock} onChange={e => setNewItemStock(e.target.value)} placeholder="0" style={{ width: '100%', padding: '9px 12px', fontSize: 13 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Minimum Stock Level</label>
+                  <input className="input" type="number" step="0.01" min="0" value={newItemMin} onChange={e => setNewItemMin(e.target.value)} placeholder="0" style={{ width: '100%', padding: '9px 12px', fontSize: 13 }} />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Unit Cost (₱)</label>
+                  <input className="input" type="number" step="0.01" min="0" value={newItemCost} onChange={e => setNewItemCost(e.target.value)} placeholder="0.00" style={{ width: '100%', padding: '9px 12px', fontSize: 13 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Supplier</label>
+                  <input className="input" value={newItemSupplier} onChange={e => setNewItemSupplier(e.target.value)} placeholder="e.g. Metro Poultry Supply" style={{ width: '100%', padding: '9px 12px', fontSize: 13 }} />
+                </div>
+              </div>
+
+              {addError && (
+                <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#b91c1c' }}>
+                  {addError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                <button type="button" className="btn-ghost" onClick={() => setShowAddModal(false)} style={{ flex: 1, padding: '10px' }}>Cancel</button>
+                <button id="btn-save-new-item" type="submit" className="btn-primary" disabled={addLoading} style={{ flex: 2, padding: '10px' }}>
+                  {addLoading ? 'Saving...' : 'Add Item'}
                 </button>
               </div>
             </form>

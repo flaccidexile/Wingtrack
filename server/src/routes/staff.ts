@@ -108,4 +108,48 @@ router.delete(
   }
 )
 
+// PATCH /api/staff/:id/reactivate — Admin only: reactivate a staff member
+router.patch(
+  '/:id/reactivate',
+  requireAuth,
+  requireRole('admin'),
+  async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { id } = _req.params
+
+    const { error } = await supabaseAdmin
+      .from('staff_profiles')
+      .update({ is_active: true })
+      .eq('id', id)
+
+    if (error) { res.status(500).json({ message: error.message }); return }
+    res.json({ id, is_active: true })
+  }
+)
+
+// PATCH /api/staff/update-password — Authenticated user updates their own password
+router.patch(
+  '/update-password',
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { password } = req.body as { password?: string }
+
+    if (!password || password.length < 6) {
+      res.status(400).json({ message: 'Password must be at least 6 characters long.' })
+      return
+    }
+
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.userId!, {
+      password,
+    })
+
+    if (error) {
+      res.status(400).json({ message: error.message })
+      return
+    }
+
+    res.json({ message: 'Password updated successfully.' })
+  }
+)
+
 export default router
+

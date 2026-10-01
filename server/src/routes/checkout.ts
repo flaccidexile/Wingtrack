@@ -69,7 +69,64 @@ router.post(
       return
     }
 
-    // ── Step 4: Insert the Order ─────────────────────────────
+    // ── Step 4: Load recipes and calculate required inventory ─
+    const { data: recipes, error: recipeError } = await supabaseAdmin
+      .from('product_recipes')
+      .select('product_id, inventory_id, qty_per_unit')
+      .in('product_id', productIds)
+
+    if (recipeError) {
+      console.error('Recipe fetch error:', recipeError)
+      res.status(500).json({ message: 'Failed to verify product ingredients.' })
+      return
+    }
+
+    const deductionMap = new Map<string, number>()
+    for (const item of items) {
+      const itemRecipes = (recipes ?? []).filter(r => r.product_id === item.product_id)
+      for (const recipe of itemRecipes) {
+        const totalDeduct = Number(recipe.qty_per_unit) * item.quantity
+        deductionMap.set(
+          recipe.inventory_id,
+          (deductionMap.get(recipe.inventory_id) ?? 0) + totalDeduct
+        )
+      }
+    }
+
+    // ── Step 5: Validate inventory availability ───────────────
+    let inventoryItems: Array<{ id: string; stock_qty: number; name: string; unit: string }> = []
+    if (deductionMap.size > 0) {
+      const inventoryIds = [...deductionMap.keys()]
+      const { data: invData, error: invFetchError } = await supabaseAdmin
+        .from('inventory')
+        .select('id, stock_qty, name, unit')
+        .in('id', inventoryIds)
+
+      if (invFetchError || !invData) {
+        console.error('Inventory fetch error:', invFetchError)
+        res.status(500).json({ message: 'Failed to check inventory levels.' })
+        return
+      }
+
+      inventoryItems = invData.map(i => ({ ...i, stock_qty: Number(i.stock_qty) }))
+
+      const insufficient: string[] = []
+      for (const inv of inventoryItems) {
+        const required = deductionMap.get(inv.id) ?? 0
+        if (inv.stock_qty < required) {
+          insufficient.push(`${inv.name} (need ${required} ${inv.unit}, only ${inv.stock_qty} available)`)
+        }
+      }
+
+      if (insufficient.length > 0) {
+        res.status(400).json({
+          message: `Insufficient stock to fulfill order: ${insufficient.join(', ')}`,
+        })
+        return
+      }
+    }
+
+    // ── Step 6: Insert the Order ─────────────────────────────
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
       .insert({
@@ -90,7 +147,7 @@ router.post(
       return
     }
 
-    // ── Step 5: Insert Order Items ───────────────────────────
+    // ── Step 7: Insert Order Items ───────────────────────────
     const { error: itemsError } = await supabaseAdmin
       .from('order_items')
       .insert(orderItems.map(i => ({ ...i, order_id: order.id })))
@@ -101,52 +158,12 @@ router.post(
       return
     }
 
-    // ── Step 6: Load Recipe Map ──────────────────────────────
-    const { data: recipes, error: recipeError } = await supabaseAdmin
-      .from('product_recipes')
-      .select('product_id, inventory_id, qty_per_unit')
-      .in('product_id', productIds)
-
-    if (recipeError) {
-      console.error('Recipe fetch error:', recipeError)
-      // Non-fatal — order is saved, but log warning
-      res.status(200).json({ ...order, warning: 'Order saved but inventory deduction skipped (recipe error).' })
-      return
-    }
-
-    // ── Step 7: Aggregate inventory deductions ───────────────
-    // Aggregate how much total to deduct per inventory item
-    const deductionMap = new Map<string, number>()
-    for (const item of items) {
-      const itemRecipes = (recipes ?? []).filter(r => r.product_id === item.product_id)
-      for (const recipe of itemRecipes) {
-        const totalDeduct = Number(recipe.qty_per_unit) * item.quantity
-        deductionMap.set(
-          recipe.inventory_id,
-          (deductionMap.get(recipe.inventory_id) ?? 0) + totalDeduct
-        )
-      }
-    }
-
     if (deductionMap.size === 0) {
       res.status(200).json(order)
       return
     }
 
-    // ── Step 8: Fetch current stock levels ───────────────────
-    const inventoryIds = [...deductionMap.keys()]
-    const { data: inventoryItems, error: invFetchError } = await supabaseAdmin
-      .from('inventory')
-      .select('id, stock_qty, name')
-      .in('id', inventoryIds)
-
-    if (invFetchError || !inventoryItems) {
-      console.error('Inventory fetch error:', invFetchError)
-      res.status(200).json({ ...order, warning: 'Order saved but inventory deduction skipped.' })
-      return
-    }
-
-    // ── Step 9: Apply deductions + log movements ─────────────
+    // ── Step 8: Apply deductions + log movements ─────────────
     const deductionErrors: string[] = []
     const movementInserts: object[] = []
 

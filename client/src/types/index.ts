@@ -83,3 +83,29 @@ export interface InventoryAdjustmentPayload {
   movement_type: 'restock' | 'adjustment' | 'waste'
   notes?: string
 }
+
+export interface InventoryMovement {
+  id: string
+  inventory_id: string
+  order_id?: string | null
+  movement_type: 'restock' | 'deduction' | 'adjustment' | 'waste'
+  qty_change: number
+  qty_before: number
+  qty_after: number
+  performed_by?: string | null
+  notes?: string | null
+  created_at: string
+  inventory?: { name: string; unit: string }
+  staff?: { full_name: string }
+}
+
+export interface CreateInventoryItemPayload {
+  name: string
+  category: string
+  unit: string
+  stock_qty?: number
+  min_stock_level?: number
+  unit_cost?: number
+  supplier?: string
+}
+

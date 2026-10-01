@@ -82,4 +82,93 @@ router.patch(
   }
 )
 
+// GET /api/inventory/movements — Admin + Inventory Personnel: audit trail
+router.get(
+  '/movements',
+  requireAuth,
+  requireRole('admin', 'inventory_personnel'),
+  async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { data, error } = await supabaseAdmin
+      .from('inventory_movements')
+      .select('*, inventory:inventory_id(name, unit), staff:performed_by(full_name)')
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    if (error) {
+      res.status(500).json({ message: error.message })
+      return
+    }
+
+    res.json(data ?? [])
+  }
+)
+
+// POST /api/inventory — Admin + Inventory Personnel: add new raw material / item
+router.post(
+  '/',
+  requireAuth,
+  requireRole('admin', 'inventory_personnel'),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { name, category, unit, stock_qty, min_stock_level, unit_cost, supplier } = req.body as {
+      name: string
+      category: string
+      unit: string
+      stock_qty?: number
+      min_stock_level?: number
+      unit_cost?: number
+      supplier?: string
+    }
+
+    if (!name || !category || !unit) {
+      res.status(400).json({ message: 'Name, category, and unit are required.' })
+      return
+    }
+
+    const initialQty = typeof stock_qty === 'number' ? Math.max(0, stock_qty) : 0
+    const minLevel = typeof min_stock_level === 'number' ? Math.max(0, min_stock_level) : 0
+    const cost = typeof unit_cost === 'number' ? Math.max(0, unit_cost) : 0
+
+    const { data: newItem, error: createError } = await supabaseAdmin
+      .from('inventory')
+      .insert({
+        name,
+        category,
+        unit,
+        stock_qty: initialQty,
+        min_stock_level: minLevel,
+        unit_cost: cost,
+        supplier: supplier || null,
+      })
+      .select()
+      .single()
+
+    if (createError || !newItem) {
+      res.status(400).json({ message: createError?.message ?? 'Failed to create inventory item.' })
+      return
+    }
+
+    // Get staff profile
+    const { data: staffProfile } = await supabaseAdmin
+      .from('staff_profiles')
+      .select('id')
+      .eq('user_id', req.userId!)
+      .single()
+
+    if (initialQty > 0) {
+      await supabaseAdmin.from('inventory_movements').insert({
+        inventory_id: newItem.id,
+        movement_type: 'restock',
+        qty_change: initialQty,
+        qty_before: 0,
+        qty_after: initialQty,
+        performed_by: staffProfile?.id ?? null,
+        notes: 'Initial inventory item setup',
+      })
+    }
+
+    res.status(201).json(newItem)
+  }
+)
+
 export default router
+

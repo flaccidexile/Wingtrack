@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { apiCreateStaff, apiDeactivateStaff } from '@/lib/api'
+import { apiCreateStaff, apiDeactivateStaff, apiReactivateStaff } from '@/lib/api'
 import type { StaffProfile, StaffRole } from '@/types'
 
 const ROLES: { value: StaffRole; label: string }[] = [
@@ -57,6 +57,16 @@ export default function StaffManager() {
       await fetchStaff()
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Deactivation failed')
+    }
+  }
+
+  async function handleReactivate(id: string, name: string) {
+    if (!confirm(`Reactivate ${name}? They will regain access to their account.`)) return
+    try {
+      await apiReactivateStaff(id)
+      await fetchStaff()
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Reactivation failed')
     }
   }
 
@@ -129,7 +139,7 @@ export default function StaffManager() {
                 </span>
               </div>
               <div>
-                {s.is_active && (
+                {s.is_active ? (
                   <button
                     id={`btn-deactivate-${s.id}`}
                     onClick={() => handleDeactivate(s.id, s.full_name)}
@@ -140,6 +150,18 @@ export default function StaffManager() {
                     }}
                   >
                     Deactivate
+                  </button>
+                ) : (
+                  <button
+                    id={`btn-reactivate-${s.id}`}
+                    onClick={() => handleReactivate(s.id, s.full_name)}
+                    style={{
+                      fontSize: 12, padding: '5px 12px', borderRadius: 6,
+                      background: 'transparent', border: '1px solid #86efac',
+                      color: '#15803d', cursor: 'pointer', fontWeight: 600,
+                    }}
+                  >
+                    Reactivate
                   </button>
                 )}
               </div>

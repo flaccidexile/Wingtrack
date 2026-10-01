@@ -54,13 +54,13 @@ export default function Inventory() {
         <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
           {critCount > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 6, background: '#fce8e8', border: '1px solid #fca5a5' }}>
-              <span>🔴</span>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#b91c1c', display: 'inline-block' }} />
               <span style={{ fontSize: 12, color: '#b91c1c', fontWeight: 600 }}>{critCount} item{critCount > 1 ? 's' : ''} critically low — reorder immediately</span>
             </div>
           )}
           {lowCount - critCount > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 6, background: '#fff7e6', border: '1px solid #fcd34d' }}>
-              <span>⚠️</span>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#b45309', display: 'inline-block' }} />
               <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>{lowCount - critCount} item{lowCount - critCount > 1 ? 's' : ''} below minimum stock level</span>
             </div>
           )}

@@ -9,6 +9,7 @@ import Analytics from '@/pages/admin/Analytics'
 import StaffManager from '@/pages/admin/StaffManager'
 import PointOfSale from '@/pages/cashier/PointOfSale'
 import Inventory from '@/pages/inventory/Inventory'
+import OrdersList from '@/pages/orders/OrdersList'
 
 const DEFAULT_PAGE: Record<StaffRole, Page> = {
   admin: 'dashboard',
@@ -27,6 +28,7 @@ export default function AppShell() {
         <div className="fade-in" key={page}>
           {page === 'dashboard'  && <Dashboard />}
           {page === 'pos'        && <PointOfSale />}
+          {page === 'orders'     && <OrdersList />}
           {page === 'inventory'  && <Inventory />}
           {page === 'analytics'  && <Analytics />}
           {page === 'staff'      && <StaffManager />}

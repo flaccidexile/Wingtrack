@@ -67,7 +67,7 @@ export default function Dashboard() {
       <div style={{ marginBottom: 28, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div>
           <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: 'var(--foreground)', marginBottom: 4 }}>
-            Good afternoon, Manager ☕
+            Good afternoon, Manager
           </h1>
           <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Wednesday, September 30, 2026 · Wing's Zone</p>
         </div>

@@ -59,7 +59,7 @@ export default function App() {
         <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--sidebar-active)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 16 }}>☕</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#1c0f06', fontFamily: 'Fraunces' }}>W</span>
             </div>
             <div>
               <p style={{ fontFamily: 'Fraunces', fontWeight: 700, fontSize: 15, color: 'var(--sidebar-foreground)', lineHeight: 1.1 }}>
