@@ -18,6 +18,17 @@ export interface ProductCategory {
   sort_order: number
 }
 
+export interface ProductRecipe {
+  id?: string
+  inventory_id: string
+  qty_per_unit: number
+  inventory?: {
+    name: string
+    unit: string
+    stock_qty?: number
+  }
+}
+
 export interface Product {
   id: string
   name: string
@@ -26,6 +37,7 @@ export interface Product {
   price: number
   is_available: boolean
   image_url?: string
+  recipes?: ProductRecipe[]
 }
 
 export interface InventoryItem {

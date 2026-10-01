@@ -7,6 +7,7 @@ import type { StaffRole } from '@/types'
 import Dashboard from '@/pages/admin/Dashboard'
 import Analytics from '@/pages/admin/Analytics'
 import StaffManager from '@/pages/admin/StaffManager'
+import MenuManager from '@/pages/admin/MenuManager'
 import PointOfSale from '@/pages/cashier/PointOfSale'
 import Inventory from '@/pages/inventory/Inventory'
 import OrdersList from '@/pages/orders/OrdersList'
@@ -29,6 +30,7 @@ export default function AppShell() {
           {page === 'dashboard'  && <Dashboard />}
           {page === 'pos'        && <PointOfSale />}
           {page === 'orders'     && <OrdersList />}
+          {page === 'menu'       && <MenuManager />}
           {page === 'inventory'  && <Inventory />}
           {page === 'analytics'  && <Analytics />}
           {page === 'staff'      && <StaffManager />}
