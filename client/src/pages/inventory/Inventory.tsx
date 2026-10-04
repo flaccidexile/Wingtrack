@@ -12,6 +12,17 @@ const STATUS_STYLES: Record<string, { label: string; bg: string; color: string }
   critical: { label: 'Critical', bg: '#fce8e8', color: '#b91c1c' },
 }
 
+function getItemStatus(item: InventoryItem): 'ok' | 'low' | 'critical' {
+  if (item.status && (item.status === 'ok' || item.status === 'low' || item.status === 'critical')) {
+    return item.status as 'ok' | 'low' | 'critical'
+  }
+  const qty = Number(item.stock_qty)
+  const min = Number(item.min_stock_level)
+  if (qty <= 0.6 * min) return 'critical'
+  if (qty <= min) return 'low'
+  return 'ok'
+}
+
 interface AdjustModal {
   item: InventoryItem
   type: 'restock' | 'adjustment' | 'waste'
@@ -23,6 +34,7 @@ export default function Inventory() {
   const [loading, setLoading] = useState(true)
   const [cat, setCat] = useState('All')
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'ok' | 'low' | 'critical'>('all')
 
   // Adjust modal state
   const [adjustModal, setAdjustModal] = useState<AdjustModal | null>(null)
@@ -103,12 +115,14 @@ export default function Inventory() {
     return () => { supabase.removeChannel(channel) }
   }, [fetchInventory, fetchMovements, activeTab])
 
+  const okCount   = items.filter(i => getItemStatus(i) === 'ok').length
+  const lowCount  = items.filter(i => getItemStatus(i) === 'low').length
+  const critCount = items.filter(i => getItemStatus(i) === 'critical').length
+
   const filtered = items
     .filter(i => cat === 'All' || i.category === cat)
     .filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
-
-  const lowCount  = items.filter(i => (i.status ?? (Number(i.stock_qty) <= Number(i.min_stock_level) ? 'low' : 'ok')) === 'low').length
-  const critCount = items.filter(i => (i.status ?? (Number(i.stock_qty) <= 0.6 * Number(i.min_stock_level) ? 'critical' : 'ok')) === 'critical').length
+    .filter(i => statusFilter === 'all' || getItemStatus(i) === statusFilter)
 
   async function handleAdjust(e: React.FormEvent) {
     e.preventDefault()
@@ -237,15 +251,55 @@ export default function Inventory() {
           {(lowCount > 0 || critCount > 0) && (
             <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
               {critCount > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderRadius: 8, background: '#fce8e8', border: '1px solid #fca5a5' }}>
+                <div
+                  id="inv-banner-critical"
+                  onClick={() => setStatusFilter(statusFilter === 'critical' ? 'all' : 'critical')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '10px 16px',
+                    borderRadius: 8,
+                    background: '#fce8e8',
+                    border: statusFilter === 'critical' ? '2px solid #b91c1c' : '1px solid #fca5a5',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  title="Click to filter critical stock items"
+                >
                   <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#b91c1c', display: 'inline-block' }} />
-                  <span style={{ fontSize: 13, color: '#b91c1c', fontWeight: 600 }}>{critCount} item{critCount > 1 ? 's' : ''} critically low — reorder immediately</span>
+                  <span style={{ fontSize: 13, color: '#b91c1c', fontWeight: 600 }}>
+                    {critCount} item{critCount > 1 ? 's' : ''} critically low — reorder immediately
+                  </span>
+                  <span style={{ fontSize: 11, background: '#b91c1c', color: '#fff', padding: '2px 8px', borderRadius: 4, marginLeft: 6, fontWeight: 600 }}>
+                    {statusFilter === 'critical' ? 'Active Filter ✕' : 'Filter Critical'}
+                  </span>
                 </div>
               )}
               {lowCount > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderRadius: 8, background: '#fff7e6', border: '1px solid #fcd34d' }}>
+                <div
+                  id="inv-banner-low"
+                  onClick={() => setStatusFilter(statusFilter === 'low' ? 'all' : 'low')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '10px 16px',
+                    borderRadius: 8,
+                    background: '#fff7e6',
+                    border: statusFilter === 'low' ? '2px solid #b45309' : '1px solid #fcd34d',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  title="Click to filter low stock items"
+                >
                   <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#b45309', display: 'inline-block' }} />
-                  <span style={{ fontSize: 13, color: '#92400e', fontWeight: 600 }}>{lowCount} item{lowCount > 1 ? 's' : ''} below minimum stock level</span>
+                  <span style={{ fontSize: 13, color: '#92400e', fontWeight: 600 }}>
+                    {lowCount} item{lowCount > 1 ? 's' : ''} below minimum stock level
+                  </span>
+                  <span style={{ fontSize: 11, background: '#b45309', color: '#fff', padding: '2px 8px', borderRadius: 4, marginLeft: 6, fontWeight: 600 }}>
+                    {statusFilter === 'low' ? 'Active Filter ✕' : 'Filter Low'}
+                  </span>
                 </div>
               )}
             </div>
@@ -259,16 +313,92 @@ export default function Inventory() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search items..."
-              style={{ width: 240, padding: '10px 14px', fontSize: 14 }}
+              style={{ width: 220, padding: '9px 14px', fontSize: 13 }}
             />
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+
+            {/* Stock Status Dropdown Filter */}
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <select
+                id="inv-status-dropdown"
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value as 'all' | 'ok' | 'low' | 'critical')}
+                style={{
+                  padding: '9px 34px 9px 14px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius)',
+                  border: statusFilter !== 'all' ? '1.5px solid var(--primary)' : '1px solid var(--border)',
+                  background: 'var(--card)',
+                  color: 'var(--foreground)',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  appearance: 'none',
+                  WebkitAppearance: 'none',
+                  minWidth: 175,
+                  boxShadow: statusFilter !== 'all' ? '0 0 0 3px rgba(234, 88, 12, 0.12)' : 'none',
+                  transition: 'border-color 0.15s, box-shadow 0.15s',
+                }}
+              >
+                <option value="all">All Stocks ({items.length})</option>
+                <option value="ok">In stock ({okCount})</option>
+                <option value="low">Low ({lowCount})</option>
+                <option value="critical">Critical ({critCount})</option>
+              </select>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  position: 'absolute',
+                  right: 12,
+                  pointerEvents: 'none',
+                  color: 'var(--muted-foreground)',
+                }}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </div>
+
+            {/* Clear filter shortcut if status is filtered */}
+            {statusFilter !== 'all' && (
+              <button
+                id="inv-clear-status-filter"
+                onClick={() => setStatusFilter('all')}
+                style={{
+                  padding: '7px 11px',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  border: '1px dashed var(--border)',
+                  background: 'var(--card)',
+                  color: 'var(--muted-foreground)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--foreground)'; e.currentTarget.style.borderColor = 'var(--foreground)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--muted-foreground)'; e.currentTarget.style.borderColor = 'var(--border)' }}
+                title="Reset stock status filter"
+              >
+                Reset Status ✕
+              </button>
+            )}
+
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 'auto' }}>
               {CATS.map(c => (
                 <button
                   key={c}
                   id={`inv-cat-${c.toLowerCase()}`}
                   onClick={() => setCat(c)}
                   style={{
-                    padding: '7px 16px', borderRadius: 22, fontSize: 12, cursor: 'pointer',
+                    padding: '7px 14px', borderRadius: 22, fontSize: 12, cursor: 'pointer',
                     border: '1px solid var(--border)',
                     background: cat === c ? 'var(--primary)' : 'var(--card)',
                     color: cat === c ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
@@ -294,7 +424,7 @@ export default function Inventory() {
                 ))}
               </div>
               {filtered.map((item, i) => {
-                const status = item.status || (Number(item.stock_qty) <= 0.6 * Number(item.min_stock_level) ? 'critical' : Number(item.stock_qty) <= Number(item.min_stock_level) ? 'low' : 'ok')
+                const status = getItemStatus(item)
                 const s = STATUS_STYLES[status] || STATUS_STYLES.ok
                 const qtyColor = status === 'ok' ? 'var(--success, #15803d)' : status === 'low' ? '#b45309' : '#b91c1c'
                 return (
