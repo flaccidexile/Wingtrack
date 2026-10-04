@@ -84,13 +84,13 @@ function StaffIcon({ active }: { active: boolean }) {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard',    roles: ['admin'],                               icon: DashIcon   },
-  { id: 'pos',       label: 'Point of Sale', roles: ['admin', 'cashier'],                    icon: PosIcon    },
-  { id: 'orders',    label: 'Transactions',  roles: ['admin', 'cashier'],                    icon: OrdersIcon },
-  { id: 'menu',      label: 'Menu Items',    roles: ['admin'],                               icon: MenuIcon   },
-  { id: 'inventory', label: 'Inventory',     roles: ['admin', 'inventory_personnel'],         icon: InvIcon    },
-  { id: 'analytics', label: 'Analytics',     roles: ['admin'],                               icon: AnaIcon    },
-  { id: 'staff',     label: 'Staff Manager', roles: ['admin'],                               icon: StaffIcon  },
+  { id: 'dashboard', label: 'Dashboard',     roles: ['admin'],                       icon: DashIcon   },
+  { id: 'pos',       label: 'Point of Sale',  roles: ['admin', 'cashier'],            icon: PosIcon    },
+  { id: 'orders',    label: 'Transactions',   roles: ['admin'],                       icon: OrdersIcon },
+  { id: 'menu',      label: 'Menu Items',     roles: ['admin'],                       icon: MenuIcon   },
+  { id: 'inventory', label: 'Inventory',      roles: ['admin', 'inventory_personnel'], icon: InvIcon    },
+  { id: 'analytics', label: 'Analytics',      roles: ['admin'],                       icon: AnaIcon    },
+  { id: 'staff',     label: 'Staff Manager',  roles: ['admin'],                       icon: StaffIcon  },
 ]
 
 interface SidebarProps {
