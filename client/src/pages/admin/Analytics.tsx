@@ -126,7 +126,7 @@ export default function Analytics() {
       <div style={{ marginBottom: 26, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div>
           <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Sales Analytics</h1>
-          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Performance overview for Wing's Zone</p>
+          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Performance overview for Wingtrack</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {PERIODS.map(p => (

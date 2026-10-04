@@ -1,6 +1,6 @@
 # WINGTRACK — Integrated POS, Inventory & Sales Analytics
 
-> Built for **Wing's Zone** | React + Node.js/Express + Supabase (PostgreSQL)
+> Built for **Wingtrack** | React + Node.js/Express + Supabase (PostgreSQL)
 
 ---
 
@@ -59,7 +59,7 @@ INSERT INTO public.staff_profiles (user_id, full_name, email, role)
 VALUES (
   '<paste-user-id-from-auth-dashboard>',
   'Manager Name',
-  'admin@wingszone.ph',
+  'admin@wingtrack.ph',
   'admin'
 );
 ```

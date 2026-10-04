@@ -69,7 +69,7 @@ export default function Dashboard() {
           <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: 'var(--foreground)', marginBottom: 4 }}>
             Good afternoon, Manager
           </h1>
-          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Wednesday, September 30, 2026 · Wing's Zone</p>
+          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Wednesday, September 30, 2026 · Wingtrack</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {['Today', 'This Week', 'This Month'].map((t, i) => (

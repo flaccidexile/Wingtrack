@@ -65,7 +65,7 @@ export default function App() {
               <p style={{ fontFamily: 'Fraunces', fontWeight: 700, fontSize: 15, color: 'var(--sidebar-foreground)', lineHeight: 1.1 }}>
                 <span style={{ color: 'var(--sidebar-active)' }}>WING</span>TRACK
               </p>
-              <p style={{ fontSize: 10, color: 'var(--sidebar-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 1 }}>Wing's Zone</p>
+              <p style={{ fontSize: 10, color: 'var(--sidebar-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 1 }}>POS & Inventory</p>
             </div>
           </div>
         </div>

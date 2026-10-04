@@ -51,7 +51,7 @@ export default function Analytics() {
       <div style={{ marginBottom: 22, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div>
           <h1 style={{ fontFamily: 'Fraunces', fontSize: 22, fontWeight: 700, color: 'var(--foreground)', marginBottom: 4 }}>Sales Analytics</h1>
-          <p style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>Performance overview for Wing's Zone</p>
+          <p style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>Performance overview for Wingtrack</p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {PERIODS.map(p => (
@@ -84,7 +84,7 @@ export default function Analytics() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16, marginBottom: 16 }}>
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '20px 22px' }}>
           <h3 style={{ fontFamily: 'Fraunces', fontSize: 15, fontWeight: 600, marginBottom: 4, color: 'var(--foreground)' }}>Monthly Revenue Trend</h3>
-          <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginBottom: 16 }}>Apr – Sep 2026 · Wing's Zone</p>
+          <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginBottom: 16 }}>Apr – Sep 2026 · Wingtrack</p>
           <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={monthly}>
               <defs>

@@ -94,7 +94,7 @@ export default function StaffManager() {
       <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div>
           <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Staff Manager</h1>
-          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Provision and manage Wing's Zone staff accounts</p>
+          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Provision and manage Wingtrack staff accounts</p>
         </div>
         <button
           id="btn-add-staff"
@@ -224,7 +224,7 @@ export default function StaffManager() {
                 <label htmlFor="staff-email" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>Email</label>
                 <input
                   id="staff-email" className="input" type="email" required
-                  placeholder="maria@wingszone.ph"
+                  placeholder="maria@wingtrack.ph"
                   value={form.email}
                   onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   style={{ padding: '11px 14px', fontSize: 14 }}

@@ -54,8 +54,8 @@ export default function ReceiptModal({ order, onClose }: ReceiptModalProps) {
         {/* Printable Receipt Body */}
         <div id="printable-receipt" style={{ fontFamily: 'Courier New, monospace' }}>
           <div style={{ textAlign: 'center', marginBottom: 16, borderBottom: '1px dashed #999', paddingBottom: 14 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 900, letterSpacing: '0.05em', margin: 0, color: '#1a1a1a' }}>WING'S ZONE</h2>
-            <p style={{ fontSize: 11, color: '#666', margin: '4px 0 0 0' }}>WINGTRACK Integrated POS System</p>
+            <h2 style={{ fontSize: 20, fontWeight: 900, letterSpacing: '0.05em', margin: 0, color: '#1a1a1a' }}>WINGTRACK</h2>
+            <p style={{ fontSize: 11, color: '#666', margin: '4px 0 0 0' }}>Integrated POS & Inventory System</p>
             <p style={{ fontSize: 11, color: '#666', margin: '2px 0 0 0' }}>Order #{order.order_number}</p>
             <p style={{ fontSize: 11, color: '#666', margin: '2px 0 0 0' }}>{dateStr}</p>
             {order.status === 'void' && (
@@ -106,7 +106,7 @@ export default function ReceiptModal({ order, onClose }: ReceiptModalProps) {
           </div>
 
           <div style={{ textAlign: 'center', marginTop: 18, borderTop: '1px dashed #999', paddingTop: 12, fontSize: 11, color: '#777' }}>
-            <p style={{ margin: 0 }}>Thank you for dining at Wing's Zone!</p>
+            <p style={{ margin: 0 }}>Thank you for ordering at Wingtrack!</p>
             <p style={{ margin: '2px 0 0 0' }}>Please come again.</p>
           </div>
         </div>

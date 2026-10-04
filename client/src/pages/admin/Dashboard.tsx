@@ -174,7 +174,7 @@ export default function Dashboard() {
             {greeting}, Manager
           </h1>
           <p style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>
-            {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} · Wing's Zone
+            {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} · Wingtrack
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>

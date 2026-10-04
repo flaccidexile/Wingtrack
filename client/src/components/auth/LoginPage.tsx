@@ -65,7 +65,7 @@ export default function LoginPage() {
             <span style={{ color: 'var(--accent)' }}>WING</span>TRACK
           </h1>
           <p style={{ fontSize: 14, color: 'var(--muted-foreground)', marginTop: 8, fontWeight: 500 }}>
-            Wing's Zone — Staff Portal
+            Wingtrack — Staff Portal
           </p>
         </div>
 
@@ -94,7 +94,7 @@ export default function LoginPage() {
               type="email"
               autoComplete="email"
               required
-              placeholder="you@wingszone.ph"
+              placeholder="you@wingtrack.ph"
               value={email}
               onChange={e => setEmail(e.target.value)}
               style={{ width: '100%', padding: '14px 16px', fontSize: 15 }}

@@ -184,11 +184,11 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontFamily: 'Fraunces', fontSize: 21, fontWeight: 700, color: 'var(--sidebar-foreground)', letterSpacing: '-0.01em' }}>
-                WING'S ZONE
+                WINGTRACK
               </span>
             </div>
             <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--sidebar-active)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
-              WINGTRACK SYSTEM
+              POS & INVENTORY
             </span>
           </div>
         </div>
