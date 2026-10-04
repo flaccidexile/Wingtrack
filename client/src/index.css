@@ -1,28 +1,28 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
 @import 'tailwindcss';
 
-/* ── Design Tokens ──────────────────────────────────────── */
+/* ── Design Tokens (Wingtrack Logo Palette) ──────────────── */
 :root {
-  --background:          #f5efe6;
-  --foreground:          #1c1007;
-  --card:                #fdfaf6;
-  --card-foreground:     #1c1007;
-  --primary:             #9b5e28;
-  --primary-foreground:  #fdfaf6;
-  --secondary:           #ecddd0;
-  --secondary-foreground:#4a2e12;
-  --muted:               #e8ddd0;
-  --muted-foreground:    #7a5c3e;
-  --accent:              #c47a2e;
-  --accent-foreground:   #fdfaf6;
-  --border:              #ddd0c0;
-  --ring:                #c47a2e;
+  --background:          #fbf9f6;
+  --foreground:          #191512;
+  --card:                #ffffff;
+  --card-foreground:     #191512;
+  --primary:             #ea580c;
+  --primary-foreground:  #ffffff;
+  --secondary:           #ffedd5;
+  --secondary-foreground:#9a3412;
+  --muted:               #f1eae2;
+  --muted-foreground:    #786b5e;
+  --accent:              #f97316;
+  --accent-foreground:   #ffffff;
+  --border:              #e5dcce;
+  --ring:                #ea580c;
   --radius:              8px;
-  --sidebar:             #1c0f06;
+  --sidebar:             #14110e;
   --sidebar-foreground:  #fffdfa;
-  --sidebar-muted:       #d8bea6;
-  --sidebar-active:      #f09b3a;
-  --sidebar-hover:       #2f1b0e;
+  --sidebar-muted:       #a89a8c;
+  --sidebar-active:      #f97316;
+  --sidebar-hover:       #241d18;
   --danger:              #b91c1c;
   --danger-bg:           #fce8e8;
   --warning:             #b45309;
@@ -120,7 +120,7 @@ code, .mono { font-family: 'DM Mono', monospace; }
 }
 .input:focus {
   border-color: var(--ring);
-  box-shadow: 0 0 0 3px rgba(196,122,46,0.12);
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.16);
 }
 
 /* ── Animations ─────────────────────────────────────────── */

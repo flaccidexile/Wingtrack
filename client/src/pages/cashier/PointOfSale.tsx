@@ -6,11 +6,53 @@ import { useAuth } from '@/hooks/useAuth'
 import type { Product, ProductCategory, CartItem, Order } from '@/types'
 import ReceiptModal from '@/components/receipt/ReceiptModal'
 
-const DEFAULT_CATS = ['All', 'Wings', 'Combos', 'Sides', 'Drinks']
+const DEFAULT_CATS = ['All', 'Wings', 'Sizzling', 'Silog', 'Shake', 'Burger', 'Fries & Pure Cheesestick']
+
+const FALLBACK_PRODUCTS: Product[] = [
+  // Wings
+  { id: 'p-1', name: 'Classic Buffalo Wings', price: 199, is_available: true, category_id: 'c-wings', category: { id: 'c-wings', name: 'Wings', sort_order: 1 } },
+  { id: 'p-2', name: 'Honey Garlic Wings', price: 199, is_available: true, category_id: 'c-wings', category: { id: 'c-wings', name: 'Wings', sort_order: 1 } },
+  { id: 'p-3', name: 'Spicy Sriracha Wings', price: 199, is_available: true, category_id: 'c-wings', category: { id: 'c-wings', name: 'Wings', sort_order: 1 } },
+  { id: 'p-4', name: 'BBQ Smokey Wings', price: 199, is_available: true, category_id: 'c-wings', category: { id: 'c-wings', name: 'Wings', sort_order: 1 } },
+  { id: 'p-5', name: 'Lemon Pepper Wings', price: 199, is_available: true, category_id: 'c-wings', category: { id: 'c-wings', name: 'Wings', sort_order: 1 } },
+  { id: 'p-6', name: 'Party Bucket (20pcs)', price: 599, is_available: true, category_id: 'c-wings', category: { id: 'c-wings', name: 'Wings', sort_order: 1 } },
+
+  // Sizzling
+  { id: 'p-7', name: 'Sizzling Pork Sisig', price: 189, is_available: true, category_id: 'c-sizzling', category: { id: 'c-sizzling', name: 'Sizzling', sort_order: 2 } },
+  { id: 'p-8', name: 'Sizzling Chicken Steak', price: 179, is_available: true, category_id: 'c-sizzling', category: { id: 'c-sizzling', name: 'Sizzling', sort_order: 2 } },
+  { id: 'p-9', name: 'Sizzling Beef Tapa', price: 199, is_available: true, category_id: 'c-sizzling', category: { id: 'c-sizzling', name: 'Sizzling', sort_order: 2 } },
+  { id: 'p-10', name: 'Sizzling Pork Chop', price: 169, is_available: true, category_id: 'c-sizzling', category: { id: 'c-sizzling', name: 'Sizzling', sort_order: 2 } },
+
+  // Silog
+  { id: 'p-11', name: 'Tapsilog Special', price: 149, is_available: true, category_id: 'c-silog', category: { id: 'c-silog', name: 'Silog', sort_order: 3 } },
+  { id: 'p-12', name: 'Tocilog Delight', price: 139, is_available: true, category_id: 'c-silog', category: { id: 'c-silog', name: 'Silog', sort_order: 3 } },
+  { id: 'p-13', name: 'Chicksilog Wing Meal', price: 149, is_available: true, category_id: 'c-silog', category: { id: 'c-silog', name: 'Silog', sort_order: 3 } },
+  { id: 'p-14', name: 'Bangsilog Supreme', price: 159, is_available: true, category_id: 'c-silog', category: { id: 'c-silog', name: 'Silog', sort_order: 3 } },
+  { id: 'p-15', name: 'Longsilog Classic', price: 129, is_available: true, category_id: 'c-silog', category: { id: 'c-silog', name: 'Silog', sort_order: 3 } },
+
+  // Shake
+  { id: 'p-16', name: 'Fresh Mango Shake', price: 89, is_available: true, category_id: 'c-shake', category: { id: 'c-shake', name: 'Shake', sort_order: 4 } },
+  { id: 'p-17', name: 'Strawberry Milkshake', price: 89, is_available: true, category_id: 'c-shake', category: { id: 'c-shake', name: 'Shake', sort_order: 4 } },
+  { id: 'p-18', name: 'Rich Chocolate Shake', price: 89, is_available: true, category_id: 'c-shake', category: { id: 'c-shake', name: 'Shake', sort_order: 4 } },
+  { id: 'p-19', name: 'House Blend Iced Tea', price: 45, is_available: true, category_id: 'c-shake', category: { id: 'c-shake', name: 'Shake', sort_order: 4 } },
+  { id: 'p-20', name: 'Bottomless Soda', price: 65, is_available: true, category_id: 'c-shake', category: { id: 'c-shake', name: 'Shake', sort_order: 4 } },
+
+  // Burger
+  { id: 'p-21', name: 'Classic Beef Burger', price: 119, is_available: true, category_id: 'c-burger', category: { id: 'c-burger', name: 'Burger', sort_order: 5 } },
+  { id: 'p-22', name: 'Cheesy Bacon Burger', price: 159, is_available: true, category_id: 'c-burger', category: { id: 'c-burger', name: 'Burger', sort_order: 5 } },
+  { id: 'p-23', name: 'Crispy Chicken Burger', price: 149, is_available: true, category_id: 'c-burger', category: { id: 'c-burger', name: 'Burger', sort_order: 5 } },
+  { id: 'p-24', name: 'Double Smash Burger', price: 189, is_available: true, category_id: 'c-burger', category: { id: 'c-burger', name: 'Burger', sort_order: 5 } },
+
+  // Fries & Pure Cheesestick
+  { id: 'p-25', name: 'Pure Mozzarella Cheesesticks (6pcs)', price: 129, is_available: true, category_id: 'c-sticks', category: { id: 'c-sticks', name: 'Fries & Pure Cheesestick', sort_order: 6 } },
+  { id: 'p-26', name: 'Crispy Golden Fries', price: 79, is_available: true, category_id: 'c-sticks', category: { id: 'c-sticks', name: 'Fries & Pure Cheesestick', sort_order: 6 } },
+  { id: 'p-27', name: 'Loaded Cheese Fries', price: 99, is_available: true, category_id: 'c-sticks', category: { id: 'c-sticks', name: 'Fries & Pure Cheesestick', sort_order: 6 } },
+  { id: 'p-28', name: 'Cheesestick & Fries Combo', price: 169, is_available: true, category_id: 'c-sticks', category: { id: 'c-sticks', name: 'Fries & Pure Cheesestick', sort_order: 6 } },
+]
 
 export default function PointOfSale() {
   const { profile } = useAuth()
-  const [products, setProducts] = useState<Product[]>([])
+  const [products, setProducts] = useState<Product[]>(FALLBACK_PRODUCTS)
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATS)
   const [cat, setCat] = useState('All')
   const [search, setSearch] = useState('')
@@ -39,14 +81,20 @@ export default function PointOfSale() {
           .order('sort_order'),
       ])
 
-      if (prodsRes.error) { setError(prodsRes.error.message); return }
-      setProducts((prodsRes.data ?? []) as Product[])
+      if (prodsRes.data && prodsRes.data.length > 0) {
+        setProducts(prodsRes.data as Product[])
+      } else {
+        setProducts(FALLBACK_PRODUCTS)
+      }
 
       if (catsRes.data && catsRes.data.length > 0) {
         setCategories(['All', ...catsRes.data.map(c => c.name)])
+      } else {
+        setCategories(DEFAULT_CATS)
       }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load products')
+    } catch {
+      setProducts(FALLBACK_PRODUCTS)
+      setCategories(DEFAULT_CATS)
     } finally {
       setLoading(false)
     }
@@ -184,7 +232,7 @@ export default function PointOfSale() {
                   id={`pos-item-${item.id}`}
                   onClick={() => addItem(item)}
                   style={{
-                    background: inCart ? 'rgba(155,94,40,0.08)' : 'var(--card)',
+                    background: inCart ? 'rgba(234,88,12,0.08)' : 'var(--card)',
                     border: `1px solid ${inCart ? 'var(--primary)' : 'var(--border)'}`,
                     borderRadius: 14, padding: '22px 20px', cursor: 'pointer', textAlign: 'left',
                     transition: 'all 0.15s',

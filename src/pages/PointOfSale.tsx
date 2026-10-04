@@ -1,24 +1,48 @@
 import { useState } from 'react'
 
 const MENU = [
+  // Wings
   { id: 1, name: 'Classic Buffalo Wings', price: 199, cat: 'Wings' },
   { id: 2, name: 'Honey Garlic Wings', price: 199, cat: 'Wings' },
   { id: 3, name: 'Spicy Sriracha Wings', price: 199, cat: 'Wings' },
   { id: 4, name: 'BBQ Smokey Wings', price: 199, cat: 'Wings' },
   { id: 5, name: 'Lemon Pepper Wings', price: 199, cat: 'Wings' },
-  { id: 6, name: 'BBQ Combo Platter', price: 299, cat: 'Combos' },
-  { id: 7, name: 'Party Bucket (20pcs)', price: 599, cat: 'Combos' },
-  { id: 8, name: 'Family Feast Set', price: 749, cat: 'Combos' },
-  { id: 9, name: 'Loaded Fries', price: 80, cat: 'Sides' },
-  { id: 10, name: 'Coleslaw', price: 55, cat: 'Sides' },
-  { id: 11, name: 'Garlic Rice', price: 45, cat: 'Sides' },
-  { id: 12, name: 'Corn on the Cob', price: 60, cat: 'Sides' },
-  { id: 13, name: 'Iced Tea', price: 45, cat: 'Drinks' },
-  { id: 14, name: 'Bottomless Soda', price: 65, cat: 'Drinks' },
-  { id: 15, name: 'Mineral Water', price: 30, cat: 'Drinks' },
+  { id: 6, name: 'Party Bucket (20pcs)', price: 599, cat: 'Wings' },
+
+  // Sizzling
+  { id: 7, name: 'Sizzling Pork Sisig', price: 189, cat: 'Sizzling' },
+  { id: 8, name: 'Sizzling Chicken Steak', price: 179, cat: 'Sizzling' },
+  { id: 9, name: 'Sizzling Beef Tapa', price: 199, cat: 'Sizzling' },
+  { id: 10, name: 'Sizzling Pork Chop', price: 169, cat: 'Sizzling' },
+
+  // Silog
+  { id: 11, name: 'Tapsilog Special', price: 149, cat: 'Silog' },
+  { id: 12, name: 'Tocilog Delight', price: 139, cat: 'Silog' },
+  { id: 13, name: 'Chicksilog Wing Meal', price: 149, cat: 'Silog' },
+  { id: 14, name: 'Bangsilog Supreme', price: 159, cat: 'Silog' },
+  { id: 15, name: 'Longsilog Classic', price: 129, cat: 'Silog' },
+
+  // Shake
+  { id: 16, name: 'Fresh Mango Shake', price: 89, cat: 'Shake' },
+  { id: 17, name: 'Strawberry Milkshake', price: 89, cat: 'Shake' },
+  { id: 18, name: 'Rich Chocolate Shake', price: 89, cat: 'Shake' },
+  { id: 19, name: 'House Blend Iced Tea', price: 45, cat: 'Shake' },
+  { id: 20, name: 'Bottomless Soda', price: 65, cat: 'Shake' },
+
+  // Burger
+  { id: 21, name: 'Classic Beef Burger', price: 119, cat: 'Burger' },
+  { id: 22, name: 'Cheesy Bacon Burger', price: 159, cat: 'Burger' },
+  { id: 23, name: 'Crispy Chicken Burger', price: 149, cat: 'Burger' },
+  { id: 24, name: 'Double Smash Burger', price: 189, cat: 'Burger' },
+
+  // Fries & Pure Cheesestick
+  { id: 25, name: 'Pure Mozzarella Cheesesticks (6pcs)', price: 129, cat: 'Fries & Pure Cheesestick' },
+  { id: 26, name: 'Crispy Golden Fries', price: 79, cat: 'Fries & Pure Cheesestick' },
+  { id: 27, name: 'Loaded Cheese Fries', price: 99, cat: 'Fries & Pure Cheesestick' },
+  { id: 28, name: 'Cheesestick & Fries Combo', price: 169, cat: 'Fries & Pure Cheesestick' },
 ]
 
-const CATS = ['All', 'Wings', 'Combos', 'Sides', 'Drinks']
+const CATS = ['All', 'Wings', 'Sizzling', 'Silog', 'Shake', 'Burger', 'Fries & Pure Cheesestick']
 
 type CartItem = { id: number; name: string; price: number; cat: string; qty: number }
 

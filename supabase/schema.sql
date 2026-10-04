@@ -147,44 +147,76 @@ CREATE TABLE IF NOT EXISTS public.inventory_movements (
 
 INSERT INTO public.product_categories (name, sort_order) VALUES
     ('Wings', 1),
-    ('Combos', 2),
-    ('Sides', 3),
-    ('Drinks', 4)
+    ('Sizzling', 2),
+    ('Silog', 3),
+    ('Shake', 4),
+    ('Burger', 5),
+    ('Fries & Pure Cheesestick', 6)
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO public.products (name, category_id, price) VALUES
-    ('Classic Buffalo Wings',  (SELECT id FROM public.product_categories WHERE name='Wings'), 199.00),
-    ('Honey Garlic Wings',     (SELECT id FROM public.product_categories WHERE name='Wings'), 199.00),
-    ('Spicy Sriracha Wings',   (SELECT id FROM public.product_categories WHERE name='Wings'), 199.00),
-    ('BBQ Smokey Wings',       (SELECT id FROM public.product_categories WHERE name='Wings'), 199.00),
-    ('Lemon Pepper Wings',     (SELECT id FROM public.product_categories WHERE name='Wings'), 199.00),
-    ('BBQ Combo Platter',      (SELECT id FROM public.product_categories WHERE name='Combos'), 299.00),
-    ('Party Bucket (20pcs)',   (SELECT id FROM public.product_categories WHERE name='Combos'), 599.00),
-    ('Family Feast Set',       (SELECT id FROM public.product_categories WHERE name='Combos'), 749.00),
-    ('Loaded Fries',           (SELECT id FROM public.product_categories WHERE name='Sides'), 80.00),
-    ('Coleslaw',               (SELECT id FROM public.product_categories WHERE name='Sides'), 55.00),
-    ('Garlic Rice',            (SELECT id FROM public.product_categories WHERE name='Sides'), 45.00),
-    ('Corn on the Cob',        (SELECT id FROM public.product_categories WHERE name='Sides'), 60.00),
-    ('Iced Tea',               (SELECT id FROM public.product_categories WHERE name='Drinks'), 45.00),
-    ('Bottomless Soda',        (SELECT id FROM public.product_categories WHERE name='Drinks'), 65.00),
-    ('Mineral Water',          (SELECT id FROM public.product_categories WHERE name='Drinks'), 30.00)
+    -- Wings
+    ('Classic Buffalo Wings',                 (SELECT id FROM public.product_categories WHERE name='Wings'), 199.00),
+    ('Honey Garlic Wings',                    (SELECT id FROM public.product_categories WHERE name='Wings'), 199.00),
+    ('Spicy Sriracha Wings',                  (SELECT id FROM public.product_categories WHERE name='Wings'), 199.00),
+    ('BBQ Smokey Wings',                      (SELECT id FROM public.product_categories WHERE name='Wings'), 199.00),
+    ('Lemon Pepper Wings',                    (SELECT id FROM public.product_categories WHERE name='Wings'), 199.00),
+    ('Party Bucket (20pcs)',                  (SELECT id FROM public.product_categories WHERE name='Wings'), 599.00),
+
+    -- Sizzling
+    ('Sizzling Pork Sisig',                   (SELECT id FROM public.product_categories WHERE name='Sizzling'), 189.00),
+    ('Sizzling Chicken Steak',                (SELECT id FROM public.product_categories WHERE name='Sizzling'), 179.00),
+    ('Sizzling Beef Tapa',                    (SELECT id FROM public.product_categories WHERE name='Sizzling'), 199.00),
+    ('Sizzling Pork Chop',                    (SELECT id FROM public.product_categories WHERE name='Sizzling'), 169.00),
+
+    -- Silog
+    ('Tapsilog Special',                      (SELECT id FROM public.product_categories WHERE name='Silog'), 149.00),
+    ('Tocilog Delight',                       (SELECT id FROM public.product_categories WHERE name='Silog'), 139.00),
+    ('Chicksilog Wing Meal',                  (SELECT id FROM public.product_categories WHERE name='Silog'), 149.00),
+    ('Bangsilog Supreme',                     (SELECT id FROM public.product_categories WHERE name='Silog'), 159.00),
+    ('Longsilog Classic',                     (SELECT id FROM public.product_categories WHERE name='Silog'), 129.00),
+
+    -- Shake
+    ('Fresh Mango Shake',                     (SELECT id FROM public.product_categories WHERE name='Shake'), 89.00),
+    ('Strawberry Milkshake',                  (SELECT id FROM public.product_categories WHERE name='Shake'), 89.00),
+    ('Rich Chocolate Shake',                  (SELECT id FROM public.product_categories WHERE name='Shake'), 89.00),
+    ('House Blend Iced Tea',                  (SELECT id FROM public.product_categories WHERE name='Shake'), 45.00),
+    ('Bottomless Soda',                       (SELECT id FROM public.product_categories WHERE name='Shake'), 65.00),
+
+    -- Burger
+    ('Classic Beef Burger',                   (SELECT id FROM public.product_categories WHERE name='Burger'), 119.00),
+    ('Cheesy Bacon Burger',                   (SELECT id FROM public.product_categories WHERE name='Burger'), 159.00),
+    ('Crispy Chicken Burger',                 (SELECT id FROM public.product_categories WHERE name='Burger'), 149.00),
+    ('Double Smash Burger',                   (SELECT id FROM public.product_categories WHERE name='Burger'), 189.00),
+
+    -- Fries & Pure Cheesestick
+    ('Pure Mozzarella Cheesesticks (6pcs)',   (SELECT id FROM public.product_categories WHERE name='Fries & Pure Cheesestick'), 129.00),
+    ('Crispy Golden Fries',                   (SELECT id FROM public.product_categories WHERE name='Fries & Pure Cheesestick'), 79.00),
+    ('Loaded Cheese Fries',                   (SELECT id FROM public.product_categories WHERE name='Fries & Pure Cheesestick'), 99.00),
+    ('Cheesestick & Fries Combo',             (SELECT id FROM public.product_categories WHERE name='Fries & Pure Cheesestick'), 169.00)
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO public.inventory (name, category, unit, stock_qty, min_stock_level, unit_cost, supplier) VALUES
-    ('Chicken Wings (Raw)',   'Proteins',  'kg',      24.5,  10,   280.00,  'FreshFarm Supply'),
-    ('Honey Garlic Sauce',    'Sauces',    'bottles',  8,    12,   185.00,  'Flavor House PH'),
-    ('Buffalo Hot Sauce',     'Sauces',    'bottles', 15,    10,   210.00,  'Flavor House PH'),
-    ('Sriracha Sauce',        'Sauces',    'bottles',  5,     8,   195.00,  'Flavor House PH'),
-    ('Cooking Oil (Palm)',    'Cooking',   'liters',  42,    20,    90.00,  'Metro Grocery'),
-    ('Frozen Fries',          'Sides',     'kg',      18,    15,   120.00,  'FreshFarm Supply'),
-    ('Garlic (Peeled)',       'Produce',   'kg',       3.2,   5,   160.00,  'Metro Grocery'),
-    ('Coleslaw Mix',          'Produce',   'kg',       6,     4,    85.00,  'FreshFarm Supply'),
-    ('BBQ Sauce',             'Sauces',    'bottles', 11,    10,   175.00,  'Flavor House PH'),
-    ('Lemon Pepper Blend',    'Spices',    'packs',    9,     6,   145.00,  'Spice Central'),
-    ('White Rice (Sacks)',    'Staples',   'sacks',    4,     3,  2200.00,  'Metro Grocery'),
-    ('Disposable Cups',       'Packaging', 'pcs',    520,   200,     2.50,  'PackPro'),
-    ('Take-out Boxes',        'Packaging', 'pcs',    145,   100,     8.00,  'PackPro'),
-    ('Napkins (Packs)',       'Packaging', 'packs',   28,    20,    35.00,  'PackPro')
+    ('Chicken Wings (Raw)',       'Proteins',  'kg',      24.5,  10,   280.00,  'FreshFarm Supply'),
+    ('Pork Sisig Meat',           'Proteins',  'kg',      15.0,   8,   260.00,  'FreshFarm Supply'),
+    ('Beef Tapa Cut',             'Proteins',  'kg',      12.0,   6,   340.00,  'MeatMaster PH'),
+    ('Burger Beef Patties',       'Proteins',  'pcs',     60.0,  20,    42.00,  'MeatMaster PH'),
+    ('Mozzarella Cheesesticks',   'Dairy',     'packs',   25.0,  10,   110.00,  'Dairy Delights'),
+    ('Burger Buns',               'Bakery',    'packs',   40.0,  15,    35.00,  'GoldBake Bakery'),
+    ('Honey Garlic Sauce',        'Sauces',    'bottles',  8,    12,   185.00,  'Flavor House PH'),
+    ('Buffalo Hot Sauce',         'Sauces',    'bottles', 15,    10,   210.00,  'Flavor House PH'),
+    ('Sriracha Sauce',            'Sauces',    'bottles',  5,     8,   195.00,  'Flavor House PH'),
+    ('BBQ Sauce',                 'Sauces',    'bottles', 11,    10,   175.00,  'Flavor House PH'),
+    ('Cheese Sauce Mix',          'Sauces',    'packs',   14,     8,   130.00,  'Flavor House PH'),
+    ('Cooking Oil (Palm)',        'Cooking',   'liters',  42,    20,    90.00,  'Metro Grocery'),
+    ('Frozen Fries',              'Sides',     'kg',      28,    15,   120.00,  'FreshFarm Supply'),
+    ('White Rice (Sacks)',        'Staples',   'sacks',    4,     3,  2200.00,  'Metro Grocery'),
+    ('Fresh Eggs (Trays)',        'Produce',   'trays',   12,     5,   230.00,  'FreshFarm Supply'),
+    ('Mango Fruit Puree',         'Beverages', 'kg',       9,     5,   160.00,  'FruitSource PH'),
+    ('Chocolate / Shake Syrup',   'Beverages', 'bottles',  8,     4,   140.00,  'Flavor House PH'),
+    ('Disposable Cups',           'Packaging', 'pcs',    520,   200,     2.50,  'PackPro'),
+    ('Take-out Boxes',            'Packaging', 'pcs',    180,   100,     8.00,  'PackPro'),
+    ('Napkins (Packs)',           'Packaging', 'packs',   28,    20,    35.00,  'PackPro')
 ON CONFLICT (name) DO NOTHING;
 
 -- Seed recipes safely
@@ -194,61 +226,51 @@ SELECT
     i.id,
     v.qty
 FROM (VALUES
-    ('Classic Buffalo Wings',  'Chicken Wings (Raw)',  0.4),
-    ('Classic Buffalo Wings',  'Buffalo Hot Sauce',    0.1),
-    ('Classic Buffalo Wings',  'Cooking Oil (Palm)',   0.05),
-    ('Classic Buffalo Wings',  'Take-out Boxes',       1),
+    ('Classic Buffalo Wings',                 'Chicken Wings (Raw)',     0.4),
+    ('Classic Buffalo Wings',                 'Buffalo Hot Sauce',       0.1),
+    ('Classic Buffalo Wings',                 'Cooking Oil (Palm)',      0.05),
+    ('Classic Buffalo Wings',                 'Take-out Boxes',          1),
 
-    ('Honey Garlic Wings',     'Chicken Wings (Raw)',  0.4),
-    ('Honey Garlic Wings',     'Honey Garlic Sauce',   0.1),
-    ('Honey Garlic Wings',     'Cooking Oil (Palm)',   0.05),
-    ('Honey Garlic Wings',     'Take-out Boxes',       1),
+    ('Honey Garlic Wings',                    'Chicken Wings (Raw)',     0.4),
+    ('Honey Garlic Wings',                    'Honey Garlic Sauce',      0.1),
+    ('Honey Garlic Wings',                    'Cooking Oil (Palm)',      0.05),
+    ('Honey Garlic Wings',                    'Take-out Boxes',          1),
 
-    ('Spicy Sriracha Wings',   'Chicken Wings (Raw)',  0.4),
-    ('Spicy Sriracha Wings',   'Sriracha Sauce',       0.1),
-    ('Spicy Sriracha Wings',   'Cooking Oil (Palm)',   0.05),
-    ('Spicy Sriracha Wings',   'Take-out Boxes',       1),
+    ('Spicy Sriracha Wings',                  'Chicken Wings (Raw)',     0.4),
+    ('Spicy Sriracha Wings',                  'Sriracha Sauce',          0.1),
+    ('Spicy Sriracha Wings',                  'Cooking Oil (Palm)',      0.05),
+    ('Spicy Sriracha Wings',                  'Take-out Boxes',          1),
 
-    ('BBQ Smokey Wings',       'Chicken Wings (Raw)',  0.4),
-    ('BBQ Smokey Wings',       'BBQ Sauce',            0.1),
-    ('BBQ Smokey Wings',       'Cooking Oil (Palm)',   0.05),
-    ('BBQ Smokey Wings',       'Take-out Boxes',       1),
+    ('Party Bucket (20pcs)',                  'Chicken Wings (Raw)',     2.0),
+    ('Party Bucket (20pcs)',                  'Cooking Oil (Palm)',      0.3),
+    ('Party Bucket (20pcs)',                  'Take-out Boxes',          2),
 
-    ('Lemon Pepper Wings',     'Chicken Wings (Raw)',  0.4),
-    ('Lemon Pepper Wings',     'Lemon Pepper Blend',   0.05),
-    ('Lemon Pepper Wings',     'Cooking Oil (Palm)',   0.05),
-    ('Lemon Pepper Wings',     'Take-out Boxes',       1),
+    ('Sizzling Pork Sisig',                   'Pork Sisig Meat',         0.25),
+    ('Sizzling Pork Sisig',                   'Cooking Oil (Palm)',      0.03),
+    ('Sizzling Pork Sisig',                   'Take-out Boxes',          1),
 
-    ('BBQ Combo Platter',      'Chicken Wings (Raw)',  0.6),
-    ('BBQ Combo Platter',      'BBQ Sauce',            0.15),
-    ('BBQ Combo Platter',      'Frozen Fries',         0.15),
-    ('BBQ Combo Platter',      'Coleslaw Mix',         0.1),
-    ('BBQ Combo Platter',      'Cooking Oil (Palm)',   0.1),
-    ('BBQ Combo Platter',      'Take-out Boxes',       1),
+    ('Tapsilog Special',                      'Beef Tapa Cut',           0.15),
+    ('Tapsilog Special',                      'White Rice (Sacks)',      0.02),
+    ('Tapsilog Special',                      'Fresh Eggs (Trays)',      0.033),
+    ('Tapsilog Special',                      'Take-out Boxes',          1),
 
-    ('Party Bucket (20pcs)',   'Chicken Wings (Raw)',  2.0),
-    ('Party Bucket (20pcs)',   'Cooking Oil (Palm)',   0.3),
-    ('Party Bucket (20pcs)',   'Take-out Boxes',       2),
+    ('Classic Beef Burger',                   'Burger Beef Patties',     1),
+    ('Classic Beef Burger',                   'Burger Buns',             1),
+    ('Classic Beef Burger',                   'Take-out Boxes',          1),
 
-    ('Family Feast Set',       'Chicken Wings (Raw)',  2.0),
-    ('Family Feast Set',       'BBQ Sauce',            0.2),
-    ('Family Feast Set',       'Frozen Fries',         0.3),
-    ('Family Feast Set',       'White Rice (Sacks)',   0.05),
-    ('Family Feast Set',       'Cooking Oil (Palm)',   0.2),
-    ('Family Feast Set',       'Take-out Boxes',       2),
+    ('Pure Mozzarella Cheesesticks (6pcs)',   'Mozzarella Cheesesticks', 0.25),
+    ('Pure Mozzarella Cheesesticks (6pcs)',   'Cooking Oil (Palm)',      0.05),
+    ('Pure Mozzarella Cheesesticks (6pcs)',   'Take-out Boxes',          1),
 
-    ('Loaded Fries',           'Frozen Fries',         0.25),
-    ('Loaded Fries',           'Cooking Oil (Palm)',   0.05),
-    ('Loaded Fries',           'Take-out Boxes',       1),
+    ('Loaded Cheese Fries',                   'Frozen Fries',            0.25),
+    ('Loaded Cheese Fries',                   'Cheese Sauce Mix',        0.05),
+    ('Loaded Cheese Fries',                   'Cooking Oil (Palm)',      0.05),
+    ('Loaded Cheese Fries',                   'Take-out Boxes',          1),
 
-    ('Coleslaw',               'Coleslaw Mix',         0.15),
-    ('Garlic Rice',            'White Rice (Sacks)',   0.02),
-    ('Garlic Rice',            'Garlic (Peeled)',      0.02),
-    ('Garlic Rice',            'Cooking Oil (Palm)',   0.01),
+    ('Fresh Mango Shake',                     'Mango Fruit Puree',       0.15),
+    ('Fresh Mango Shake',                     'Disposable Cups',         1),
 
-    ('Iced Tea',               'Disposable Cups',      1),
-    ('Bottomless Soda',        'Disposable Cups',      1),
-    ('Mineral Water',          'Disposable Cups',      1)
+    ('House Blend Iced Tea',                  'Disposable Cups',         1)
 ) AS v(product_name, inventory_name, qty)
 JOIN public.products p ON p.name = v.product_name
 JOIN public.inventory i ON i.name = v.inventory_name

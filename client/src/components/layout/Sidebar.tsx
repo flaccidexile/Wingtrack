@@ -168,18 +168,22 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
             style={{
               width: 44,
               height: 44,
-              borderRadius: 10,
-              background: 'linear-gradient(135deg, var(--sidebar-active), var(--primary))',
+              borderRadius: '50%',
+              overflow: 'hidden',
+              flexShrink: 0,
+              boxShadow: '0 4px 14px rgba(234,88,12,0.3)',
+              border: '2px solid rgba(249,115,22,0.4)',
+              background: '#ea580c',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              flexShrink: 0,
-              boxShadow: '0 4px 12px rgba(196,122,46,0.3)',
             }}
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1c0f06" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-            </svg>
+            <img
+              src="/logo.png"
+              alt="Wingtrack Logo"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

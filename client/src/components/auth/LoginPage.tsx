@@ -38,20 +38,24 @@ export default function LoginPage() {
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
           <div
             style={{
-              width: 72,
-              height: 72,
-              borderRadius: 18,
-              background: 'var(--sidebar)',
+              width: 88,
+              height: 88,
+              borderRadius: '50%',
+              overflow: 'hidden',
+              margin: '0 auto 18px',
+              boxShadow: '0 10px 28px rgba(234,88,12,0.3)',
+              border: '3px solid rgba(249,115,22,0.4)',
+              background: '#ea580c',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              margin: '0 auto 18px',
-              boxShadow: '0 10px 28px rgba(0,0,0,0.22)',
             }}
           >
-            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="var(--sidebar-active)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 6l9-3 9 3v12l-9 3-9-3V6z"/><path d="M12 3v18M3 6l9 3 9-3"/>
-            </svg>
+            <img
+              src="/logo.png"
+              alt="Wingtrack Logo"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
           </div>
           <h1
             style={{

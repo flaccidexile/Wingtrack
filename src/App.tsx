@@ -58,8 +58,8 @@ export default function App() {
         {/* Logo */}
         <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--sidebar-active)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#1c0f06', fontFamily: 'Fraunces' }}>W</span>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--sidebar-active)', flexShrink: 0, background: '#ea580c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img src="/logo.png" alt="Wingtrack Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
             <div>
               <p style={{ fontFamily: 'Fraunces', fontWeight: 700, fontSize: 15, color: 'var(--sidebar-foreground)', lineHeight: 1.1 }}>
@@ -82,7 +82,7 @@ export default function App() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '9px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                  background: active ? 'rgba(240,155,58,0.18)' : 'transparent',
+                  background: active ? 'rgba(234,88,12,0.18)' : 'transparent',
                   color: active ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
                   fontFamily: 'DM Sans', fontSize: 13, fontWeight: active ? 600 : 500,
                   transition: 'all 0.15s', textAlign: 'left', width: '100%',
@@ -104,7 +104,7 @@ export default function App() {
             <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, color: '#fdfaf6' }}>M</div>
             <div>
               <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--sidebar-foreground)' }}>Manager</p>
-              <p style={{ fontSize: 10, color: 'var(--sidebar-muted)' }}>wings.zone@store.ph</p>
+              <p style={{ fontSize: 10, color: 'var(--sidebar-muted)' }}>manager@wingtrack.ph</p>
             </div>
           </div>
         </div>
