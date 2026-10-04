@@ -5,6 +5,7 @@ import { apiCheckout } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
 import type { Product, ProductCategory, CartItem, Order } from '@/types'
 import ReceiptModal from '@/components/receipt/ReceiptModal'
+import CashPaymentCalculator from '@/components/cashier/CashPaymentCalculator'
 
 const DEFAULT_CATS = ['All', 'Wings', 'Sizzling', 'Silog', 'Shake', 'Burger', 'Fries & Pure Cheesestick']
 
@@ -66,6 +67,9 @@ export default function PointOfSale() {
   const [showReceipt, setShowReceipt] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showCashCalc, setShowCashCalc] = useState(false)
+  const [lastCashReceived, setLastCashReceived] = useState<number | null>(null)
+  const [lastChangeGiven, setLastChangeGiven] = useState<number | null>(null)
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -122,10 +126,32 @@ export default function PointOfSale() {
   const vat      = Math.round(subtotal * 0.12 * 100) / 100
   const total    = Math.round((subtotal + vat) * 100) / 100
 
-  async function handleCheckout() {
+  // When "Charge" is clicked: if cash, show calculator first; otherwise checkout directly
+  function handleChargeClick() {
     if (cart.length === 0 || !profile) return
+    if (method === 'cash') {
+      setShowCashCalc(true)
+    } else {
+      executeCheckout()
+    }
+  }
+
+  // Called after cash calc confirmation or directly for non-cash methods
+  async function executeCheckout(cashReceived?: number, changeGiven?: number) {
+    if (cart.length === 0 || !profile) return
+    setShowCashCalc(false)
     setCheckoutLoading(true)
     setError(null)
+
+    // Store cash info for the success modal
+    if (cashReceived !== undefined && changeGiven !== undefined) {
+      setLastCashReceived(cashReceived)
+      setLastChangeGiven(changeGiven)
+    } else {
+      setLastCashReceived(null)
+      setLastChangeGiven(null)
+    }
+
     const currentCart = [...cart]
     try {
       const result = await apiCheckout({
@@ -175,6 +201,8 @@ export default function PointOfSale() {
     setOrderNum(null)
     setCompletedOrder(null)
     setShowReceipt(false)
+    setLastCashReceived(null)
+    setLastChangeGiven(null)
   }
 
   return (
@@ -366,7 +394,7 @@ export default function PointOfSale() {
           <button
             id="btn-checkout"
             disabled={cart.length === 0 || checkoutLoading}
-            onClick={handleCheckout}
+            onClick={handleChargeClick}
             style={{
               width: '100%', padding: '14px', borderRadius: 8, fontSize: 16, fontWeight: 700,
               cursor: cart.length && !checkoutLoading ? 'pointer' : 'not-allowed',
@@ -423,6 +451,18 @@ export default function PointOfSale() {
             </div>
             <h2 style={{ fontFamily: 'Fraunces', fontSize: 22, fontWeight: 700, color: 'var(--foreground)', marginBottom: 8 }}>Payment Received</h2>
             <p style={{ fontSize: 14, color: 'var(--muted-foreground)', marginBottom: 4 }}>Order #{orderNum} completed</p>
+            {lastCashReceived !== null && lastChangeGiven !== null && (
+              <div style={{ background: 'var(--muted)', borderRadius: 10, padding: '14px 18px', margin: '14px 0', textAlign: 'left' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Cash Received</span>
+                  <span style={{ fontSize: 14, fontFamily: 'DM Mono', fontWeight: 600, color: 'var(--foreground)' }}>₱{lastCashReceived.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Change Given</span>
+                  <span style={{ fontSize: 14, fontFamily: 'DM Mono', fontWeight: 700, color: lastChangeGiven > 0 ? 'var(--success)' : 'var(--foreground)' }}>₱{lastChangeGiven.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            )}
             <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 22 }}>Inventory has been updated automatically.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button
@@ -449,6 +489,15 @@ export default function PointOfSale() {
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Cash Payment Calculator Modal */}
+      {showCashCalc && (
+        <CashPaymentCalculator
+          total={total}
+          onConfirm={(cashReceived, change) => executeCheckout(cashReceived, change)}
+          onCancel={() => setShowCashCalc(false)}
+        />
       )}
 
       {/* Printable Receipt Modal */}
