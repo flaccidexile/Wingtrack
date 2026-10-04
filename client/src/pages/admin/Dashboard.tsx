@@ -224,8 +224,8 @@ export default function Dashboard() {
                   &#8369;{totalRevenue.toLocaleString()}
                 </span>
               </div>
-              <ResponsiveContainer width="100%" height={210}>
-                <AreaChart data={dailyStats}>
+              <ResponsiveContainer width="100%" height={240}>
+                <AreaChart data={dailyStats} margin={{ bottom: 20 }}>
                   <defs>
                     <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%"  stopColor="#c47a2e" stopOpacity={0.25}/>
@@ -233,7 +233,16 @@ export default function Dashboard() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="day" tick={{ fontSize: 12, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} />
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={dailyStats.length > 14 ? Math.ceil(dailyStats.length / 10) - 1 : 0}
+                    angle={dailyStats.length > 10 ? -35 : 0}
+                    textAnchor={dailyStats.length > 10 ? 'end' : 'middle'}
+                    dy={dailyStats.length > 10 ? 8 : 0}
+                  />
                   <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} />
                   <Tooltip content={<CustomTooltip />} />
                   <Area type="monotone" dataKey="revenue" stroke="#c47a2e" strokeWidth={2} fill="url(#rev)" />
@@ -299,10 +308,19 @@ export default function Dashboard() {
             <div className="card" style={{ padding: '24px 26px' }}>
               <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Orders by Day</h3>
               <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 18 }}>{totalOrders} total · &#8369;{totalRevenue.toLocaleString()}</p>
-              <ResponsiveContainer width="100%" height={210}>
-                <BarChart data={dailyStats} barSize={32}>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={dailyStats} barSize={dailyStats.length > 14 ? 16 : 32} margin={{ bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="day" tick={{ fontSize: 12, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} />
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={dailyStats.length > 14 ? Math.ceil(dailyStats.length / 10) - 1 : 0}
+                    angle={dailyStats.length > 10 ? -35 : 0}
+                    textAnchor={dailyStats.length > 10 ? 'end' : 'middle'}
+                    dy={dailyStats.length > 10 ? 8 : 0}
+                  />
                   <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} />
                   <Tooltip
                     contentStyle={{ background: 'var(--sidebar)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontFamily: 'DM Sans' }}
