@@ -9,6 +9,7 @@ import inventoryRouter from './routes/inventory'
 import staffRouter     from './routes/staff'
 import ordersRouter    from './routes/orders'
 import productsRouter  from './routes/products'
+import authRouter      from './routes/auth'
 
 const app  = express()
 const PORT = Number(process.env.PORT ?? 4000)
@@ -29,6 +30,7 @@ app.get('/api/health', (_req, res) => {
 })
 
 // ── Routes ───────────────────────────────────────────────────
+app.use('/api/auth',      authRouter)
 app.use('/api/checkout',  checkoutRouter)
 app.use('/api/inventory', inventoryRouter)
 app.use('/api/staff',     staffRouter)

@@ -334,4 +334,27 @@ export async function apiDeleteProduct(id: string) {
   return res.json()
 }
 
+/**
+ * POST /api/auth/signup
+ * Registers a new staff account and provisions their profile.
+ */
+export async function apiSignUp(payload: {
+  email: string
+  password: string
+  full_name: string
+  role?: string
+}) {
+  const res = await fetch(`${API_BASE}/auth/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Sign up failed' }))
+    throw new Error(err.message ?? 'Sign up failed')
+  }
+  return res.json()
+}
+
+
 

@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 
-export default function LoginPage() {
+interface LoginPageProps {
+  onSwitchToSignUp?: () => void
+}
+
+export default function LoginPage({ onSwitchToSignUp }: LoginPageProps) {
   const { signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -11,12 +15,25 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setError('Access Denied: Internet is not connected. Please connect to the internet to sign in.')
+      return
+    }
     setError(null)
     setLoading(true)
     try {
       await signIn(email, password)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Login failed. Please try again.')
+      const msg = err instanceof Error ? err.message : 'Login failed. Please try again.'
+      if (
+        (typeof navigator !== 'undefined' && !navigator.onLine) ||
+        msg.toLowerCase().includes('failed to fetch') ||
+        msg.toLowerCase().includes('network')
+      ) {
+        setError('Access Denied: Internet is not connected. Please check your network connection.')
+      } else {
+        setError(msg)
+      }
     } finally {
       setLoading(false)
     }
@@ -29,7 +46,7 @@ export default function LoginPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'var(--background)',
+        background: '#FFC8A7',
         padding: '24px 16px',
       }}
     >
@@ -43,8 +60,8 @@ export default function LoginPage() {
               borderRadius: '50%',
               overflow: 'hidden',
               margin: '0 auto 18px',
-              boxShadow: '0 10px 28px rgba(234,88,12,0.3)',
-              border: '3px solid rgba(249,115,22,0.4)',
+              boxShadow: '0 10px 28px rgba(154, 52, 18, 0.3)',
+              border: '3px solid rgba(255, 255, 255, 0.8)',
               background: '#ea580c',
               display: 'flex',
               alignItems: 'center',
@@ -62,13 +79,13 @@ export default function LoginPage() {
               fontFamily: 'Fraunces',
               fontSize: 36,
               fontWeight: 700,
-              color: 'var(--foreground)',
+              color: '#1c1917',
               lineHeight: 1.15,
             }}
           >
-            <span style={{ color: 'var(--accent)' }}>WING</span>TRACK
+            <span style={{ color: '#c2410c' }}>WING</span>TRACK
           </h1>
-          <p style={{ fontSize: 14, color: 'var(--muted-foreground)', marginTop: 8, fontWeight: 500 }}>
+          <p style={{ fontSize: 14, color: '#431407', marginTop: 8, fontWeight: 600 }}>
             Wingtrack — Staff Portal
           </p>
         </div>
@@ -78,11 +95,13 @@ export default function LoginPage() {
           onSubmit={handleSubmit}
           className="card"
           style={{
+            background: '#ffffff',
             padding: '42px 38px',
             display: 'flex',
             flexDirection: 'column',
             gap: 24,
-            boxShadow: '0 12px 36px rgba(74, 46, 18, 0.08)',
+            borderRadius: 16,
+            boxShadow: '0 16px 40px rgba(124, 45, 18, 0.15)',
           }}
         >
           <div>
@@ -201,9 +220,34 @@ export default function LoginPage() {
             )}
           </button>
 
-          <p style={{ fontSize: 13, color: 'var(--muted-foreground)', textAlign: 'center', marginTop: 6, lineHeight: 1.5 }}>
-            Staff credentials are provisioned by your Admin.
-            <br />Contact your manager if you need access.
+          {onSwitchToSignUp && (
+            <div style={{ textAlign: 'center', marginTop: 2 }}>
+              <span style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
+                Don't have an account?{' '}
+              </span>
+              <button
+                type="button"
+                id="switch-to-signup-btn"
+                onClick={onSwitchToSignUp}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--accent)',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  padding: 0,
+                }}
+              >
+                Sign up here
+              </button>
+            </div>
+          )}
+
+          <p style={{ fontSize: 13, color: 'var(--muted-foreground)', textAlign: 'center', marginTop: 4, lineHeight: 1.5 }}>
+            Need assistance with your staff profile?
+            <br />Contact your store administrator.
           </p>
         </form>
       </div>
