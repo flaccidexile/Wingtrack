@@ -18,6 +18,7 @@ function formatTime(s: number) {
 export default function OTPVerificationPage({ email, onVerified, onBack }: OTPVerificationPageProps) {
   const [otp, setOtp]         = useState(['', '', '', '', '', ''])
   const [loading, setLoading] = useState(false)
+  const [showSuccess, setShowSuccess] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [resending, setResending] = useState(false)
 
@@ -82,7 +83,7 @@ export default function OTPVerificationPage({ email, onVerified, onBack }: OTPVe
     try {
       const { error } = await supabase.auth.verifyOtp({ email, token: code, type: 'signup' })
       if (error) throw error
-      onVerified()
+      setShowSuccess(true)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
       // Humanise Supabase error messages
@@ -126,6 +127,43 @@ export default function OTPVerificationPage({ email, onVerified, onBack }: OTPVe
   // Expiry bar colour
   const barPct = (expiry / OTP_EXPIRY_SECONDS) * 100
   const barColor = expiry > 120 ? '#15803d' : expiry > 60 ? '#d97706' : '#b91c1c'
+
+  if (showSuccess) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FFC8A7', padding: '24px 16px' }}>
+        <div className="fade-in" style={{ width: '100%', maxWidth: 420, textAlign: 'center' }}>
+          <div style={{ background: '#fff', padding: '48px 36px', borderRadius: 20, boxShadow: '0 20px 60px rgba(124,45,18,0.2)' }}>
+            {/* Animated checkmark */}
+            <div style={{
+              width: 80, height: 80, borderRadius: '50%', background: 'linear-gradient(135deg, #15803d, #22c55e)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 24px', boxShadow: '0 8px 24px rgba(34,197,94,0.35)',
+              animation: 'pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+            }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+            <h2 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: '#1c1917', marginBottom: 10 }}>
+              Registration Successful!
+            </h2>
+            <p style={{ fontSize: 14, color: '#78716c', lineHeight: 1.6, marginBottom: 28 }}>
+              Your account has been verified and created successfully.<br />
+              You can now sign in to <strong style={{ color: '#c2410c' }}>WINGTRACK</strong>.
+            </p>
+            <button
+              id="success-go-to-login-btn"
+              onClick={onVerified}
+              className="btn-primary"
+              style={{ width: '100%', padding: '14px', fontSize: 15, fontWeight: 600, borderRadius: 10 }}
+            >
+              Go to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FFC8A7', padding: '24px 16px' }}>

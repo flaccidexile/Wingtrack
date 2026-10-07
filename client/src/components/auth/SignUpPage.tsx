@@ -118,7 +118,7 @@ export default function SignUpPage({ onSwitchToLogin, onRegistered }: SignUpPage
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Sign up failed. Please try again.'
       if (msg.toLowerCase().includes('rate limit')) {
-        setError('Email rate limit reached: Supabase limits free projects to 3–4 confirmation emails per hour. Please wait a short while, disable "Confirm email" for testing in Supabase, or connect custom SMTP (e.g. Resend).')
+        setError('Email rate limit reached. Please wait a few minutes before trying again, or contact the administrator.')
       } else {
         setError(msg)
       }
