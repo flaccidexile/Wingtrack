@@ -108,6 +108,7 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
   const [pwdError, setPwdError] = useState<string | null>(null)
   const [pwdSuccess, setPwdSuccess] = useState(false)
   const [pwdLoading, setPwdLoading] = useState(false)
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
 
   const visibleNav = NAV_ITEMS.filter(item => role && item.roles.includes(role))
 
@@ -199,7 +200,7 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto' }}>
+      <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
         {visibleNav.map(({ id, label, icon: Icon }) => {
           const active = page === id
           return (
@@ -285,12 +286,13 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
 
         <button
           id="btn-signout"
-          onClick={signOut}
+          onClick={() => setShowSignOutConfirm(true)}
           style={{
             width: '100%', marginTop: 8, padding: '10px', background: 'transparent',
             border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8,
             fontSize: 13, color: 'var(--sidebar-muted)', cursor: 'pointer',
             fontFamily: 'DM Sans', fontWeight: 500, transition: 'all 0.15s',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
           }}
           onMouseEnter={e => {
             (e.currentTarget as HTMLElement).style.background = 'rgba(185,28,28,0.16)'
@@ -303,9 +305,61 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
             ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.14)'
           }}
         >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
           Sign Out
         </button>
       </div>
+
+      {/* Sign Out Confirmation Modal */}
+      {showSignOutConfirm && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setShowSignOutConfirm(false) }}
+        >
+          <div className="card fade-in" style={{ width: '100%', maxWidth: 360, padding: '28px 26px', textAlign: 'center', boxShadow: '0 25px 60px rgba(0,0,0,0.35)' }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(185,28,28,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </div>
+            <h3 style={{ fontFamily: 'Fraunces', fontSize: 18, fontWeight: 700, color: 'var(--foreground)', marginBottom: 8 }}>Sign Out?</h3>
+            <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 22 }}>You will be logged out of your current session. Any unsaved changes will be lost.</p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                id="btn-signout-cancel"
+                onClick={() => setShowSignOutConfirm(false)}
+                className="btn-ghost"
+                style={{ flex: 1, padding: '10px' }}
+              >
+                Cancel
+              </button>
+              <button
+                id="btn-signout-confirm"
+                onClick={() => { setShowSignOutConfirm(false); signOut() }}
+                style={{
+                  flex: 1, padding: '10px', borderRadius: 8, border: 'none',
+                  background: '#b91c1c', color: '#fff', fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'DM Sans', transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#991b1b'}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = '#b91c1c'}
+              >
+                Yes, Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Change Password Modal */}
       {showPwdModal && (

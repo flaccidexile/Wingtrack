@@ -32,6 +32,7 @@ export default function MenuManager() {
 
   // Item form state
   const [formName, setFormName] = useState('')
+  const [formType, setFormType] = useState('Regular')
   const [formCatId, setFormCatId] = useState('')
   const [formPrice, setFormPrice] = useState('')
   const [formAvailable, setFormAvailable] = useState(true)
@@ -90,6 +91,7 @@ export default function MenuManager() {
   function openCreateModal() {
     setEditingProduct(null)
     setFormName('')
+    setFormType('Regular')
     setFormCatId(categories[0]?.id || '')
     setFormPrice('')
     setFormAvailable(true)
@@ -101,6 +103,7 @@ export default function MenuManager() {
   function openEditModal(prod: Product) {
     setEditingProduct(prod)
     setFormName(prod.name)
+    setFormType((prod as Product & { product_type?: string }).product_type ?? 'Regular')
     setFormCatId(prod.category_id)
     setFormPrice(String(prod.price))
     setFormAvailable(prod.is_available)
@@ -146,6 +149,10 @@ export default function MenuManager() {
     const priceNum = Number(formPrice)
     if (isNaN(priceNum) || priceNum < 0) {
       setFormError('Please enter a valid price (>= 0).')
+      return
+    }
+    if (priceNum > 10000) {
+      setFormError('Price cannot exceed ₱10,000.00. Please enter a valid amount.')
       return
     }
 
@@ -509,6 +516,15 @@ export default function MenuManager() {
                 {filteredProducts.map(prod => {
                   const catName = (prod.category as ProductCategory | undefined)?.name ?? '—'
                   const recipeCount = prod.recipes?.length ?? 0
+                  const prodType = (prod as Product & { product_type?: string }).product_type ?? 'Regular'
+                  const typeConfig: Record<string, { label: string; bg: string; color: string }> = {
+                    Bestseller: { label: 'Bestseller', bg: '#fff7e6', color: '#b45309' },
+                    New:        { label: 'New',        bg: '#e8f5e9', color: '#15803d' },
+                    Seasonal:   { label: 'Seasonal',   bg: '#fce8e8', color: '#b91c1c' },
+                    Special:    { label: 'Special',    bg: '#f0f4ff', color: '#4338ca' },
+                    Regular:    { label: 'Regular',    bg: 'transparent', color: 'var(--muted-foreground)' },
+                  }
+                  const tc = typeConfig[prodType] ?? typeConfig.Regular
 
                   return (
                     <tr
@@ -523,10 +539,15 @@ export default function MenuManager() {
                     >
                       {/* Name */}
                       <td style={{ padding: '16px 20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                           <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--foreground)' }}>
                             {prod.name}
                           </span>
+                          {prodType !== 'Regular' && (
+                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: tc.bg, color: tc.color, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                              {tc.label}
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -711,6 +732,38 @@ export default function MenuManager() {
                 />
               </div>
 
+              {/* Product Type */}
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>
+                  PRODUCT TYPE
+                </label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {['Regular', 'Bestseller', 'New', 'Seasonal', 'Special'].map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setFormType(t)}
+                      style={{
+                        padding: '7px 16px',
+                        borderRadius: 20,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        border: `1.5px solid ${formType === t ? 'var(--primary)' : 'var(--border)'}`,
+                        background: formType === t ? 'rgba(234,88,12,0.12)' : 'transparent',
+                        color: formType === t ? 'var(--primary)' : 'var(--muted-foreground)',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {t === 'Bestseller' ? 'Bestseller' :
+                       t === 'New' ? 'New' :
+                       t === 'Seasonal' ? 'Seasonal' :
+                       t === 'Special' ? 'Special' : 'Regular'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Category & Price */}
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 14 }}>
                 <div>
@@ -753,13 +806,23 @@ export default function MenuManager() {
                       type="number"
                       step="0.01"
                       min="0"
+                      max="10000"
                       required
                       placeholder="0.00"
                       value={formPrice}
-                      onChange={e => setFormPrice(e.target.value)}
+                      onChange={e => {
+                        const val = e.target.value
+                        // Clamp to max immediately
+                        if (Number(val) > 10000) {
+                          setFormPrice('10000')
+                        } else {
+                          setFormPrice(val)
+                        }
+                      }}
                       style={{ width: '100%', padding: '10px 14px 10px 30px', fontSize: 14, fontFamily: 'DM Mono' }}
                     />
                   </div>
+                  <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 4 }}>Max ₱10,000.00</p>
                 </div>
               </div>
 

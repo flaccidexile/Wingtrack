@@ -358,3 +358,75 @@ export async function apiSignUp(payload: {
 
 
 
+
+// --- PayMongo Sandbox Helpers --------------------------------
+
+/** POST /api/paymongo/create-intent */
+export async function apiCreatePaymentIntent(amountCentavos: number, description?: string) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/paymongo/create-intent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ amount_centavos: amountCentavos, description }),
+  })
+  if (!res.ok) { const err = await res.json().catch(() => ({ message: 'PayMongo error' })); throw new Error(err.message ?? 'Failed to create payment intent') }
+  return res.json() as Promise<{ payment_intent_id: string; client_key: string }>
+}
+
+/** POST /api/paymongo/create-method */
+export async function apiCreatePaymentMethod(payload: { type: 'card' | 'gcash' | 'paymaya'; billing?: object; details?: object }) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/paymongo/create-method`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) { const err = await res.json().catch(() => ({ message: 'PayMongo error' })); throw new Error(err.message ?? 'Failed to create payment method') }
+  return res.json() as Promise<{ payment_method_id: string }>
+}
+
+/** POST /api/paymongo/attach-method */
+export async function apiAttachPaymentMethod(payload: { payment_intent_id: string; payment_method_id: string; client_key: string }) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/paymongo/attach-method`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) { const err = await res.json().catch(() => ({ message: 'PayMongo error' })); throw new Error(err.message ?? 'Failed to attach payment method') }
+  return res.json() as Promise<{
+    status: string
+    next_action?: {
+      type: string
+      redirect?: { url: string; return_url?: string }
+    } | null
+  }>
+}
+
+/** POST /api/paymongo/create-checkout-session */
+export async function apiCreateCheckoutSession(payload: {
+  amount_centavos: number
+  description?: string
+  method_type?: 'gcash' | 'paymaya' | 'card' | 'all'
+  line_items?: Array<{ name: string; amount: number; quantity: number }>
+  success_url?: string
+  cancel_url?: string
+}) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/paymongo/create-checkout-session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'PayMongo error' }))
+    throw new Error(err.message ?? 'Failed to create checkout session')
+  }
+  return res.json() as Promise<{
+    checkout_session_id: string
+    checkout_url: string
+    client_key?: string
+    sandbox_mock?: boolean
+  }>
+}
+

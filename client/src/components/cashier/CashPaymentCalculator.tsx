@@ -7,7 +7,7 @@ interface CashPaymentCalculatorProps {
   onCancel: () => void
 }
 
-const PHP_DENOMINATIONS = [20, 50, 100, 200, 500, 1000]
+const PHP_BILL_AMOUNTS = [20, 50, 100, 200, 500, 1000]
 
 export default function CashPaymentCalculator({ total, onConfirm, onCancel }: CashPaymentCalculatorProps) {
   const [cashInput, setCashInput] = useState('')
@@ -30,7 +30,7 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
     return () => { document.body.style.overflow = prev }
   }, [])
 
-  function handleDenomination(amount: number) {
+  function handleBillAmount(amount: number) {
     setCashInput(amount.toString())
   }
 
@@ -61,8 +61,8 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
     }
   }
 
-  // Suggest the smallest denomination that covers the total
-  const suggestedDenom = PHP_DENOMINATIONS.find(d => d >= total)
+  // Suggest the smallest bill amount that covers the total
+  const suggestedAmount = PHP_BILL_AMOUNTS.find(d => d >= total)
 
   return createPortal(
     <div
@@ -224,20 +224,20 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
           </div>
         </div>
 
-        {/* Quick Cash Denomination Buttons */}
+        {/* Quick Cash Amount Buttons */}
         <div style={{ marginBottom: 20 }}>
           <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 8, fontWeight: 500 }}>
-            Quick select denomination
+            Quick select amount
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-            {PHP_DENOMINATIONS.map(d => {
+            {PHP_BILL_AMOUNTS.map(d => {
               const isSelected = cashInput === d.toString()
-              const isRecommended = d === suggestedDenom
+              const isRecommended = d === suggestedAmount
               return (
                 <button
                   key={d}
-                  id={`cash-denom-${d}`}
-                  onClick={() => handleDenomination(d)}
+                  id={`cash-amount-${d}`}
+                  onClick={() => handleBillAmount(d)}
                   style={{
                     padding: '12px 4px',
                     borderRadius: 8,

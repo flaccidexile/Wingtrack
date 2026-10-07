@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth'
 import type { Product, ProductCategory, CartItem, Order } from '@/types'
 import ReceiptModal from '@/components/receipt/ReceiptModal'
 import CashPaymentCalculator from '@/components/cashier/CashPaymentCalculator'
+import PayMongoModal from '@/components/cashier/PayMongoModal'
 
 const DEFAULT_CATS = ['All', 'Wings', 'Sizzling', 'Silog', 'Shake', 'Burger', 'Fries & Pure Cheesestick']
 
@@ -58,7 +59,7 @@ export default function PointOfSale() {
   const [cat, setCat] = useState('All')
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
-  const [method, setMethod] = useState<'cash' | 'gcash' | 'card'>('cash')
+  const [method, setMethod] = useState<'cash' | 'online'>('cash')
   const [notes, setNotes] = useState('')
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutSuccess, setCheckoutSuccess] = useState(false)
@@ -68,6 +69,7 @@ export default function PointOfSale() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showCashCalc, setShowCashCalc] = useState(false)
+  const [showPayMongo, setShowPayMongo] = useState(false)
   const [lastCashReceived, setLastCashReceived] = useState<number | null>(null)
   const [lastChangeGiven, setLastChangeGiven] = useState<number | null>(null)
 
@@ -106,6 +108,83 @@ export default function PointOfSale() {
 
   useEffect(() => { fetchProducts() }, [fetchProducts])
 
+  // Handle returning from PayMongo online payment redirect (GCash / Maya QR scan)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const pmStatus = params.get('paymongo')
+    if (pmStatus === 'success') {
+      const savedRaw = localStorage.getItem('wingtrack_pending_pos_order')
+      if (savedRaw) {
+        try {
+          const saved = JSON.parse(savedRaw)
+          if (saved.cart && saved.cart.length > 0 && profile) {
+            setCheckoutLoading(true)
+            const chosenMethod = (saved.method === 'gcash' ? 'gcash' : 'card') as 'cash' | 'gcash' | 'card'
+            apiCheckout({
+              items: saved.cart.map((c: CartItem) => ({ product_id: c.id, quantity: c.qty })),
+              payment_method: chosenMethod,
+              notes: saved.notes || '',
+            }).then(result => {
+              setOrderNum(result.order_number)
+              setCompletedOrder({
+                id: result.id,
+                order_number: result.order_number,
+                cashier_id: profile.id,
+                status: 'completed',
+                payment_method: chosenMethod,
+                subtotal: saved.subtotal,
+                vat_amount: saved.vat,
+                total_amount: saved.total,
+                notes: saved.notes || '',
+                created_at: new Date().toISOString(),
+                order_items: saved.cart.map((c: CartItem) => ({
+                  id: c.id,
+                  order_id: result.id,
+                  product_id: c.id,
+                  product_name: c.name,
+                  unit_price: c.price,
+                  quantity: c.qty,
+                  line_total: c.price * c.qty,
+                })),
+              })
+              setCheckoutSuccess(true)
+              setCart([])
+              setNotes('')
+              localStorage.removeItem('wingtrack_pending_pos_order')
+              window.history.replaceState({}, '', window.location.pathname)
+            }).catch(err => {
+              setError(err instanceof Error ? err.message : 'Failed to finalize order after payment.')
+              localStorage.removeItem('wingtrack_pending_pos_order')
+              window.history.replaceState({}, '', window.location.pathname)
+            }).finally(() => {
+              setCheckoutLoading(false)
+            })
+          }
+        } catch {
+          localStorage.removeItem('wingtrack_pending_pos_order')
+          window.history.replaceState({}, '', window.location.pathname)
+        }
+      } else {
+        window.history.replaceState({}, '', window.location.pathname)
+      }
+    } else if (pmStatus === 'cancel') {
+      const savedRaw = localStorage.getItem('wingtrack_pending_pos_order')
+      if (savedRaw) {
+        try {
+          const saved = JSON.parse(savedRaw)
+          if (saved.cart && saved.cart.length > 0) {
+            setCart(saved.cart)
+          }
+        } catch {
+          // ignore
+        }
+        localStorage.removeItem('wingtrack_pending_pos_order')
+      }
+      setError('Payment was cancelled on the payment portal.')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [profile])
+
   const filtered = products
     .filter(p => cat === 'All' || (p.category as unknown as ProductCategory)?.name === cat)
     .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
@@ -122,15 +201,21 @@ export default function PointOfSale() {
     setCart(prev => prev.map(c => c.id === id ? { ...c, qty: c.qty + delta } : c).filter(c => c.qty > 0))
   }
 
+  const removeItem = (id: string) => {
+    setCart(prev => prev.filter(c => c.id !== id))
+  }
+
   const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0)
   const vat      = Math.round(subtotal * 0.12 * 100) / 100
   const total    = Math.round((subtotal + vat) * 100) / 100
 
-  // When "Charge" is clicked: if cash, show calculator first; otherwise checkout directly
+  // When "Charge" is clicked: route to appropriate payment flow
   function handleChargeClick() {
     if (cart.length === 0 || !profile) return
     if (method === 'cash') {
       setShowCashCalc(true)
+    } else if (method === 'online') {
+      setShowPayMongo(true)
     } else {
       executeCheckout()
     }
@@ -156,7 +241,7 @@ export default function PointOfSale() {
     try {
       const result = await apiCheckout({
         items: currentCart.map(c => ({ product_id: c.id, quantity: c.qty })),
-        payment_method: method,
+        payment_method: (method === 'online' ? 'card' : 'cash') as 'cash' | 'gcash' | 'card',
         notes,
       })
       setOrderNum(result.order_number)
@@ -165,7 +250,7 @@ export default function PointOfSale() {
         order_number: result.order_number,
         cashier_id: profile.id,
         status: 'completed',
-        payment_method: method,
+        payment_method: (method === 'online' ? 'card' : 'cash') as 'cash' | 'gcash' | 'card',
         subtotal,
         vat_amount: vat,
         total_amount: total,
@@ -318,15 +403,30 @@ export default function PointOfSale() {
               <p style={{ fontSize: 13, marginTop: 5, color: 'var(--sidebar-muted)' }}>Tap menu items to add</p>
             </div>
           ) : cart.map(item => (
-            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--sidebar-foreground)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
                 <p style={{ fontSize: 14, fontFamily: 'DM Mono', color: 'var(--sidebar-active)', marginTop: 3, fontWeight: 500 }}>&#8369;{(item.price * item.qty).toLocaleString()}</p>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button id={`cart-dec-${item.id}`} onClick={() => updateQty(item.id, -1)} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.05)', color: 'var(--sidebar-foreground)', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button id={`cart-dec-${item.id}`} onClick={() => updateQty(item.id, -1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.05)', color: 'var(--sidebar-foreground)', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
                 <span style={{ fontSize: 14, fontFamily: 'DM Mono', color: 'var(--sidebar-foreground)', minWidth: 22, textAlign: 'center', fontWeight: 600 }}>{item.qty}</span>
-                <button id={`cart-inc-${item.id}`} onClick={() => updateQty(item.id, 1)} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.05)', color: 'var(--sidebar-foreground)', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                <button id={`cart-inc-${item.id}`} onClick={() => updateQty(item.id, 1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.05)', color: 'var(--sidebar-foreground)', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                <button
+                  id={`cart-remove-${item.id}`}
+                  onClick={() => removeItem(item.id)}
+                  title="Remove item"
+                  style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid rgba(255,100,100,0.25)', background: 'rgba(185,28,28,0.1)', color: '#fca5a5', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', marginLeft: 2 }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(185,28,28,0.3)'; (e.currentTarget as HTMLElement).style.color = '#fecaca' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(185,28,28,0.1)'; (e.currentTarget as HTMLElement).style.color = '#fca5a5' }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    <path d="M10 11v6M14 11v6"/>
+                    <path d="M9 6V4h6v2"/>
+                  </svg>
+                </button>
               </div>
             </div>
           ))}
@@ -373,22 +473,32 @@ export default function PointOfSale() {
 
           {/* Payment method */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            {(['cash', 'gcash', 'card'] as const).map(m => (
-              <button
-                key={m}
-                id={`pos-pay-${m}`}
-                onClick={() => setMethod(m)}
-                style={{
-                  flex: 1, padding: '9px 4px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  border: `1px solid ${method === m ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.18)'}`,
-                  background: method === m ? 'rgba(240,155,58,0.22)' : 'rgba(255,255,255,0.04)',
-                  color: method === m ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
-                  textTransform: 'capitalize',
-                }}
-              >
-                {m === 'gcash' ? 'GCash' : m.charAt(0).toUpperCase() + m.slice(1)}
-              </button>
-            ))}
+            {/* Cash */}
+            <button
+              id="pos-pay-cash"
+              onClick={() => setMethod('cash')}
+              style={{
+                flex: 1, padding: '9px 4px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                border: `1px solid ${method === 'cash' ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.18)'}`,
+                background: method === 'cash' ? 'rgba(240,155,58,0.22)' : 'rgba(255,255,255,0.04)',
+                color: method === 'cash' ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
+              }}
+            >
+              Cash
+            </button>
+            {/* Online payment via PayMongo (Card, GCash, Maya) */}
+            <button
+              id="pos-pay-online"
+              onClick={() => setMethod('online')}
+              style={{
+                flex: 1, padding: '9px 4px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                border: `1px solid ${method === 'online' ? '#818cf8' : 'rgba(255,255,255,0.18)'}`,
+                background: method === 'online' ? 'rgba(99,102,241,0.22)' : 'rgba(255,255,255,0.04)',
+                color: method === 'online' ? '#a5b4fc' : 'var(--sidebar-muted)',
+              }}
+            >
+              Online
+            </button>
           </div>
 
           <button
@@ -497,6 +607,23 @@ export default function PointOfSale() {
           total={total}
           onConfirm={(cashReceived, change) => executeCheckout(cashReceived, change)}
           onCancel={() => setShowCashCalc(false)}
+        />
+      )}
+
+      {/* PayMongo Online Payment Modal (Sandbox) */}
+      {showPayMongo && (
+        <PayMongoModal
+          total={total}
+          subtotal={subtotal}
+          vat={vat}
+          notes={notes}
+          cartItems={cart.map(c => ({ id: c.id, name: c.name, price: c.price, qty: c.qty }))}
+          orderDescription={`WINGTRACK Order — ${cart.length} item${cart.length !== 1 ? 's' : ''}`}
+          onSuccess={(_intentId) => {
+            setShowPayMongo(false)
+            executeCheckout()
+          }}
+          onCancel={() => setShowPayMongo(false)}
         />
       )}
 

@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import { apiSignUp } from '@/lib/api'
 import type { StaffProfile, StaffRole } from '@/types'
 
 interface AuthContextValue {
@@ -13,6 +12,9 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, fullName: string, role?: StaffRole) => Promise<{ requiresConfirmation: boolean }>
   signOut: () => Promise<void>
+  signInWithGoogle: () => Promise<void>
+  sendPasswordReset: (email: string) => Promise<void>
+  updatePassword: (newPassword: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -134,69 +136,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fullName: string,
     role: StaffRole = 'admin'
   ): Promise<{ requiresConfirmation: boolean }> {
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            role,
-          },
-        },
-      })
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName, role },
+      },
+    })
 
-      if (error) {
-        throw error
-      }
+    if (error) throw new Error(error.message)
 
-      if (data?.user) {
-        try {
-          await supabase.from('staff_profiles').insert({
-            user_id: data.user.id,
-            full_name: fullName,
-            email,
-            role,
-            is_active: true,
-          })
-        } catch {
-          // Profile provision fallback will link on next check
-        }
-      }
-
-      if (data?.session) {
-        setSession(data.session)
-        setUser(data.session.user)
-        const p = await fetchProfile(data.session.user)
-        setProfile(p)
-        return { requiresConfirmation: false }
-      }
-
-      // If user was created but session is null (email confirmation required)
-      if (data?.user && !data?.session) {
-        return { requiresConfirmation: true }
-      }
-
-      return { requiresConfirmation: false }
-    } catch (clientErr: unknown) {
-      // Fallback: Use backend admin route if client-side public sign-up is disabled
+    // Insert staff profile row (may fail silently if email unconfirmed — that's fine)
+    if (data?.user) {
       try {
-        await apiSignUp({
-          email,
-          password,
+        await supabase.from('staff_profiles').insert({
+          user_id: data.user.id,
           full_name: fullName,
+          email,
           role,
+          is_active: false, // Only activate after email confirmation
         })
-        // Automatically sign in once provisioned
-        await signIn(email, password)
-        return { requiresConfirmation: false }
-      } catch (serverErr: unknown) {
-        const msg = serverErr instanceof Error
-          ? serverErr.message
-          : (clientErr instanceof Error ? clientErr.message : 'Registration failed.')
-        throw new Error(msg)
+      } catch {
+        // Profile will be created on first confirmed login
       }
     }
+
+    // Email confirmation required — never auto-login
+    return { requiresConfirmation: true }
+  }
+
+  async function signInWithGoogle() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    })
+    if (error) throw new Error(error.message)
+  }
+
+  async function sendPasswordReset(email: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}?mode=reset`,
+    })
+    if (error) throw new Error(error.message)
+  }
+
+  async function updatePassword(newPassword: string) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) throw new Error(error.message)
   }
 
   async function signOut() {
@@ -212,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, role: profile?.role ?? null, loading, signIn, signUp, signOut }}
+      value={{ session, user, profile, role: profile?.role ?? null, loading, signIn, signUp, signOut, signInWithGoogle, sendPasswordReset, updatePassword }}
     >
       {children}
     </AuthContext.Provider>
