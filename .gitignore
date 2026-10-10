@@ -24,6 +24,7 @@ Thumbs.db
 
 # Editor files
 .vscode/
+.workbuddy-ai/
 *.suo
 *.ntvs*
 *.njsproj
