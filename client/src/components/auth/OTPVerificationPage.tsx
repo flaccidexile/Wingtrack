@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { apiProvisionSelf } from '@/lib/api'
 
 interface OTPVerificationPageProps {
   email: string
   onVerified: () => void
   onBack: () => void
 }
-
 const OTP_EXPIRY_SECONDS = 300 // 5 minutes — must match Supabase OTP expiry setting
 
 function formatTime(s: number) {
@@ -19,6 +19,7 @@ export default function OTPVerificationPage({ email, onVerified, onBack }: OTPVe
   const [otp, setOtp]         = useState(['', '', '', '', '', ''])
   const [loading, setLoading] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [finishing, setFinishing] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [resending, setResending] = useState(false)
 
@@ -124,6 +125,35 @@ export default function OTPVerificationPage({ email, onVerified, onBack }: OTPVe
 
   const allFilled = otp.every(d => d !== '')
 
+  /**
+   * Verifying a signup OTP establishes a session, so the user would otherwise
+   * be already inside the app. New accounts must sign in explicitly: create
+   * their staff profile, end the session verifyOtp opened, then hand off to
+   * the login page. (Google sign-in is the only path that lands directly in
+   * the system.)
+   *
+   * The profile is created here rather than relying on the auth listener, so
+   * it is guaranteed to exist even if the user clicks immediately — signOut()
+   * would otherwise race the listener's async provisioning and leave them
+   * locked out at their first real login.
+   */
+  async function handleGoToLogin() {
+    setFinishing(true)
+    try {
+      // The server fills in full_name from the session's metadata; passing
+      // nothing here is fine and keeps this page free of signup-form state.
+      await apiProvisionSelf()
+    } catch (err) {
+      console.warn('Profile provisioning did not complete:', err)
+    }
+    try {
+      await supabase.auth.signOut()
+    } catch (err) {
+      console.warn('Sign-out after verification failed:', err)
+    }
+    onVerified()
+  }
+
   // Expiry bar colour
   const barPct = (expiry / OTP_EXPIRY_SECONDS) * 100
   const barColor = expiry > 120 ? '#15803d' : expiry > 60 ? '#d97706' : '#b91c1c'
@@ -153,11 +183,17 @@ export default function OTPVerificationPage({ email, onVerified, onBack }: OTPVe
             </p>
             <button
               id="success-go-to-login-btn"
-              onClick={onVerified}
+              onClick={handleGoToLogin}
+              disabled={finishing}
               className="btn-primary"
               style={{ width: '100%', padding: '14px', fontSize: 15, fontWeight: 600, borderRadius: 10 }}
             >
-              Go to Login
+              {finishing ? (
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                  <span className="spinner" style={{ width: 18, height: 18 }} />
+                  Preparing your account...
+                </span>
+              ) : 'Go to Login'}
             </button>
           </div>
         </div>
