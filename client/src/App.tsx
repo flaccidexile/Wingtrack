@@ -89,6 +89,26 @@ function AppContent() {
     )
   }
 
+  // ── Password Reset page ───────────────────────────────────
+  // Deliberately rendered before the `loading` and `if (session)` branches.
+  // A recovery link signs the user in, so waiting on the session would let the
+  // app briefly treat them as authenticated and flash the main interface —
+  // and the session must not be consulted at all while they are resetting.
+  // updatePassword() clears the session once the new password is saved, so
+  // finishing the flow lands on the login page.
+  if (authMode === 'reset') {
+    return (
+      <ResetPasswordPage
+        onDone={() => {
+          // Strip both the query flag and the recovery hash so a refresh cannot
+          // re-enter the reset flow with a stale token.
+          window.history.replaceState({}, '', window.location.pathname)
+          setAuthMode('login')
+        }}
+      />
+    )
+  }
+
   // ── Loading spinner ───────────────────────────────────────
   if (loading) {
     return (
@@ -98,18 +118,6 @@ function AppContent() {
           <p style={{ marginTop: 14, fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}>Loading WINGTRACK...</p>
         </div>
       </div>
-    )
-  }
-
-  // ── Password Reset page ───────────────────────────────────
-  if (authMode === 'reset') {
-    return (
-      <ResetPasswordPage
-        onDone={() => {
-          window.history.replaceState({}, '', window.location.pathname)
-          setAuthMode('login')
-        }}
-      />
     )
   }
 

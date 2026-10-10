@@ -228,6 +228,9 @@ export default function ResetPasswordPage({ onDone }: ResetPasswordPageProps) {
     if (!passwordsMatch) { setPwdError('Passwords do not match.'); return }
     setPwdError(null); setPwdLoading(true)
     try {
+      // updatePassword() ends the recovery session as part of the update, so by
+      // the time we reach the done screen the user is signed out and the app
+      // cannot route them into the system behind the login page.
       await updatePassword(password)
       setStep('done')
     } catch (err: unknown) {

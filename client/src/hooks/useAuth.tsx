@@ -253,9 +253,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw new Error(error.message)
   }
 
+  /**
+   * Completes a password reset.
+   *
+   * `updateUser` does NOT end the current session: following a recovery link
+   * signs the user in, and Supabase keeps that session alive across the
+   * password change. Without an explicit sign-out the app would treat the user
+   * as authenticated the instant the new password was saved and drop them into
+   * the system, bypassing the login page entirely.
+   *
+   * Resetting a forgotten password proves control of the inbox, not knowledge
+   * of the new credential — so the session is cleared here and the caller
+   * routes to the login page. This mirrors the signup flow, where a verified
+   * account must also sign in explicitly.
+   */
   async function updatePassword(newPassword: string) {
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     if (error) throw new Error(error.message)
+
+    // Drop the recovery session so the user must sign in with the new password.
+    await signOut()
   }
 
   async function signOut() {
