@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { apiAdjustInventory, apiGetInventoryMovements, apiCreateInventoryItem } from '@/lib/api'
+import { useIsCompact } from '@/hooks/useMediaQuery'
 import type { InventoryItem, InventoryAdjustmentPayload, InventoryMovement } from '@/types'
 
 const CATS = ['All', 'Proteins', 'Sauces', 'Sides', 'Produce', 'Cooking', 'Spices', 'Staples', 'Packaging']
@@ -28,7 +29,134 @@ interface AdjustModal {
   type: 'restock' | 'adjustment' | 'waste'
 }
 
+/** Read-only label/value pair used throughout the mobile inventory cards. */
+function Field({ label, value, mono, color }: { label: string; value: React.ReactNode; mono?: boolean; color?: string }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <p style={{ fontSize: 10, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
+        {label}
+      </p>
+      <p style={{ fontSize: 13, fontWeight: 600, fontFamily: mono ? 'DM Mono' : undefined, color: color ?? 'var(--foreground)', overflowWrap: 'anywhere' }}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
+/**
+ * Phone-width presentation of a stock item — mirrors all eight columns of the
+ * desktop grid (name, unit, stock, min level, cost, supplier, status, action).
+ */
+function InventoryCard({
+  item,
+  onAdjust,
+}: {
+  item: InventoryItem
+  onAdjust: () => void
+}) {
+  const status = getItemStatus(item)
+  const s = STATUS_STYLES[status] ?? STATUS_STYLES.ok
+  const qtyColor = status === 'ok' ? 'var(--success, #15803d)' : status === 'low' ? '#b45309' : '#b91c1c'
+
+  return (
+    <div className="card" style={{ padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--foreground)', overflowWrap: 'anywhere' }}>{item.name}</p>
+          <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2 }}>{item.category}</p>
+        </div>
+        <span
+          style={{
+            fontSize: 11, padding: '4px 10px', borderRadius: 20, fontWeight: 700,
+            background: s.bg, color: s.color, whiteSpace: 'nowrap', flexShrink: 0,
+          }}
+        >
+          {s.label}
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <Field label={`In Stock (${item.unit})`} value={Number(item.stock_qty).toLocaleString()} mono color={qtyColor} />
+        <Field label={`Min Level (${item.unit})`} value={Number(item.min_stock_level).toLocaleString()} mono />
+        <Field label="Unit Cost" value={`\u20B1${Number(item.unit_cost).toLocaleString()}`} mono />
+        <Field label="Supplier" value={item.supplier ?? '-'} />
+      </div>
+
+      <button
+        type="button"
+        id={`inv-restock-${item.id}`}
+        onClick={onAdjust}
+        style={{
+          width: '100%', fontSize: 13, padding: '10px 12px', borderRadius: 8,
+          border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--primary)',
+          cursor: 'pointer', fontWeight: 600,
+        }}
+      >
+        Adjust Stock
+      </button>
+    </div>
+  )
+}
+
+/**
+ * Phone-width presentation of an audit movement — mirrors all seven columns
+ * (timestamp, item, type, change, before → after, staff, notes).
+ */
+function MovementCard({ m }: { m: InventoryMovement }) {
+  const dateStr = new Date(m.created_at).toLocaleString('en-PH', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+  })
+  const isPositive = m.qty_change > 0
+  const typeColor = m.movement_type === 'restock' ? '#15803d' : m.movement_type === 'deduction' ? '#c47a2e' : m.movement_type === 'waste' ? '#b91c1c' : '#4b5563'
+  const typeBg = m.movement_type === 'restock' ? '#e8f5e9' : m.movement_type === 'deduction' ? '#fff7ed' : m.movement_type === 'waste' ? '#fce8e8' : '#f3f4f6'
+
+  return (
+    <div className="card" style={{ padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--foreground)', overflowWrap: 'anywhere' }}>
+            {m.inventory?.name ?? 'Unknown item'}
+          </p>
+          <p style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'DM Mono', marginTop: 2 }}>
+            {dateStr}
+          </p>
+        </div>
+        <span
+          style={{
+            fontSize: 10, padding: '3px 8px', borderRadius: 12, background: typeBg,
+            color: typeColor, textTransform: 'uppercase', fontWeight: 700,
+            whiteSpace: 'nowrap', flexShrink: 0,
+          }}
+        >
+          {m.movement_type}
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: m.notes ? 10 : 0 }}>
+        <Field
+          label="Change"
+          value={`${isPositive ? '+' : ''}${m.qty_change} ${m.inventory?.unit ?? ''}`}
+          mono
+          color={isPositive ? '#15803d' : '#b91c1c'}
+        />
+        <Field label="Before → After" value={`${Number(m.qty_before).toFixed(1)} → ${Number(m.qty_after).toFixed(1)}`} mono color="var(--muted-foreground)" />
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--muted)' }}>
+        <span style={{ fontSize: 12, color: 'var(--foreground)' }}>{m.staff?.full_name ?? 'System'}</span>
+        {m.notes && (
+          <span style={{ fontSize: 12, color: 'var(--muted-foreground)', textAlign: 'right', overflowWrap: 'anywhere' }}>
+            {m.notes}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function Inventory() {
+  /** Phones get card lists; wider viewports keep the wide grids. */
+  const isCompact = useIsCompact()
   const [activeTab, setActiveTab] = useState<'stock' | 'movements'>('stock')
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -543,6 +671,22 @@ export default function Inventory() {
             <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}>
               <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
             </div>
+          ) : isCompact ? (
+            /* Phones: the 920px grid hid half the columns off-screen. */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {filtered.map(item => (
+                <InventoryCard
+                  key={item.id}
+                  item={item}
+                  onAdjust={() => { setAdjustModal({ item, type: 'restock' }); setAdjustQty(''); setAdjustNotes('') }}
+                />
+              ))}
+              {filtered.length === 0 && (
+                <div className="card" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 14 }}>
+                  No items match your filter.
+                </div>
+              )}
+            </div>
           ) : (
             <div className="card" style={{ overflow: 'hidden' }}>
               <div className="scroll-x">
@@ -605,6 +749,16 @@ export default function Inventory() {
           ) : movementsError ? (
             <div style={{ padding: '14px', background: '#fee2e2', color: '#b91c1c', borderRadius: 8, fontSize: 13 }}>
               {movementsError}
+            </div>
+          ) : isCompact ? (
+            /* Phones: the 940px audit grid did not fit at all. */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {movements.map(m => <MovementCard key={m.id} m={m} />)}
+              {movements.length === 0 && (
+                <div className="card" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 14 }}>
+                  No inventory movements recorded yet.
+                </div>
+              )}
             </div>
           ) : (
             <div className="card" style={{ overflow: 'hidden' }}>

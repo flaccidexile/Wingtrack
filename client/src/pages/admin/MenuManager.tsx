@@ -10,8 +10,131 @@ import {
   apiDeleteProduct,
 } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
+import { useIsCompact } from '@/hooks/useMediaQuery'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import type { Product, ProductCategory, InventoryItem } from '@/types'
+
+/** Badge styling per product type, shared by the table row and the mobile card. */
+const TYPE_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
+  Bestseller: { label: 'Bestseller', bg: '#fff7e6', color: '#b45309' },
+  New:        { label: 'New',        bg: '#e8f5e9', color: '#15803d' },
+  Seasonal:   { label: 'Seasonal',   bg: '#fce8e8', color: '#b91c1c' },
+  Special:    { label: 'Special',    bg: '#f0f4ff', color: '#4338ca' },
+  Regular:    { label: 'Regular',    bg: 'transparent', color: 'var(--muted-foreground)' },
+}
+
+/**
+ * Phone-width presentation of a menu item. Mirrors every column the desktop
+ * table shows: name, type, category, price, linked recipe, POS status, actions.
+ */
+function MenuCard({
+  prod,
+  onEdit,
+  onDelete,
+  onToggle,
+}: {
+  prod: Product
+  onEdit: () => void
+  onDelete: () => void
+  onToggle: () => void
+}) {
+  const catName = (prod.category as ProductCategory | undefined)?.name ?? '—'
+  const recipes = prod.recipes ?? []
+  const prodType = (prod as Product & { product_type?: string }).product_type ?? 'Regular'
+  const tc = TYPE_CONFIG[prodType] ?? TYPE_CONFIG.Regular
+
+  return (
+    <div className="card" style={{ padding: '14px 16px', opacity: prod.is_available ? 1 : 0.65 }}>
+      {/* Name + type badge */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+        <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--foreground)', minWidth: 0, overflowWrap: 'anywhere' }}>
+          {prod.name}
+        </span>
+        {prodType !== 'Regular' && (
+          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: tc.bg, color: tc.color, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {tc.label}
+          </span>
+        )}
+      </div>
+
+      {/* Category + price */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
+        <span
+          style={{
+            padding: '4px 10px', borderRadius: 12, fontSize: 12, fontWeight: 500,
+            background: 'rgba(155,94,40,0.1)', color: 'var(--primary)', fontFamily: 'DM Mono',
+          }}
+        >
+          {catName}
+        </span>
+        <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 16, color: 'var(--foreground)' }}>
+          &#8369;{Number(prod.price).toFixed(2)}
+        </span>
+      </div>
+
+      {/* Linked recipe */}
+      <p style={{ fontSize: 10, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+        Inventory Recipe
+      </p>
+      {recipes.length === 0 ? (
+        <p style={{ fontSize: 12, color: 'var(--muted-foreground)', fontStyle: 'italic', marginBottom: 12 }}>
+          None linked
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+          {recipes.map((r, i) => (
+            <span
+              key={i}
+              style={{
+                fontSize: 11, background: 'rgba(0,0,0,0.05)', padding: '3px 8px',
+                borderRadius: 4, color: 'var(--foreground)', fontFamily: 'DM Mono',
+              }}
+            >
+              {r.inventory?.name ?? 'Item'} &times; {r.qty_per_unit} {r.inventory?.unit ?? ''}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* POS status */}
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          width: '100%', padding: '9px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+          cursor: 'pointer', border: 'none', marginBottom: 10,
+          background: prod.is_available ? '#e8f5e9' : '#fee2e2',
+          color: prod.is_available ? '#15803d' : '#991b1b',
+        }}
+      >
+        {prod.is_available ? 'In Stock' : 'Out of Stock'}
+      </button>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="btn-ghost"
+          style={{ flex: 1, padding: '9px 12px', fontSize: 13, borderRadius: 8 }}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          style={{
+            flex: 1, padding: '9px 12px', fontSize: 13, borderRadius: 8,
+            border: '1px solid #fee2e2', background: '#fff5f5', color: '#b91c1c',
+            cursor: 'pointer', fontWeight: 600,
+          }}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  )
+}
 
 interface RecipeRow {
   inventory_id: string
@@ -19,6 +142,8 @@ interface RecipeRow {
 }
 
 export default function MenuManager() {
+  /** Phones get a card list; wider viewports keep the table. */
+  const isCompact = useIsCompact()
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<ProductCategory[]>([])
   const [inventoryList, setInventoryList] = useState<InventoryItem[]>([])
@@ -540,6 +665,25 @@ export default function MenuManager() {
               : 'Click "+ Add Food Item" above to add your first menu dish!'}
           </p>
         </div>
+      ) : isCompact ? (
+        /* Phones: one card per menu item. The 6-column table needed ~900px,
+           so half of it (recipe, POS status, actions) was off-screen. */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filteredProducts.map(prod => (
+            <MenuCard
+              key={prod.id}
+              prod={prod}
+              onEdit={() => openEditModal(prod)}
+              onDelete={() => setPendingDelete(prod)}
+              onToggle={() => handleToggleAvailability(prod)}
+            />
+          ))}
+          {filteredProducts.length === 0 && (
+            <div className="card" style={{ padding: '40px 20px', textAlign: 'center', fontSize: 14, color: 'var(--muted-foreground)' }}>
+              No menu items match this filter.
+            </div>
+          )}
+        </div>
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
@@ -559,14 +703,7 @@ export default function MenuManager() {
                   const catName = (prod.category as ProductCategory | undefined)?.name ?? '—'
                   const recipeCount = prod.recipes?.length ?? 0
                   const prodType = (prod as Product & { product_type?: string }).product_type ?? 'Regular'
-                  const typeConfig: Record<string, { label: string; bg: string; color: string }> = {
-                    Bestseller: { label: 'Bestseller', bg: '#fff7e6', color: '#b45309' },
-                    New:        { label: 'New',        bg: '#e8f5e9', color: '#15803d' },
-                    Seasonal:   { label: 'Seasonal',   bg: '#fce8e8', color: '#b91c1c' },
-                    Special:    { label: 'Special',    bg: '#f0f4ff', color: '#4338ca' },
-                    Regular:    { label: 'Regular',    bg: 'transparent', color: 'var(--muted-foreground)' },
-                  }
-                  const tc = typeConfig[prodType] ?? typeConfig.Regular
+                  const tc = TYPE_CONFIG[prodType] ?? TYPE_CONFIG.Regular
 
                   return (
                     <tr

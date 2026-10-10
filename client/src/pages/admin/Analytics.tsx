@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts'
 import { supabase } from '@/lib/supabase'
+import { useChartWidth, tickInterval } from '@/hooks/useChartWidth'
 import type { Order } from '@/types'
 
 const PIE_COLORS = ['#9b5e28', '#c47a2e', '#dba96a', '#ecddd0']
@@ -15,6 +16,23 @@ export default function Analytics() {
   const [categoryData, setCategoryData] = useState<{ name: string; value: number }[]>([])
   const [topProducts, setTopProducts] = useState<{ name: string; orders: number; revenue: number }[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Adapt the trend chart's tick density to the space it actually gets.
+  const [trendRef, trendWidth] = useChartWidth<HTMLDivElement>()
+
+  const trendAxis = useMemo(() => {
+    const usable = Math.max(0, trendWidth - 46)
+    // "May 26" at 11px monospace is ~44px.
+    const labelWidth = 44
+    const angle = usable > 0 && usable < monthlyData.length * 74 ? -45 : 0
+    return {
+      angle,
+      tickInterval: tickInterval(usable, monthlyData.length, labelWidth),
+    }
+  }, [trendWidth, monthlyData.length])
+
+  const trendAngle = trendAxis.angle
+  const trendTickInterval = trendAxis.tickInterval
 
   useEffect(() => {
     async function fetchData() {
@@ -161,12 +179,14 @@ export default function Analytics() {
             ))}
           </div>
 
-          {/* Revenue trend + pie */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 18, marginBottom: 20 }}>
-            <div className="card" style={{ padding: '24px 26px' }}>
+          {/* Revenue trend + pie. The fixed 300px side column would crush the
+              trend chart to ~70px on a phone, so collapse to one column there. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 18, marginBottom: 20 }}>
+            <div className="card" style={{ padding: '24px 26px', minWidth: 0 }}>
               <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, marginBottom: 4, color: 'var(--foreground)' }}>Monthly Revenue Trend</h3>
               <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 18 }}>{period}</p>
-              <ResponsiveContainer width="100%" height={230}>
+              <div ref={trendRef} style={{ width: '100%', minWidth: 0 }}>
+              <ResponsiveContainer width="100%" height={trendAngle ? 200 : 230}>
                 <AreaChart data={monthlyData}>
                   <defs>
                     <linearGradient id="mrev" x1="0" y1="0" x2="0" y2="1">
@@ -175,12 +195,23 @@ export default function Analytics() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} />
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={trendTickInterval}
+                    angle={trendAngle}
+                    textAnchor={trendAngle ? 'end' : 'middle'}
+                    height={trendAngle ? 46 : 26}
+                    dy={trendAngle ? 6 : 0}
+                  />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} width={38} />
                   <Tooltip contentStyle={{ background: 'var(--sidebar)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} labelStyle={{ color: 'var(--sidebar-muted)', fontSize: 12 }} formatter={(v) => [`₱${Number(v).toLocaleString()}`, 'Revenue']} itemStyle={{ color: 'var(--sidebar-foreground)', fontSize: 13 }} />
                   <Area type="monotone" dataKey="revenue" stroke="#c47a2e" strokeWidth={2.5} fill="url(#mrev)" />
                 </AreaChart>
               </ResponsiveContainer>
+              </div>
             </div>
 
             <div className="card" style={{ padding: '24px 26px' }}>

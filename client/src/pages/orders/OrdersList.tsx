@@ -3,10 +3,161 @@ import { createPortal } from 'react-dom'
 import { apiGetOrders, apiVoidOrder } from '@/lib/api'
 import type { Order } from '@/types'
 import { useAuth } from '@/hooks/useAuth'
+import { useIsCompact } from '@/hooks/useMediaQuery'
 import ReceiptModal from '@/components/receipt/ReceiptModal'
+
+/**
+ * Compact presentation of a single order for phone-width viewports.
+ *
+ * Every field that the desktop grid shows is present here, laid out vertically
+ * so nothing requires horizontal scrolling.
+ */
+function OrderCard({
+  order,
+  onReceipt,
+  onVoid,
+}: {
+  order: Order
+  onReceipt: (o: Order) => void
+  onVoid: (o: Order) => void
+}) {
+  const isVoid = order.status === 'void'
+  const dateStr = new Date(order.created_at).toLocaleString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+  const items = order.order_items ?? []
+
+  return (
+    <div className="card" style={{ padding: '14px 16px', background: isVoid ? 'rgba(254, 242, 242, 0.5)' : undefined }}>
+      {/* Row 1: order number + status */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+        <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 15, color: 'var(--foreground)' }}>
+          #{order.order_number}
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            padding: '3px 8px',
+            borderRadius: 12,
+            fontWeight: 700,
+            background: isVoid ? '#fee2e2' : '#e8f5e9',
+            color: isVoid ? '#b91c1c' : '#15803d',
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+          }}
+        >
+          {order.status}
+        </span>
+      </div>
+
+      {/* Row 2: when */}
+      <p style={{ fontSize: 12, color: 'var(--muted-foreground)', fontFamily: 'DM Mono', marginBottom: 10 }}>
+        {dateStr}
+      </p>
+
+      {/* Row 3: the items themselves (never truncated on mobile) */}
+      {items.length > 0 ? (
+        <ul style={{ listStyle: 'none', margin: '0 0 10px', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {items.map(item => (
+            <li key={item.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13 }}>
+              <span style={{ color: 'var(--foreground)', minWidth: 0, overflowWrap: 'anywhere' }}>
+                <span style={{ color: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}>{item.quantity}&times;</span>{' '}
+                {item.product_name}
+              </span>
+              <span style={{ fontFamily: 'DM Mono', color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>
+                &#8369;{Number(item.line_total).toFixed(2)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 10 }}>No items</p>
+      )}
+
+      {order.notes && (
+        <p style={{ fontSize: 12, color: 'var(--muted-foreground)', fontStyle: 'italic', marginBottom: 10, overflowWrap: 'anywhere' }}>
+          {order.notes}
+        </p>
+      )}
+
+      {/* Row 4: payment + total */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          paddingTop: 10,
+          borderTop: '1px solid var(--muted)',
+        }}
+      >
+        <span style={{ fontSize: 11, textTransform: 'uppercase', fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>
+          {order.payment_method}
+        </span>
+        <span
+          style={{
+            fontSize: 16,
+            fontFamily: 'DM Mono',
+            fontWeight: 700,
+            color: isVoid ? '#9ca3af' : 'var(--foreground)',
+            textDecoration: isVoid ? 'line-through' : 'none',
+          }}
+        >
+          &#8369;{Number(order.total_amount).toFixed(2)}
+        </span>
+      </div>
+
+      {/* Row 5: actions, full-width tap targets */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button
+          type="button"
+          onClick={() => onReceipt(order)}
+          style={{
+            flex: 1,
+            fontSize: 13,
+            padding: '10px 12px',
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: 'var(--card)',
+            color: 'var(--foreground)',
+            cursor: 'pointer',
+            fontWeight: 600,
+          }}
+        >
+          Receipt
+        </button>
+        {!isVoid && (
+          <button
+            type="button"
+            onClick={() => onVoid(order)}
+            style={{
+              flex: 1,
+              fontSize: 13,
+              padding: '10px 12px',
+              borderRadius: 8,
+              border: '1px solid #fecaca',
+              background: '#fef2f2',
+              color: '#b91c1c',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            Void
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function OrdersList() {
   const { role } = useAuth()
+  /** Phones get a card list; wider viewports keep the grid table. */
+  const isCompact = useIsCompact()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -73,6 +224,13 @@ export default function OrdersList() {
     }
     return true
   })
+
+  /** Opens the void confirmation for an order, resetting any prior state. */
+  const openVoid = useCallback((order: Order) => {
+    setVoidModalOrder(order)
+    setVoidReason('')
+    setVoidError(null)
+  }, [])
 
   async function handleConfirmVoid(e: React.FormEvent) {
     e.preventDefault()
@@ -171,10 +329,23 @@ export default function OrdersList() {
         </div>
       )}
 
-      {/* Orders Table */}
+      {/* Orders list — a compact card stack on phones, a grid table above that.
+          A 1330px grid inside a 360px viewport forced sideways scrolling to
+          reach Payment/Total/Actions, which is not usable one-handed. */}
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}>
           <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+        </div>
+      ) : isCompact ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filteredOrders.map(order => (
+            <OrderCard key={order.id} order={order} onReceipt={setSelectedReceiptOrder} onVoid={openVoid} />
+          ))}
+          {filteredOrders.length === 0 && (
+            <div className="card" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 14 }}>
+              No orders found matching your criteria.
+            </div>
+          )}
         </div>
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
@@ -277,11 +448,7 @@ export default function OrdersList() {
 
                   {!isVoid && (
                     <button
-                      onClick={() => {
-                        setVoidModalOrder(order)
-                        setVoidReason('')
-                        setVoidError(null)
-                      }}
+                      onClick={() => openVoid(order)}
                       style={{
                         fontSize: 12,
                         padding: '5px 9px',

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { apiCreateStaff, apiDeactivateStaff, apiReactivateStaff } from '@/lib/api'
+import { useIsCompact } from '@/hooks/useMediaQuery'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import type { StaffProfile, StaffRole } from '@/types'
 
@@ -17,7 +18,99 @@ const roleBadge: Record<StaffRole, { bg: string; color: string }> = {
   inventory_personnel: { bg: 'rgba(30,64,175,0.1)',  color: '#1d4ed8' },
 }
 
+/**
+ * Compact presentation of a single staff member for phone-width viewports,
+ * mirroring every column the desktop grid exposes.
+ */
+function StaffCard({
+  staff,
+  onAction,
+}: {
+  staff: StaffProfile
+  onAction: (kind: 'deactivate' | 'reactivate') => void
+}) {
+  const badge = roleBadge[staff.role]
+
+  return (
+    <div className="card" style={{ padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--foreground)', overflowWrap: 'anywhere' }}>
+            {staff.full_name}
+          </p>
+          <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2, fontFamily: 'DM Mono' }}>
+            ID: {staff.id.slice(0, 8)}
+          </p>
+        </div>
+        <span
+          style={{
+            fontSize: 11,
+            padding: '4px 10px',
+            borderRadius: 20,
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+            background: staff.is_active ? '#e8f5e9' : '#f3f4f6',
+            color: staff.is_active ? '#15803d' : '#6b7280',
+          }}
+        >
+          {staff.is_active ? 'Active' : 'Inactive'}
+        </span>
+      </div>
+
+      <p style={{ fontSize: 12, color: 'var(--muted-foreground)', fontFamily: 'DM Mono', marginBottom: 12, overflowWrap: 'anywhere' }}>
+        {staff.email}
+      </p>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <span
+          style={{
+            fontSize: 12,
+            padding: '4px 11px',
+            borderRadius: 20,
+            fontWeight: 600,
+            background: badge.bg,
+            color: badge.color,
+          }}
+        >
+          {ROLES.find(r => r.value === staff.role)?.label ?? staff.role}
+        </span>
+
+        {staff.is_active ? (
+          <button
+            type="button"
+            id={`btn-deactivate-${staff.id}`}
+            onClick={() => onAction('deactivate')}
+            style={{
+              fontSize: 13, padding: '9px 16px', borderRadius: 8,
+              background: 'transparent', border: '1px solid #fca5a5',
+              color: 'var(--danger)', cursor: 'pointer', fontWeight: 600,
+            }}
+          >
+            Deactivate
+          </button>
+        ) : (
+          <button
+            type="button"
+            id={`btn-reactivate-${staff.id}`}
+            onClick={() => onAction('reactivate')}
+            style={{
+              fontSize: 13, padding: '9px 16px', borderRadius: 8,
+              background: 'transparent', border: '1px solid #86efac',
+              color: '#15803d', cursor: 'pointer', fontWeight: 600,
+            }}
+          >
+            Reactivate
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function StaffManager() {
+  /** Phones get a card list; wider viewports keep the grid table. */
+  const isCompact = useIsCompact()
   const [staff, setStaff] = useState<StaffProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -138,10 +231,29 @@ export default function StaffManager() {
         </div>
       )}
 
-      {/* Staff table */}
+      {/* Staff list — a card stack on phones (the 700px grid needed sideways
+          scrolling otherwise), the grid table from tablet up. */}
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}>
           <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+        </div>
+      ) : isCompact ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {staff.map(s => (
+            <StaffCard
+              key={s.id}
+              staff={s}
+              onAction={(kind) => {
+                setActionError(null)
+                setPendingAction({ kind, id: s.id, name: s.full_name })
+              }}
+            />
+          ))}
+          {staff.length === 0 && (
+            <div className="card" style={{ padding: '40px 20px', textAlign: 'center', fontSize: 14, color: 'var(--muted-foreground)' }}>
+              No staff accounts yet. Add your first staff member above.
+            </div>
+          )}
         </div>
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>

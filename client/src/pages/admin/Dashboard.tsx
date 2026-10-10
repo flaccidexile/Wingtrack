@@ -1,12 +1,20 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar,
 } from 'recharts'
 import { supabase } from '@/lib/supabase'
+import { useChartWidth, tickInterval } from '@/hooks/useChartWidth'
 import type { Order } from '@/types'
 
-interface DailyStat { day: string; revenue: number; orders: number }
+interface DailyStat {
+  /** Full label, e.g. "Sat, 10/3" — used when there is room for it. */
+  dayFull: string
+  /** Compact label, e.g. "10/3" — used on narrow screens / dense axes. */
+  dayShort: string
+  revenue: number
+  orders: number
+}
 interface TopItem { name: string; qty: number; revenue: number }
 
 type PeriodPreset = 'today' | 'week' | 'month' | 'custom'
@@ -57,6 +65,80 @@ export default function Dashboard() {
   const [lowStockCount, setLowStockCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
+  // Measure each chart's actual rendered width so tick density adapts to it
+  // rather than guessing from the data length alone.
+  const [revRef, revWidth] = useChartWidth<HTMLDivElement>()
+  const [ordRef, ordWidth] = useChartWidth<HTMLDivElement>()
+
+  /**
+   * Axis configuration derived from the measured width.
+   *
+   * The y-axis eats ~38px, so the usable label span is width - 46. We then ask
+   * how many labels of the chosen style fit, and let `tickInterval` pick the
+   * skip count. Narrow screens get the compact "10/3" label and rotate it.
+   */
+  /**
+   * Builds the axis config for a chart of a given measured width.
+   *
+   * The y-axis eats ~38px, so the usable label span is width - 46. We then ask
+   * how many labels of the chosen style fit, and let `tickInterval` pick the
+   * skip count. Narrow screens get the compact "10/3" label and rotate it.
+   *
+   * This is per-chart on purpose: the revenue (full-width) and orders (half
+   * width) charts have very different amounts of room, so sharing one config
+   * left the narrower chart with crowded labels.
+   */
+  const buildAxis = useCallback((width: number) => {
+    const usable = Math.max(0, width - 46)
+    // "Sat, 10/3" at 10px monospace is ~54px; "10/3" is ~26px.
+    const useShort = usable > 0 && usable < dailyStats.length * 58
+    const labelWidth = useShort ? 30 : 58
+    // Rotate whenever labels would otherwise be tight, so short labels get the
+    // extra room too instead of being squeezed side by side.
+    const angle = usable > 0 && usable < dailyStats.length * 92 ? -45 : 0
+
+    return {
+      useShort,
+      labelWidth,
+      angle,
+      textAnchor: (angle ? 'end' : 'middle') as 'end' | 'middle',
+      dy: angle ? 6 : 0,
+      axisHeight: angle ? 46 : 26,
+      tickInterval: tickInterval(usable, dailyStats.length, labelWidth),
+    }
+  }, [dailyStats.length])
+
+  const revAxis = useMemo(() => buildAxis(revWidth), [buildAxis, revWidth])
+  const ordAxis = useMemo(() => buildAxis(ordWidth), [buildAxis, ordWidth])
+
+  /**
+   * Each chart gets its own label column so a wide chart keeps the fuller
+   * "Sat, 10/3" form while a narrow one falls back to "10/3", rather than
+   * forcing both to the lowest common denominator.
+   */
+  const chartData = useMemo(
+    () =>
+      dailyStats.map(d => ({
+        ...d,
+        revLabel: revAxis.useShort ? d.dayShort : d.dayFull,
+        ordLabel: ordAxis.useShort ? d.dayShort : d.dayFull,
+      })),
+    [dailyStats, revAxis.useShort, ordAxis.useShort],
+  )
+
+  // Give the charts more vertical room on phones, where the axis is rotated.
+  const revHeight = revAxis.angle ? 200 : 240
+  const ordHeight = ordAxis.angle ? 200 : 240
+
+  // Bars should fill the plot area without touching: budget ~60% of the slot
+  // each bar gets, clamped to a sane min/max.
+  const barSize = useMemo(() => {
+    if (dailyStats.length === 0) return 24
+    const plot = Math.max(0, ordWidth - 46)
+    const slot = plot / dailyStats.length
+    return Math.max(6, Math.min(32, Math.round(slot * 0.6)))
+  }, [ordWidth, dailyStats.length])
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     const now = new Date()
@@ -92,14 +174,17 @@ export default function Dashboard() {
     const orders: Order[] = ordersRes.data ?? []
     setLowStockCount((inventoryRes.data ?? []).length)
 
-    // Build chronological stats
-    const statsMap = new Map<string, { label: string; revenue: number; orders: number; timestamp: number }>()
+    // Build chronological stats. Both label widths are stored so the chart can
+    // switch to the compact form when the container is too narrow.
+    const statsMap = new Map<string, { dayFull: string; dayShort: string; revenue: number; orders: number; timestamp: number }>()
 
     if (period === 'today') {
       for (let h = 8; h <= 22; h += 2) {
-        const hourLabel = `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'AM' : 'PM'}`
+        const dayFull = `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'AM' : 'PM'}`
+        // Compact hour form, e.g. "9A" / "2P" — enough in a tight axis.
+        const dayShort = `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'A' : 'P'}`
         const key = String(h).padStart(2, '0')
-        statsMap.set(key, { label: hourLabel, revenue: 0, orders: 0, timestamp: h })
+        statsMap.set(key, { dayFull, dayShort, revenue: 0, orders: 0, timestamp: h })
       }
       for (const o of orders) {
         const d = new Date(o.created_at)
@@ -122,8 +207,10 @@ export default function Dashboard() {
       for (let i = 0; i < dayCount; i++) {
         const d = new Date(startDay.getTime() + i * msPerDay)
         const dateKey = d.toISOString().split('T')[0]
-        const label = d.toLocaleDateString('en-US', dayCount > 14 ? { month: 'short', day: 'numeric' } : { weekday: 'short', month: 'numeric', day: 'numeric' })
-        statsMap.set(dateKey, { label, revenue: 0, orders: 0, timestamp: d.getTime() })
+        // Build both label widths up front; the chart picks whichever fits.
+        const dayFull = d.toLocaleDateString('en-US', dayCount > 14 ? { month: 'short', day: 'numeric' } : { weekday: 'short', month: 'numeric', day: 'numeric' })
+        const dayShort = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
+        statsMap.set(dateKey, { dayFull, dayShort, revenue: 0, orders: 0, timestamp: d.getTime() })
       }
 
       for (const o of orders) {
@@ -134,15 +221,16 @@ export default function Dashboard() {
           existing.orders += 1
         } else {
           const d = new Date(o.created_at)
-          const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-          statsMap.set(dateKey, { label, revenue: Number(o.total_amount), orders: 1, timestamp: d.getTime() })
+          const dayFull = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          const dayShort = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
+          statsMap.set(dateKey, { dayFull, dayShort, revenue: Number(o.total_amount), orders: 1, timestamp: d.getTime() })
         }
       }
     }
 
     const sortedStats = Array.from(statsMap.values())
       .sort((a, b) => a.timestamp - b.timestamp)
-      .map(s => ({ day: s.label, revenue: Math.round(s.revenue * 100) / 100, orders: s.orders }))
+      .map(s => ({ dayFull: s.dayFull, dayShort: s.dayShort, revenue: Math.round(s.revenue * 100) / 100, orders: s.orders }))
 
     setDailyStats(sortedStats)
 
@@ -298,8 +386,9 @@ export default function Dashboard() {
                   &#8369;{totalRevenue.toLocaleString()}
                 </span>
               </div>
-              <ResponsiveContainer width="100%" height={240}>
-                <AreaChart data={dailyStats} margin={{ bottom: 20 }}>
+              <div ref={revRef} style={{ width: '100%', minWidth: 0 }}>
+              <ResponsiveContainer width="100%" height={revHeight}>
+                <AreaChart data={chartData} margin={{ bottom: 20 }}>
                   <defs>
                     <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%"  stopColor="#c47a2e" stopOpacity={0.25}/>
@@ -307,17 +396,24 @@ export default function Dashboard() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false}
-                    interval={dailyStats.length > 14 ? Math.ceil(dailyStats.length / 10) - 1 : 0}
-                    angle={dailyStats.length > 10 ? -35 : 0}
-                    textAnchor={dailyStats.length > 10 ? 'end' : 'middle'}
-                    dy={dailyStats.length > 10 ? 8 : 0} />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} />
+                  <XAxis
+                    dataKey="revLabel"
+                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={revAxis.tickInterval}
+                    angle={revAxis.angle}
+                    textAnchor={revAxis.textAnchor}
+                    height={revAxis.axisHeight}
+                    dy={revAxis.dy}
+                  />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} width={38} />
                   <Tooltip content={<CustomTooltip />} />
                   <Area type="monotone" dataKey="revenue" stroke="#c47a2e" strokeWidth={2} fill="url(#rev)" />
                   <Area type="monotone" dataKey="orders" stroke="transparent" />
                 </AreaChart>
               </ResponsiveContainer>
+              </div>
             </div>
 
             <div className="card" style={{ padding: '24px 26px' }}>
@@ -348,26 +444,29 @@ export default function Dashboard() {
           {/* Bottom row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18 }}>
             {/* Recent transactions */}
-            <div className="card" style={{ padding: '24px 26px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+            <div className="card" style={{ padding: '24px 26px', minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 10, flexWrap: 'wrap' }}>
                 <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, color: 'var(--foreground)' }}>Recent Transactions</h3>
                 <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{periodLabel}</span>
               </div>
               {recentOrders.length === 0 ? (
                 <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>No recent orders.</p>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(70px, 1fr) 80px 90px 80px', gap: 10, padding: '0 0 10px', borderBottom: '1px solid var(--border)', marginBottom: 10, minWidth: 360 }}>
+                <div>
+                  {/* Column budget: order numbers are short ("#282"), methods are
+                      shorter ("Card"/"Gcash"), so the money column gets the most
+                      room — a truncated peso amount is worse than a truncated label. */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.8fr) minmax(0, 0.85fr) minmax(0, 1.25fr) minmax(0, 0.85fr)', gap: 6, padding: '0 0 10px', borderBottom: '1px solid var(--border)', marginBottom: 10 }}>
                     {['Order #', 'Method', 'Total', 'Status'].map(h => (
-                      <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
+                      <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h}</span>
                     ))}
                   </div>
                   {recentOrders.map(o => (
-                    <div key={o.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(70px, 1fr) 80px 90px 80px', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--muted)', alignItems: 'center', minWidth: 360 }}>
-                      <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--foreground)', fontWeight: 500 }}>#{o.order_number}</span>
-                      <span style={{ fontSize: 12, color: 'var(--muted-foreground)', textTransform: 'capitalize' }}>{o.payment_method}</span>
-                      <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--foreground)', fontWeight: 600 }}>&#8369;{Number(o.total_amount).toLocaleString()}</span>
-                      <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, background: o.status === 'void' ? '#fce8e8' : '#e8f5e9', color: o.status === 'void' ? '#c0392b' : '#2e7d32', fontWeight: 600, textAlign: 'center', textTransform: 'capitalize' }}>{o.status}</span>
+                    <div key={o.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.8fr) minmax(0, 0.85fr) minmax(0, 1.25fr) minmax(0, 0.85fr)', gap: 6, padding: '10px 0', borderBottom: '1px solid var(--muted)', alignItems: 'center' }}>
+                      <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--foreground)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{o.order_number}</span>
+                      <span style={{ fontSize: 12, color: 'var(--muted-foreground)', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.payment_method}</span>
+                      <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--foreground)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>&#8369;{Number(o.total_amount).toLocaleString()}</span>
+                      <span style={{ fontSize: 11, padding: '3px 7px', borderRadius: 20, background: o.status === 'void' ? '#fce8e8' : '#e8f5e9', color: o.status === 'void' ? '#c0392b' : '#2e7d32', fontWeight: 600, textAlign: 'center', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.status === 'void' ? 'Void' : 'Paid'}</span>
                     </div>
                   ))}
                 </div>
@@ -378,21 +477,29 @@ export default function Dashboard() {
             <div className="card" style={{ padding: '24px 26px' }}>
               <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Orders by Day</h3>
               <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 18 }}>{totalOrders} total · &#8369;{totalRevenue.toLocaleString()}</p>
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={dailyStats} barSize={dailyStats.length > 14 ? 16 : 32} margin={{ bottom: 20 }}>
+              <div ref={ordRef} style={{ width: '100%', minWidth: 0 }}>
+              <ResponsiveContainer width="100%" height={ordHeight}>
+                <BarChart data={chartData} barSize={barSize} margin={{ bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false}
-                    interval={dailyStats.length > 14 ? Math.ceil(dailyStats.length / 10) - 1 : 0}
-                    angle={dailyStats.length > 10 ? -35 : 0}
-                    textAnchor={dailyStats.length > 10 ? 'end' : 'middle'}
-                    dy={dailyStats.length > 10 ? 8 : 0} />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} />
+                  <XAxis
+                    dataKey="ordLabel"
+                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={ordAxis.tickInterval}
+                    angle={ordAxis.angle}
+                    textAnchor={ordAxis.textAnchor}
+                    height={ordAxis.axisHeight}
+                    dy={ordAxis.dy}
+                  />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
                   <Tooltip contentStyle={{ background: 'var(--sidebar)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontFamily: 'DM Sans' }}
                     labelStyle={{ color: 'var(--sidebar-muted)', fontSize: 12, fontFamily: 'DM Mono' }}
                     itemStyle={{ color: 'var(--sidebar-foreground)', fontSize: 13 }} />
                   <Bar dataKey="orders" fill="var(--primary)" radius={[5, 5, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+              </div>
             </div>
           </div>
         </>
