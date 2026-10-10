@@ -11,6 +11,8 @@ dist/
 # Build outputs
 client/dist/
 server/dist/
+dist/
+*.tsbuildinfo
 
 # Logs
 *.log

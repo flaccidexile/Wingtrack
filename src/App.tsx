@@ -1,122 +1,142 @@
-import { useState } from 'react'
-import Dashboard from './pages/Dashboard'
-import PointOfSale from './pages/PointOfSale'
-import Inventory from './pages/Inventory'
-import Analytics from './pages/Analytics'
+import { useState, useEffect } from 'react'
+import { AuthProvider, useAuth } from '@/hooks/useAuth'
+import LoginPage from '@/components/auth/LoginPage'
+import SignUpPage from '@/components/auth/SignUpPage'
+import ForgotPasswordPage from '@/components/auth/ForgotPasswordPage'
+import ResetPasswordPage from '@/components/auth/ResetPasswordPage'
+import OTPVerificationPage from '@/components/auth/OTPVerificationPage'
+import AppShell from '@/components/layout/AppShell'
 
-type Page = 'dashboard' | 'pos' | 'inventory' | 'analytics'
+type AuthMode = 'login' | 'signup' | 'forgot' | 'reset' | 'otp'
 
-const NAV = [
-  { id: 'dashboard' as Page, label: 'Dashboard', icon: DashIcon },
-  { id: 'pos' as Page, label: 'Point of Sale', icon: PosIcon },
-  { id: 'inventory' as Page, label: 'Inventory', icon: InvIcon },
-  { id: 'analytics' as Page, label: 'Analytics', icon: AnaIcon },
-]
+function detectInitialMode(): AuthMode {
+  const params = new URLSearchParams(window.location.search)
+  // Supabase sends ?mode=reset in the redirectTo we set in sendPasswordReset
+  if (params.get('mode') === 'reset') return 'reset'
+  // Supabase also sets the hash #access_token when following a recovery link
+  if (window.location.hash.includes('type=recovery')) return 'reset'
+  return 'login'
+}
 
-function DashIcon({ active }: { active: boolean }) {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--sidebar-active)' : 'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-      <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-    </svg>
+function AppContent() {
+  const { session, loading, signOut } = useAuth()
+  const [authMode, setAuthMode] = useState<AuthMode>(detectInitialMode)
+  const [pendingEmail, setPendingEmail] = useState<string>('')
+  const [isOnline, setIsOnline] = useState(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
   )
-}
-function PosIcon({ active }: { active: boolean }) {
+
+  useEffect(() => {
+    function handleOnline()  { setIsOnline(true) }
+    function handleOffline() { setIsOnline(false) }
+    window.addEventListener('online',  handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online',  handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  // ── Offline banner ────────────────────────────────────────
+  if (!isOnline) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--background)', padding: '24px 16px' }}>
+        <div className="card fade-in" style={{ padding: '36px 30px', maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 16px 40px rgba(0,0,0,0.12)', border: '1px solid rgba(239,68,68,0.25)' }}>
+          <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="1" y1="1" x2="23" y2="23"/>
+              <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+              <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+              <path d="M10.71 5.05A16 16 0 0 1 22.58 9"/>
+              <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+              <line x1="12" y1="20" x2="12.01" y2="20"/>
+            </svg>
+          </div>
+          <h2 style={{ fontFamily: 'Fraunces', fontSize: 22, fontWeight: 700, marginBottom: 10, color: 'var(--foreground)' }}>Access Denied</h2>
+          <p style={{ fontSize: 14, color: '#ef4444', fontWeight: 600, marginBottom: 8 }}>Internet is not connected</p>
+          <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 24, lineHeight: 1.5 }}>
+            You cannot access WINGTRACK while offline. Please check your network connection.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button id="retry-connection-btn" className="btn-primary"
+              onClick={() => { if (navigator.onLine) { setIsOnline(true); window.location.reload() } else { alert('Still offline. Please check your network connection.') } }}
+              style={{ width: '100%', padding: '12px', fontWeight: 600 }}>
+              Retry Connection
+            </button>
+            {session && (
+              <button id="access-denied-signout" className="btn-ghost" onClick={() => signOut()} style={{ width: '100%', padding: '10px', fontSize: 13 }}>
+                Sign Out
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Loading spinner ───────────────────────────────────────
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--background)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
+          <p style={{ marginTop: 14, fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}>Loading WINGTRACK...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Password Reset page ───────────────────────────────────
+  if (authMode === 'reset') {
+    return (
+      <ResetPasswordPage
+        onDone={() => {
+          window.history.replaceState({}, '', window.location.pathname)
+          setAuthMode('login')
+        }}
+      />
+    )
+  }
+
+  // ── OTP verification page ─────────────────────────────────
+  if (authMode === 'otp') {
+    return (
+      <OTPVerificationPage
+        email={pendingEmail}
+        onVerified={() => setAuthMode('login')}
+        onBack={() => setAuthMode('login')}
+      />
+    )
+  }
+
+  // ── Authenticated ─────────────────────────────────────────
+  if (session) return <AppShell />
+
+  // ── Unauthenticated pages ─────────────────────────────────
+  if (authMode === 'forgot') return <ForgotPasswordPage onBack={() => setAuthMode('login')} />
+
+  if (authMode === 'signup') {
+    return (
+      <SignUpPage
+        onSwitchToLogin={() => setAuthMode('login')}
+        onRegistered={(email) => { setPendingEmail(email); setAuthMode('otp') }}
+      />
+    )
+  }
+
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--sidebar-active)' : 'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="4" width="20" height="16" rx="2"/>
-      <line x1="6" y1="9" x2="6" y2="9.01"/><line x1="10" y1="9" x2="10" y2="9.01"/>
-      <line x1="14" y1="9" x2="14" y2="9.01"/><line x1="6" y1="13" x2="6" y2="13.01"/>
-      <line x1="10" y1="13" x2="10" y2="13.01"/><line x1="14" y1="13" x2="18" y2="13"/>
-    </svg>
-  )
-}
-function InvIcon({ active }: { active: boolean }) {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--sidebar-active)' : 'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 6l9-3 9 3v12l-9 3-9-3V6z"/>
-      <path d="M12 3v18M3 6l9 3 9-3"/>
-    </svg>
-  )
-}
-function AnaIcon({ active }: { active: boolean }) {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--sidebar-active)' : 'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
-      <line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/>
-    </svg>
+    <LoginPage
+      onSwitchToSignUp={() => setAuthMode('signup')}
+      onForgotPassword={() => setAuthMode('forgot')}
+    />
   )
 }
 
 export default function App() {
-  const [page, setPage] = useState<Page>('dashboard')
-
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', height: '100vh', overflow: 'hidden' }}>
-      {/* Sidebar */}
-      <aside style={{ background: 'var(--sidebar)', display: 'flex', flexDirection: 'column', height: '100vh' }}>
-        {/* Logo */}
-        <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--sidebar-active)', flexShrink: 0, background: '#ea580c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <img src="/logo.png" alt="Wingtrack Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            </div>
-            <div>
-              <p style={{ fontFamily: 'Fraunces', fontWeight: 700, fontSize: 15, color: 'var(--sidebar-foreground)', lineHeight: 1.1 }}>
-                <span style={{ color: 'var(--sidebar-active)' }}>WING</span>TRACK
-              </p>
-              <p style={{ fontSize: 10, color: 'var(--sidebar-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 1 }}>POS & Inventory</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Nav */}
-        <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <p style={{ fontSize: 10, color: 'var(--sidebar-muted)', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '6px 8px 10px', fontFamily: 'DM Mono', fontWeight: 600 }}>Operations</p>
-          {NAV.map(({ id, label, icon: Icon }) => {
-            const active = page === id
-            return (
-              <button
-                key={id}
-                onClick={() => setPage(id)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '9px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                  background: active ? 'rgba(234,88,12,0.18)' : 'transparent',
-                  color: active ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
-                  fontFamily: 'DM Sans', fontSize: 13, fontWeight: active ? 600 : 500,
-                  transition: 'all 0.15s', textAlign: 'left', width: '100%',
-                  borderLeft: active ? '2px solid var(--sidebar-active)' : '2px solid transparent',
-                }}
-                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-hover)'; (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)' }}
-                onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-muted)' } }}
-              >
-                <Icon active={active} />
-                {label}
-              </button>
-            )
-          })}
-        </nav>
-
-        {/* User */}
-        <div style={{ padding: '16px 12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 6 }}>
-            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, color: '#fdfaf6' }}>M</div>
-            <div>
-              <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--sidebar-foreground)' }}>Manager</p>
-              <p style={{ fontSize: 10, color: 'var(--sidebar-muted)' }}>manager@wingtrack.ph</p>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main content */}
-      <main style={{ overflow: 'auto', height: '100vh', background: 'var(--background)' }}>
-        {page === 'dashboard' && <Dashboard />}
-        {page === 'pos' && <PointOfSale />}
-        {page === 'inventory' && <Inventory />}
-        {page === 'analytics' && <Analytics />}
-      </main>
-    </div>
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   )
 }
