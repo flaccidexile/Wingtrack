@@ -34,3 +34,6 @@ Thumbs.db
 # pnpm
 pnpm-lock.yaml
 .pnpm-store/
+
+# local scratch
+.git-msg.tmp
