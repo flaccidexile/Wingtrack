@@ -51,7 +51,7 @@ router.post(
       .from('staff_profiles')
       .select('id')
       .eq('user_id', req.userId!)
-      .single()
+      .maybeSingle()
 
     // Create staff profile
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -91,7 +91,7 @@ router.delete(
       .from('staff_profiles')
       .select('id')
       .eq('user_id', req.userId!)
-      .single()
+      .maybeSingle()
 
     if (selfProfile?.id === id) {
       res.status(400).json({ message: 'You cannot deactivate your own account.' })

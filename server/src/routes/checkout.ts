@@ -58,11 +58,12 @@ router.post(
     const total_amount = Math.round((subtotal + vat_amount) * 100) / 100
 
     // ── Step 3: Fetch cashier staff_profile id ───────────────
+    // maybeSingle() so a missing profile is a clean 403, not a PGRST116 500.
     const { data: staffProfile } = await supabaseAdmin
       .from('staff_profiles')
       .select('id')
       .eq('user_id', req.userId!)
-      .single()
+      .maybeSingle()
 
     if (!staffProfile) {
       res.status(403).json({ message: 'Staff profile not found.' })

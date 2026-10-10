@@ -64,24 +64,40 @@ export default function MenuManager() {
   }, [showItemModal, showCategoryModal])
 
   const loadData = useCallback(async () => {
-    try {
-      const [prods, cats, invRes] = await Promise.all([
-        apiGetProducts(),
-        apiGetCategories(),
-        supabase.from('inventory').select('id, name, unit, stock_qty').order('name'),
-      ])
+    setLoading(true)
+    // Settle each source independently: a failure in one used to blank the
+    // whole page because Promise.all rejects on the first error. Now the
+    // products/categories are what the page is actually for, and the recipe
+    // picker degrades to an empty list if inventory can't be read.
+    const [prodsRes, catsRes, invRes] = await Promise.allSettled([
+      apiGetProducts(),
+      apiGetCategories(),
+      supabase.from('inventory').select('id, name, unit, stock_qty').order('name'),
+    ])
 
-      setProducts(prods)
-      setCategories(cats)
-      if (invRes.data) {
-        setInventoryList(invRes.data as InventoryItem[])
+    const criticalFailure =
+      prodsRes.status === 'rejected' || catsRes.status === 'rejected'
+
+    if (prodsRes.status === 'fulfilled') setProducts(prodsRes.value)
+    if (catsRes.status === 'fulfilled') setCategories(catsRes.value)
+
+    if (invRes.status === 'fulfilled') {
+      if (invRes.value.error) {
+        console.warn('Inventory lookup failed (recipe picker will be empty):', invRes.value.error.message)
+      } else if (invRes.value.data) {
+        setInventoryList(invRes.value.data as InventoryItem[])
       }
-    } catch (err: unknown) {
-      console.error('Failed to load menu data:', err)
-      showBanner('error', 'Failed to load menu data')
-    } finally {
-      setLoading(false)
+    } else {
+      console.warn('Inventory lookup failed (recipe picker will be empty):', invRes.reason)
     }
+
+    if (criticalFailure) {
+      const reason = prodsRes.status === 'rejected' ? prodsRes.reason : (catsRes as PromiseRejectedResult).reason
+      console.error('Failed to load menu data:', reason)
+      showBanner('error', reason instanceof Error ? reason.message : 'Failed to load menu data')
+    }
+
+    setLoading(false)
   }, [])
 
   useEffect(() => {

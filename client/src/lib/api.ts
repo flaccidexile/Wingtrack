@@ -131,6 +131,19 @@ export async function apiUpdatePassword(password: string) {
 }
 
 /**
+ * Parse a failed response into a human-readable Error. Surfaces the HTTP
+ * status so a proxy/network failure ("Failed to fetch") is distinguishable
+ * from a real API error message.
+ */
+async function toApiError(res: Response, fallback: string): Promise<Error> {
+  const body = await res.json().catch(() => null) as { message?: string } | null
+  if (body?.message) return new Error(body.message)
+  if (res.status === 401) return new Error('Your session has expired. Please sign in again.')
+  if (res.status === 403) return new Error('You do not have permission to perform this action.')
+  return new Error(`${fallback} (HTTP ${res.status})`)
+}
+
+/**
  * GET /api/orders (Cashier or Admin)
  */
 export async function apiGetOrders() {
@@ -140,8 +153,7 @@ export async function apiGetOrders() {
     headers,
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: 'Failed to fetch orders' }))
-    throw new Error(err.message ?? 'Failed to fetch orders')
+    throw await toApiError(res, 'Failed to fetch orders')
   }
   return res.json()
 }
@@ -173,8 +185,7 @@ export async function apiGetInventoryMovements() {
     headers,
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: 'Failed to fetch inventory movements' }))
-    throw new Error(err.message ?? 'Failed to fetch inventory movements')
+    throw await toApiError(res, 'Failed to fetch inventory movements')
   }
   return res.json()
 }
@@ -214,8 +225,7 @@ export async function apiGetProducts() {
     headers,
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: 'Failed to fetch products' }))
-    throw new Error(err.message ?? 'Failed to fetch products')
+    throw await toApiError(res, 'Failed to fetch products')
   }
   return res.json()
 }
@@ -230,8 +240,7 @@ export async function apiGetCategories() {
     headers,
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: 'Failed to fetch categories' }))
-    throw new Error(err.message ?? 'Failed to fetch categories')
+    throw await toApiError(res, 'Failed to fetch categories')
   }
   return res.json()
 }

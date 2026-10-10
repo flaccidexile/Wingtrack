@@ -12,11 +12,20 @@ router.get(
   requireRole('cashier', 'admin'),
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { data: staffProfile } = await supabaseAdmin
+      // maybeSingle(): a missing row must be a normal null, not a PGRST116
+      // throw. requireRole has already resolved and validated this profile, so
+      // an absent row here is a genuine data gap — report it, don't 500.
+      const { data: staffProfile, error: profileError } = await supabaseAdmin
         .from('staff_profiles')
         .select('id, role')
         .eq('user_id', req.userId!)
-        .single()
+        .maybeSingle()
+
+      if (profileError) {
+        console.error('Fetch orders — profile lookup failed:', profileError)
+        res.status(500).json({ message: 'Unable to resolve your staff profile.' })
+        return
+      }
 
       if (!staffProfile) {
         res.status(403).json({ message: 'Staff profile not found.' })
@@ -86,11 +95,17 @@ router.post(
       const { id } = req.params
       const { reason } = req.body as { reason?: string }
 
-      const { data: staffProfile } = await supabaseAdmin
+      const { data: staffProfile, error: profileError } = await supabaseAdmin
         .from('staff_profiles')
         .select('id, role')
         .eq('user_id', req.userId!)
-        .single()
+        .maybeSingle()
+
+      if (profileError) {
+        console.error('Void order — profile lookup failed:', profileError)
+        res.status(500).json({ message: 'Unable to resolve your staff profile.' })
+        return
+      }
 
       if (!staffProfile) {
         res.status(403).json({ message: 'Staff profile not found.' })

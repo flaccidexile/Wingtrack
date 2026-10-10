@@ -60,12 +60,13 @@ router.patch(
       return
     }
 
-    // Get staff profile for audit log
+    // Get staff profile for audit log. maybeSingle() so an unlinked account
+    // yields null (performed_by: null) instead of throwing PGRST116.
     const { data: staffProfile } = await supabaseAdmin
       .from('staff_profiles')
       .select('id')
       .eq('user_id', req.userId!)
-      .single()
+      .maybeSingle()
 
     // Log movement
     await supabaseAdmin.from('inventory_movements').insert({
@@ -147,12 +148,12 @@ router.post(
       return
     }
 
-    // Get staff profile
+    // Get staff profile (maybeSingle: unlinked account -> null, not a throw)
     const { data: staffProfile } = await supabaseAdmin
       .from('staff_profiles')
       .select('id')
       .eq('user_id', req.userId!)
-      .single()
+      .maybeSingle()
 
     if (initialQty > 0) {
       await supabaseAdmin.from('inventory_movements').insert({
