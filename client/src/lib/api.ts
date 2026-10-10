@@ -392,6 +392,30 @@ export async function apiCheckRegistered(email: string): Promise<{
   return res.json()
 }
 
+/**
+ * POST /api/auth/provision-self  (Authenticated)
+ * Completes self-service sign-up by creating the caller's staff_profiles row.
+ * Idempotent: safe to call on every sign-in. The server clamps the role to
+ * non-admin values and never reactivates a deactivated account.
+ */
+export async function apiProvisionSelf(payload?: { full_name?: string; role?: string }) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/auth/provision-self`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(payload ?? {}),
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Failed to complete registration')
+  }
+  return res.json() as Promise<{
+    provisioned: boolean
+    created: boolean
+    role?: string
+    is_active?: boolean
+  }>
+}
+
 
 // --- PayMongo Sandbox Helpers --------------------------------
 

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import { apiCheckRegistered } from '@/lib/api'
+import { apiCheckRegistered, apiProvisionSelf } from '@/lib/api'
 import type { StaffProfile, StaffRole } from '@/types'
 
 /**
@@ -82,7 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userId = currentUser.id
     const userEmail = currentUser.email || ''
 
-    try {
+    /** Reads the profile row for this user, by user_id then by email. */
+    async function lookup(): Promise<StaffProfile | null> {
       // 1. Authoritative lookup by user_id.
       const { data, error } = await supabase
         .from('staff_profiles')
@@ -90,33 +91,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('user_id', userId)
         .maybeSingle()
 
-      if (!error && data) {
-        if (!data.is_active) {
-          setAccountState('deactivated')
-          return null
-        }
-        setAccountState('active')
-        return data as StaffProfile
-      }
+      if (!error && data) return data as StaffProfile
 
       // 2. Fall back to an email match — a profile may have been provisioned
-      //    before the user first signed in. An inactive match stays inactive:
-      //    we never silently reactivate an account from the client.
+      //    before the user first signed in.
       if (userEmail) {
         const { data: byEmail } = await supabase
           .from('staff_profiles')
           .select('*')
           .ilike('email', userEmail)
           .maybeSingle()
+        if (byEmail) return byEmail as StaffProfile
+      }
 
-        if (byEmail) {
-          if (!byEmail.is_active) {
-            setAccountState('deactivated')
-            return null
-          }
-          setAccountState('active')
-          return byEmail as StaffProfile
+      return null
+    }
+
+    try {
+      let profile = await lookup()
+
+      // 3. Authenticated but no profile yet: this is a completed sign-up whose
+      //    row was never created. Ask the server to provision it (idempotent,
+      //    role clamped to non-admin). This is what stops self-registered
+      //    users from being locked out permanently.
+      if (!profile) {
+        try {
+          await apiProvisionSelf({
+            full_name: (currentUser.user_metadata?.full_name as string | undefined),
+            role: (currentUser.user_metadata?.role as string | undefined),
+          })
+          profile = await lookup()
+        } catch (provisionErr) {
+          // Someone else (an admin action, a race) may have created it, or the
+          // call may have failed — either way fall through to the normal
+          // no-profile handling rather than throwing.
+          console.warn('Self-provisioning did not complete:', provisionErr)
         }
+      }
+
+      if (profile) {
+        if (!profile.is_active) {
+          setAccountState('deactivated')
+          return null
+        }
+        setAccountState('active')
+        return profile
       }
     } catch (err) {
       console.warn('Profile lookup failed:', err)

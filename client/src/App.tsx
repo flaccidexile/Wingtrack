@@ -37,10 +37,11 @@ function AppContent() {
     }
   }, [])
 
-  // An existing (password/OTP) sign-in that resolves to no profile is a
-  // provisioning gap, not a new account — clear the session instead of showing
-  // the "Access Not Provisioned" card. Run as an effect so we never call
-  // signOut() during render.
+  // Fallback guard. Self-registered users are now auto-provisioned on first
+  // authenticated load (see fetchProfile -> apiProvisionSelf), so reaching here
+  // with no profile means the provisioning call itself failed. Rather than
+  // trapping an existing credential holder on an error card, sign them out and
+  // let them retry. Run as an effect so we never signOut() during render.
   const unprovisionedExistingUser =
     accountState === 'unprovisioned' &&
     sessionOrigin !== 'google' &&

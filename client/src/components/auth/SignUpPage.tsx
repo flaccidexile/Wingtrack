@@ -257,7 +257,7 @@ export default function SignUpPage({ onSwitchToLogin, onRegistered }: SignUpPage
                   <option value="inventory_personnel">Inventory Personnel (Stock &amp; Inventory)</option>
                 </select>
                 <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 6, lineHeight: 1.45 }}>
-                  Your role is assigned and confirmed by an administrator. Admin access cannot be self-assigned.
+                  You can change this later. Admin access cannot be self-assigned — an administrator must grant it.
                 </p>
               </div>
 
