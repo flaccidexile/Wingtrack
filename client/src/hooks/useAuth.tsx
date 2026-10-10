@@ -43,7 +43,17 @@ interface AuthContextValue {
   sendLoginOtp: (email: string) => Promise<void>
   /** Verifies a login OTP code, establishing a session on success. */
   verifyLoginOtp: (email: string, token: string) => Promise<void>
+  /**
+   * How the current session was established. Used to decide whether an
+   * unprovisioned account should be shown the "Access Not Provisioned"
+   * screen (new / self-service accounts) or treated as a provisioning gap
+   * for an existing staff member (who goes straight to the login page).
+   */
+  sessionOrigin: SessionOrigin
 }
+
+/** How the current session was established — drives the unprovisioned screen. */
+export type SessionOrigin = 'password' | 'google' | 'signup' | 'otp' | null
 
 export type AccountState = 'active' | 'deactivated' | 'unprovisioned' | null
 
@@ -54,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<StaffProfile | null>(null)
   const [accountState, setAccountState] = useState<AccountState>(null)
+  const [sessionOrigin, setSessionOrigin] = useState<SessionOrigin>(null)
   const [loading, setLoading] = useState(true)
 
   /**
@@ -147,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw new Error(error.message)
+    setSessionOrigin('password')
   }
 
   async function signUp(
@@ -168,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Note: no client-side staff_profiles insert. Profiles are provisioned
     // server-side by an admin; the row is created via /api/auth/signup.
     // We never write a role from the browser.
+    setSessionOrigin('signup')
 
     // Email confirmation required — never auto-login.
     return { requiresConfirmation: Boolean(data?.user && !data.session) }
@@ -181,6 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     })
     if (error) throw new Error(error.message)
+    setSessionOrigin('google')
   }
 
   async function sendPasswordReset(email: string) {
@@ -205,6 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setProfile(null)
     setAccountState(null)
+    setSessionOrigin(null)
   }
 
   /**
@@ -257,11 +272,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       type: 'email',
     })
     if (error) throw new Error(error.message)
+    setSessionOrigin('otp')
   }
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, role: profile?.role ?? null, loading, accountState, signIn, signUp, signOut, signInWithGoogle, sendPasswordReset, updatePassword, checkStaffRegistered, sendLoginOtp, verifyLoginOtp }}
+      value={{ session, user, profile, role: profile?.role ?? null, loading, accountState, sessionOrigin, signIn, signUp, signOut, signInWithGoogle, sendPasswordReset, updatePassword, checkStaffRegistered, sendLoginOtp, verifyLoginOtp }}
     >
       {children}
     </AuthContext.Provider>
