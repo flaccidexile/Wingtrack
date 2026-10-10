@@ -73,6 +73,14 @@ export default function PointOfSale() {
   const [showPayMongo, setShowPayMongo] = useState(false)
   const [lastCashReceived, setLastCashReceived] = useState<number | null>(null)
   const [lastChangeGiven, setLastChangeGiven] = useState<number | null>(null)
+  /**
+   * Whether the mobile cart sheet is expanded.
+   *
+   * On narrow screens the cart lives in a bottom sheet instead of a side rail,
+   * so the checkout button stays within thumb reach no matter how long the
+   * product list is.
+   */
+  const [cartSheetOpen, setCartSheetOpen] = useState(false)
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -209,6 +217,8 @@ export default function PointOfSale() {
   const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0)
   const vat      = Math.round(subtotal * 0.12 * 100) / 100
   const total    = Math.round((subtotal + vat) * 100) / 100
+  /** Total units in the cart (not the number of distinct lines). */
+  const cartCount = cart.reduce((s, c) => s + c.qty, 0)
 
   // When "Charge" is clicked: route to appropriate payment flow
   function handleChargeClick() {
@@ -368,17 +378,15 @@ export default function PointOfSale() {
       </div>
 
       {/* Cart Panel */}
+      {/*
+        Layout (display/height/border) lives in `.pos-cart` in index.css, NOT in
+        an inline style — inline styles outrank media queries, which would stop
+        the ≤767px `display: none` rule from ever applying.
+      */}
       <div
         className="pos-cart"
         style={{
           background: 'var(--sidebar)',
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100%',
-          minHeight: '100%',
-          maxHeight: '100dvh',
-          borderLeft: '1px solid rgba(255,255,255,0.06)',
-          overflow: 'hidden',
         }}
       >
         <div style={{ padding: '18px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
@@ -533,6 +541,223 @@ export default function PointOfSale() {
           )}
         </div>
       </div>
+
+      {/* ── Mobile sticky cart bar ─────────────────────────────
+          Always visible at the bottom of the screen on narrow viewports, so
+          the cashier can reach checkout without scrolling past the menu.
+          Hidden on desktop, where the side rail is always in view. */}
+      <div className="pos-mobile-bar">
+        <button
+          type="button"
+          id="btn-mobile-cart"
+          onClick={() => setCartSheetOpen(true)}
+          style={{
+            flex: 1, display: 'flex', alignItems: 'center', gap: 12,
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            padding: '4px 2px', textAlign: 'left', minWidth: 0,
+          }}
+        >
+          <span style={{ position: 'relative', display: 'flex', flexShrink: 0 }}>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--sidebar-foreground)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+            </svg>
+            {cartCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute', top: -5, right: -7,
+                  minWidth: 18, height: 18, padding: '0 5px',
+                  borderRadius: 9, background: 'var(--sidebar-active)', color: '#1c0f06',
+                  fontSize: 11, fontWeight: 700, fontFamily: 'DM Mono',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                {cartCount}
+              </span>
+            )}
+          </span>
+          <span style={{ minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 12, color: 'var(--sidebar-muted)', fontFamily: 'DM Mono', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {cartCount === 0 ? 'Cart empty' : `${cartCount} item${cartCount === 1 ? '' : 's'}`}
+            </span>
+            <span style={{ display: 'block', fontSize: 17, fontWeight: 700, color: 'var(--sidebar-active)', fontFamily: 'DM Mono', lineHeight: 1.25 }}>
+              &#8369;{total.toLocaleString()}
+            </span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          id="btn-mobile-checkout"
+          disabled={cartCount === 0 || checkoutLoading}
+          onClick={() => (cartCount === 0 ? setCartSheetOpen(true) : handleChargeClick())}
+          style={{
+            flexShrink: 0, padding: '13px 22px', borderRadius: 9, border: 'none',
+            fontSize: 15, fontWeight: 700, fontFamily: 'Fraunces',
+            cursor: cartCount === 0 || checkoutLoading ? 'not-allowed' : 'pointer',
+            background: cartCount ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.08)',
+            color: cartCount ? '#1c0f06' : 'rgba(255,255,255,0.45)',
+            transition: 'all 0.15s',
+          }}
+        >
+          {checkoutLoading ? 'Processing…' : cartCount === 0 ? 'View cart' : 'Charge'}
+        </button>
+      </div>
+
+      {/* ── Mobile cart sheet ─────────────────────────────────
+          Full cart contents, notes and payment method, presented as a
+          bottom sheet so nothing needs its own scroll to reach. */}
+      {cartSheetOpen && createPortal(
+        <div
+          className="pos-sheet-backdrop"
+          onClick={e => { if (e.target === e.currentTarget) setCartSheetOpen(false) }}
+        >
+          <div className="pos-sheet" role="dialog" aria-modal="true" aria-label="Current order">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+              <div>
+                <h2 style={{ fontFamily: 'Fraunces', fontSize: 19, fontWeight: 600, color: 'var(--sidebar-foreground)' }}>Current Order</h2>
+                <p style={{ fontSize: 12.5, color: 'var(--sidebar-muted)', marginTop: 2, fontFamily: 'DM Mono' }}>
+                  {cartCount} item{cartCount === 1 ? '' : 's'} · &#8369;{total.toLocaleString()}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCartSheetOpen(false)}
+                aria-label="Close cart"
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--sidebar-muted)', padding: 8, display: 'flex' }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Cart lines — the only scrolling region in the sheet */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 18px' }}>
+              {cartCount === 0 ? (
+                <div style={{ textAlign: 'center', padding: '44px 20px', color: 'var(--sidebar-muted)' }}>
+                  <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--sidebar-foreground)' }}>No items yet</p>
+                  <p style={{ fontSize: 13, marginTop: 5 }}>Tap menu items to add them</p>
+                </div>
+              ) : cart.map(item => (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--sidebar-foreground)', lineHeight: 1.3 }}>{item.name}</p>
+                    <p style={{ fontSize: 14, fontFamily: 'DM Mono', color: 'var(--sidebar-active)', marginTop: 3, fontWeight: 500 }}>&#8369;{(item.price * item.qty).toLocaleString()}</p>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button type="button" onClick={() => updateQty(item.id, -1)} aria-label={`Decrease ${item.name}`} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.05)', color: 'var(--sidebar-foreground)', fontSize: 17, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
+                    <span style={{ fontSize: 14, fontFamily: 'DM Mono', color: 'var(--sidebar-foreground)', minWidth: 22, textAlign: 'center', fontWeight: 600 }}>{item.qty}</span>
+                    <button type="button" onClick={() => updateQty(item.id, 1)} aria-label={`Increase ${item.name}`} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.05)', color: 'var(--sidebar-foreground)', fontSize: 17, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                    <button type="button" onClick={() => removeItem(item.id)} aria-label={`Remove ${item.name}`} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(252,165,165,0.3)', background: 'transparent', color: '#fca5a5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: 2 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Totals + payment + checkout — pinned to the bottom of the sheet */}
+            <div style={{ padding: '14px 18px calc(16px + env(safe-area-inset-bottom, 0px))', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+              {error && (
+                <div style={{ background: 'rgba(185,28,28,0.25)', border: '1px solid rgba(185,28,28,0.5)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#fca5a5', marginBottom: 10 }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ marginBottom: 12 }}>
+                {[['Subtotal', `\u20B1${subtotal.toLocaleString()}`], ['VAT (12%)', `\u20B1${vat.toLocaleString()}`]].map(([k, v]) => (
+                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{ fontSize: 13, color: 'var(--sidebar-muted)' }}>{k}</span>
+                    <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--sidebar-foreground)', fontWeight: 500 }}>{v}</span>
+                  </div>
+                ))}
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '10px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--sidebar-foreground)', fontFamily: 'Fraunces' }}>Total</span>
+                  <span style={{ fontSize: 19, fontFamily: 'DM Mono', fontWeight: 700, color: 'var(--sidebar-active)' }}>&#8369;{total.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <textarea
+                className="sidebar-textarea"
+                placeholder="Order notes (optional)..."
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                rows={1}
+                style={{
+                  width: '100%', resize: 'none', marginBottom: 12,
+                  padding: '10px 12px', borderRadius: 6, height: 40,
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  background: 'rgba(255,255,255,0.06)',
+                  color: 'var(--sidebar-foreground)',
+                  fontSize: 16, fontFamily: 'DM Sans', outline: 'none',
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => setMethod('cash')}
+                  style={{
+                    flex: 1, padding: '11px 4px', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                    border: `1px solid ${method === 'cash' ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.18)'}`,
+                    background: method === 'cash' ? 'rgba(240,155,58,0.22)' : 'rgba(255,255,255,0.04)',
+                    color: method === 'cash' ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
+                  }}
+                >
+                  Cash
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMethod('online')}
+                  style={{
+                    flex: 1, padding: '11px 4px', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                    border: `1px solid ${method === 'online' ? '#818cf8' : 'rgba(255,255,255,0.18)'}`,
+                    background: method === 'online' ? 'rgba(99,102,241,0.22)' : 'rgba(255,255,255,0.04)',
+                    color: method === 'online' ? '#a5b4fc' : 'var(--sidebar-muted)',
+                  }}
+                >
+                  Online
+                </button>
+              </div>
+
+              <button
+                type="button"
+                disabled={cartCount === 0 || checkoutLoading}
+                onClick={() => { setCartSheetOpen(false); handleChargeClick() }}
+                style={{
+                  width: '100%', padding: '15px', borderRadius: 8, fontSize: 16, fontWeight: 700,
+                  cursor: cartCount && !checkoutLoading ? 'pointer' : 'not-allowed',
+                  background: cartCount ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.08)',
+                  color: cartCount ? '#1c0f06' : 'rgba(255,255,255,0.45)',
+                  border: 'none', fontFamily: 'Fraunces', transition: 'all 0.15s',
+                }}
+              >
+                {checkoutLoading
+                  ? 'Processing...'
+                  : cartCount
+                  ? `Charge \u20B1${total.toLocaleString()}`
+                  : 'Add items to continue'}
+              </button>
+
+              {cartCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setCartSheetOpen(false); handleVoid() }}
+                  style={{ width: '100%', marginTop: 8, padding: '11px', background: 'transparent', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 6, fontSize: 13.5, color: 'var(--sidebar-muted)', cursor: 'pointer' }}
+                >
+                  Void Order
+                </button>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {/* Success Modal — rendered via portal to escape transform containing block */}
       {checkoutSuccess && createPortal(

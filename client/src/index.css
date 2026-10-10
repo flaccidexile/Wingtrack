@@ -200,12 +200,16 @@ code, .mono { font-family: 'DM Mono', monospace; }
   height: 100%;
 }
 .pos-cart {
+  display: flex;
+  flex-direction: column;
   width: 420px;
   min-width: 420px;
   max-width: 420px;
   flex-shrink: 0;
   height: 100%;
-  max-height: 100%;
+  max-height: 100dvh;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
 }
 
 @media (max-width: 1023px) {
@@ -226,17 +230,71 @@ code, .mono { font-family: 'DM Mono', monospace; }
     height: auto;
     overflow-y: visible;
     flex: none;
+    /* Clear the sticky bar so the last product row is never covered. */
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   }
   .pos-cart {
-    width: 100%;
-    min-width: 0;
-    max-width: none;
-    height: auto;
-    max-height: none;
-    min-height: 0;
-    border-left: none;
-    border-top: 1px solid rgba(255,255,255,0.06);
+    display: none;
   }
+}
+
+/* ── Point of Sale — mobile sticky cart ────────────────── */
+/*
+ * On narrow screens the cart rail is replaced by a always-visible bottom bar
+ * plus a full-height sheet. This keeps checkout within thumb reach however
+ * long the product list is.
+ */
+.pos-mobile-bar {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .pos-mobile-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 150;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: rgba(28, 18, 12, 0.97);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.28);
+  }
+
+  .pos-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    animation: fadeIn 0.18s ease both;
+  }
+
+  .pos-sheet {
+    width: 100%;
+    max-height: 88dvh;
+    display: flex;
+    flex-direction: column;
+    background: var(--sidebar);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+    animation: sheetUp 0.24s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+}
+
+@keyframes sheetUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
 }
 
 @media (max-width: 1023px) {
