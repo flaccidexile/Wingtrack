@@ -19,7 +19,7 @@ function detectInitialMode(): AuthMode {
 }
 
 function AppContent() {
-  const { session, loading, signOut } = useAuth()
+  const { session, loading, signOut, accountState } = useAuth()
   const [authMode, setAuthMode] = useState<AuthMode>(detectInitialMode)
   const [pendingEmail, setPendingEmail] = useState<string>('')
   const [isOnline, setIsOnline] = useState(
@@ -107,6 +107,40 @@ function AppContent() {
         onVerified={() => setAuthMode('login')}
         onBack={() => setAuthMode('login')}
       />
+    )
+  }
+
+  // ── Authenticated but no usable profile ───────────────────
+  // The account exists in Supabase Auth but is either deactivated by an admin
+  // or was never provisioned with a staff_profiles row. We deny access rather
+  // than synthesizing a profile.
+  if (session && accountState !== 'active') {
+    const deactivated = accountState === 'deactivated'
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--background)', padding: '24px 16px' }}>
+        <div className="card fade-in" style={{ padding: '36px 30px', maxWidth: 440, width: '100%', textAlign: 'center', boxShadow: '0 16px 40px rgba(0,0,0,0.12)', border: '1px solid rgba(239,68,68,0.25)' }}>
+          <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+          <h2 style={{ fontFamily: 'Fraunces', fontSize: 22, fontWeight: 700, marginBottom: 10, color: 'var(--foreground)' }}>
+            {deactivated ? 'Account Deactivated' : 'Access Not Provisioned'}
+          </h2>
+          <p style={{ fontSize: 14, color: '#ef4444', fontWeight: 600, marginBottom: 8 }}>
+            {deactivated ? 'This account has been switched off' : 'No staff profile is linked to this account'}
+          </p>
+          <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 24, lineHeight: 1.5 }}>
+            {deactivated
+              ? 'An administrator has deactivated this account. Please contact your manager to restore access.'
+              : 'Your sign-in succeeded, but no staff profile has been set up for you yet. Please contact an administrator to be provisioned.'}
+          </p>
+          <button id="no-profile-signout" className="btn-primary" onClick={() => signOut()} style={{ width: '100%', padding: '12px', fontWeight: 600 }}>
+            Sign Out
+          </button>
+        </div>
+      </div>
     )
   }
 

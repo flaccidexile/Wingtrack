@@ -4,9 +4,20 @@ import { supabaseAdmin } from '../lib/supabase'
 
 type StaffRole = 'admin' | 'cashier' | 'inventory_personnel'
 
+const VALID_ROLES: readonly StaffRole[] = ['admin', 'cashier', 'inventory_personnel']
+
+function isStaffRole(value: unknown): value is StaffRole {
+  return typeof value === 'string' && (VALID_ROLES as readonly string[]).includes(value)
+}
+
 /**
  * Middleware factory: Restrict a route to specific roles.
  * Must be used AFTER requireAuth.
+ *
+ * Fail-closed by design: a request is denied unless an active staff profile
+ * with an explicitly allowed role can be resolved. This middleware does NOT
+ * auto-provision profiles, does NOT reactivate deactivated accounts, and
+ * never falls back to a privileged role.
  *
  * Usage: router.post('/checkout', requireAuth, requireRole('cashier', 'admin'), handler)
  */
@@ -17,13 +28,16 @@ export function requireRole(...allowedRoles: StaffRole[]) {
       return
     }
 
+    // Resolve the staff profile by user_id (authoritative link).
     let { data: profile } = await supabaseAdmin
       .from('staff_profiles')
       .select('id, role, is_active')
       .eq('user_id', req.userId)
       .maybeSingle()
 
-    // If profile not found by user_id, try by email or auto-provision
+    // Fall back to matching on email only to LINK a pre-provisioned profile to
+    // this auth user. If the email row is inactive we refuse — we never
+    // reactivate an account implicitly.
     if (!profile && req.userEmail) {
       const { data: byEmail } = await supabaseAdmin
         .from('staff_profiles')
@@ -32,41 +46,43 @@ export function requireRole(...allowedRoles: StaffRole[]) {
         .maybeSingle()
 
       if (byEmail) {
-        await supabaseAdmin
-          .from('staff_profiles')
-          .update({ user_id: req.userId, is_active: true })
-          .eq('id', byEmail.id)
-        profile = { ...byEmail, is_active: true }
-      } else {
-        const { data: created } = await supabaseAdmin
-          .from('staff_profiles')
-          .insert({
-            user_id: req.userId,
-            email: req.userEmail,
-            full_name: req.userEmail.split('@')[0] || 'Staff Member',
-            role: 'admin',
-            is_active: true,
-          })
-          .select('id, role, is_active')
-          .maybeSingle()
-
-        if (created) {
-          profile = created
+        if (!byEmail.is_active) {
+          res.status(403).json({ message: 'This account has been deactivated. Contact an administrator.' })
+          return
         }
+
+        const { error: linkError } = await supabaseAdmin
+          .from('staff_profiles')
+          .update({ user_id: req.userId })
+          .eq('id', byEmail.id)
+
+        if (linkError) {
+          console.error('[RBAC] Failed to link staff profile by email:', linkError)
+          res.status(403).json({ message: 'No staff profile is linked to this account.' })
+          return
+        }
+
+        profile = byEmail
       }
     }
 
-    if (profile && !profile.is_active) {
-      await supabaseAdmin
-        .from('staff_profiles')
-        .update({ is_active: true })
-        .eq('id', profile.id)
-      profile.is_active = true
+    // No profile ⇒ deny. Do NOT auto-provision.
+    if (!profile) {
+      res.status(403).json({
+        message: 'No staff profile is associated with this account. Contact an administrator.',
+      })
+      return
     }
 
-    const currentRole = (profile?.role as StaffRole) || 'admin'
+    // Deactivated accounts are refused outright.
+    if (!profile.is_active) {
+      res.status(403).json({ message: 'This account has been deactivated. Contact an administrator.' })
+      return
+    }
 
-    if (!allowedRoles.includes(currentRole)) {
+    const currentRole = profile.role
+
+    if (!isStaffRole(currentRole) || !allowedRoles.includes(currentRole)) {
       res.status(403).json({
         message: `Access denied. Required role: ${allowedRoles.join(' or ')}.`,
       })

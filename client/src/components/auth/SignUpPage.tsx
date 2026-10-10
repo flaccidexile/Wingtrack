@@ -44,7 +44,7 @@ export default function SignUpPage({ onSwitchToLogin, onRegistered }: SignUpPage
   const { signUp } = useAuth()
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState<StaffRole>('admin')
+  const [role, setRole] = useState<StaffRole>('cashier')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -253,10 +253,12 @@ export default function SignUpPage({ onSwitchToLogin, onRegistered }: SignUpPage
                   onChange={e => setRole(e.target.value as StaffRole)}
                   style={{ width: '100%', padding: '12px 14px', fontSize: 14, background: 'var(--card)' }}
                 >
-                  <option value="admin">Admin / Manager (Full Access)</option>
                   <option value="cashier">Cashier (Point of Sale)</option>
-                  <option value="inventory_personnel">Inventory Personnel (Stock & Inventory)</option>
+                  <option value="inventory_personnel">Inventory Personnel (Stock &amp; Inventory)</option>
                 </select>
+                <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 6, lineHeight: 1.45 }}>
+                  Your role is assigned and confirmed by an administrator. Admin access cannot be self-assigned.
+                </p>
               </div>
 
               {/* Password */}

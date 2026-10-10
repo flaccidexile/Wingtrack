@@ -9,6 +9,12 @@ interface AuthContextValue {
   profile: StaffProfile | null
   role: StaffRole | null
   loading: boolean
+  /**
+   * Why the current user has no usable profile (null while loading or when a
+   * profile exists). `deactivated` = account switched off by an admin;
+   * `unprovisioned` = authenticated but no staff_profiles row.
+   */
+  accountState: AccountState
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, fullName: string, role?: StaffRole) => Promise<{ requiresConfirmation: boolean }>
   signOut: () => Promise<void>
@@ -17,20 +23,34 @@ interface AuthContextValue {
   updatePassword: (newPassword: string) => Promise<void>
 }
 
+export type AccountState = 'active' | 'deactivated' | 'unprovisioned' | null
+
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<StaffProfile | null>(null)
+  const [accountState, setAccountState] = useState<AccountState>(null)
   const [loading, setLoading] = useState(true)
 
-  async function fetchProfile(currentUser: User): Promise<StaffProfile> {
+  /**
+   * Resolves the staff profile for an authenticated user.
+   *
+   * Fail-closed: the profile is READ from the database and never synthesized.
+   * The hook does not default a missing role to admin, does not create profile
+   * rows, and does not reactivate deactivated accounts — the server and RLS
+   * remain the source of truth for authorization.
+   *
+   * Returns `null` when the user has no usable profile; callers must treat that
+   * as "no access".
+   */
+  async function fetchProfile(currentUser: User): Promise<StaffProfile | null> {
     const userId = currentUser.id
     const userEmail = currentUser.email || ''
 
     try {
-      // 1. Try fetching by user_id
+      // 1. Authoritative lookup by user_id.
       const { data, error } = await supabase
         .from('staff_profiles')
         .select('*')
@@ -39,12 +59,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!error && data) {
         if (!data.is_active) {
-          await supabase.from('staff_profiles').update({ is_active: true }).eq('id', data.id)
+          setAccountState('deactivated')
+          return null
         }
-        return { ...data, is_active: true } as StaffProfile
+        setAccountState('active')
+        return data as StaffProfile
       }
 
-      // 2. Try fetching by email (e.g. provisioned in staff table prior to first sign-in)
+      // 2. Fall back to an email match — a profile may have been provisioned
+      //    before the user first signed in. An inactive match stays inactive:
+      //    we never silently reactivate an account from the client.
       if (userEmail) {
         const { data: byEmail } = await supabase
           .from('staff_profiles')
@@ -53,49 +77,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .maybeSingle()
 
         if (byEmail) {
-          await supabase
-            .from('staff_profiles')
-            .update({ user_id: userId, is_active: true })
-            .eq('id', byEmail.id)
-          return { ...byEmail, user_id: userId, is_active: true } as StaffProfile
-        }
-      }
-
-      // 3. Attempt inserting staff profile for authenticated user
-      if (userEmail) {
-        const newProfile = {
-          user_id: userId,
-          full_name: (currentUser.user_metadata?.full_name as string) || userEmail.split('@')[0] || 'Staff Member',
-          email: userEmail,
-          role: ((currentUser.user_metadata?.role as StaffRole) || 'admin'),
-          is_active: true,
-        }
-        const { data: inserted } = await supabase
-          .from('staff_profiles')
-          .insert(newProfile)
-          .select()
-          .maybeSingle()
-
-        if (inserted) {
-          return inserted as StaffProfile
+          if (!byEmail.is_active) {
+            setAccountState('deactivated')
+            return null
+          }
+          setAccountState('active')
+          return byEmail as StaffProfile
         }
       }
     } catch (err) {
-      console.warn('Profile fetch/creation note:', err)
+      console.warn('Profile lookup failed:', err)
     }
 
-    // 4. Resilient fallback profile: ensures authenticated user is granted access
-    const fallbackName = (currentUser.user_metadata?.full_name as string) || (userEmail ? userEmail.split('@')[0] : 'Staff Member')
-    const fallbackRole: StaffRole = (currentUser.user_metadata?.role as StaffRole) || 'admin'
-    return {
-      id: userId,
-      user_id: userId,
-      full_name: fallbackName,
-      email: userEmail,
-      role: fallbackRole,
-      is_active: true,
-      created_at: new Date().toISOString(),
-    }
+    // No profile — the account is authenticated but not provisioned for access.
+    setAccountState('unprovisioned')
+    return null
   }
 
   useEffect(() => {
@@ -118,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(p)
       } else {
         setProfile(null)
+        setAccountState(null)
       }
       setLoading(false)
     })
@@ -134,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     fullName: string,
-    role: StaffRole = 'admin'
+    role: StaffRole = 'cashier'
   ): Promise<{ requiresConfirmation: boolean }> {
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -146,23 +143,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) throw new Error(error.message)
 
-    // Insert staff profile row (may fail silently if email unconfirmed — that's fine)
-    if (data?.user) {
-      try {
-        await supabase.from('staff_profiles').insert({
-          user_id: data.user.id,
-          full_name: fullName,
-          email,
-          role,
-          is_active: false, // Only activate after email confirmation
-        })
-      } catch {
-        // Profile will be created on first confirmed login
-      }
-    }
+    // Note: no client-side staff_profiles insert. Profiles are provisioned
+    // server-side by an admin; the row is created via /api/auth/signup.
+    // We never write a role from the browser.
 
-    // Email confirmation required — never auto-login
-    return { requiresConfirmation: true }
+    // Email confirmation required — never auto-login.
+    return { requiresConfirmation: Boolean(data?.user && !data.session) }
   }
 
   async function signInWithGoogle() {
@@ -196,11 +182,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null)
     setUser(null)
     setProfile(null)
+    setAccountState(null)
   }
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, role: profile?.role ?? null, loading, signIn, signUp, signOut, signInWithGoogle, sendPasswordReset, updatePassword }}
+      value={{ session, user, profile, role: profile?.role ?? null, loading, accountState, signIn, signUp, signOut, signInWithGoogle, sendPasswordReset, updatePassword }}
     >
       {children}
     </AuthContext.Provider>

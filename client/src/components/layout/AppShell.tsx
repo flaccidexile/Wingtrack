@@ -42,7 +42,11 @@ export default function AppShell() {
     }
   }, [role, page])
 
-  const safePage = role && canAccess(role, page) ? page : (role ? DEFAULT_PAGE[role] : 'dashboard')
+  // No role means no usable profile — App.tsx already renders an access-denied
+  // screen in that case, so render nothing here rather than defaulting a page.
+  if (!role) return null
+
+  const safePage = canAccess(role, page) ? page : DEFAULT_PAGE[role]
 
   return (
     <div style={{ display: 'flex', height: '100dvh', overflow: 'hidden' }}>

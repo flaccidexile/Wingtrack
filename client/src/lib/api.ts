@@ -335,18 +335,20 @@ export async function apiDeleteProduct(id: string) {
 }
 
 /**
- * POST /api/auth/signup
- * Registers a new staff account and provisions their profile.
+ * POST /api/auth/signup  (Admin only)
+ * Provisions a new staff account. Requires an authenticated admin session —
+ * public self-registration is disabled.
  */
 export async function apiSignUp(payload: {
   email: string
   password: string
   full_name: string
-  role?: string
+  role: 'admin' | 'cashier' | 'inventory_personnel'
 }) {
+  const headers = await getAuthHeader()
   const res = await fetch(`${API_BASE}/auth/signup`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
