@@ -8,11 +8,14 @@
 
 ```
 WINGTRACK Website Design/
-├── client/        # React 19 + Vite + Tailwind CSS v4 (frontend)
+├── client/        # React 19 + Vite + Tailwind CSS v4 (frontend) — all frontend code lives here
 ├── server/        # Express.js + TypeScript (backend API)
 ├── supabase/      # schema.sql — run this in Supabase SQL Editor
 └── package.json   # Root dev scripts (runs both client + server)
 ```
+
+> **Note:** the repository root intentionally contains no `src/`, `index.html`, or `vite.config.ts`.
+> `client/` is the single source of truth for the frontend — edit files under `client/src/`.
 
 ---
 
@@ -46,8 +49,7 @@ Keys to fill in (from Supabase Project Settings → API):
 
 ### 3. Install Dependencies
 ```bash
-npm install          # installs root concurrently
-npm run install:all  # installs client + server packages
+npm run install:all  # installs root + client + server packages
 ```
 
 ### 4. Create the First Admin Account

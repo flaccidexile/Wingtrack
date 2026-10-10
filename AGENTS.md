@@ -1,35 +1,78 @@
-# figma-make-app
+# wingtrack
 
-React + Vite + Tailwind CSS project running inside Figma Make.
+React + Vite + Tailwind CSS frontend in `client/`, Express + TypeScript API in `server/`, Supabase (PostgreSQL) for data.
+
+## Canonical source layout
+
+**`client/` is the single source of truth for all frontend code.** The repository root holds only orchestration files (root `package.json`, docs, `supabase/`) — it contains **no** `src/`, `index.html`, or Vite config of its own.
+
+```
+WINGTRACK Website Design/
+├── client/              # React 19 + Vite 8 + Tailwind v4  ← all frontend code
+│   ├── index.html       # Vite entry shell
+│   ├── src/             # App.tsx, components/, pages/, hooks/, lib/, types/
+│   ├── public/          # Static assets (logo.png)
+│   ├── vite.config.ts   # Vite config + /api proxy → localhost:4000
+│   └── tsconfig.json
+├── server/              # Express 4 + TypeScript API (routes/, middleware/, lib/)
+├── supabase/schema.sql  # Run in Supabase SQL Editor
+└── package.json         # Root orchestrator (delegates to client/ and server/)
+```
+
+Do not re-create a root-level `src/` or `vite.config.ts` — that duplication was removed deliberately. Edit files under `client/src/`.
 
 ## Development Server
 
-A Vite development server is **already running** on `$PORT` (default 8443). You don't need to start it manually.
+A Vite development server is running on **http://localhost:5173** (started from `client/`). The Express API runs on **http://localhost:4000**.
 
-- Preview URL: The user can access the running app through the preview panel
-- Hot reload: Changes to source files are reflected immediately
+- Preview URL: access the running app through the preview panel
+- Hot reload: changes to `client/src/` are reflected immediately
+- API calls to `/api/*` are proxied by Vite to `http://localhost:4000`
 
-## Project Structure
+### Commands (run from the repository root)
 
-This is the canonical project structure. Start with task-relevant files below. Only follow imports or inspect other files when required, when a documented path is missing, or when the repository contradicts this guide.
+| Command | Effect |
+|---|---|
+| `npm run dev` | Runs client + server together via concurrently |
+| `npm run dev:client` | Vite dev server on :5173 |
+| `npm run dev:server` | Express API on :4000 |
+| `npm run build` | Typecheck + production build of `client/` |
+| `npm run preview` | Preview the production build |
+| `npm run typecheck` | `tsc -b` over `client/` |
 
-- `src/main.tsx` - React entrypoint; imports `src/index.css` and mounts `src/App.tsx` into the `#root` element
-- `src/App.tsx` - Primary application component and the usual starting point for UI work
-- `src/index.css` - Global CSS entrypoint and Tailwind CSS v4 import
-- `index.html` - Vite HTML shell containing the `#root` element and loading `src/main.tsx`
-- `package.json` - Project dependencies and the Vite build, development, preview, and formatting scripts
-- `vite.config.ts` - Vite configuration with React, Tailwind CSS v4, and Figma Make plugins plus the `@` alias for `src`
-- `.mise.toml` - Toolchain versions for Node.js and pnpm
+## Project Structure (client/src)
+
+- `main.tsx` — React entrypoint; imports `index.css` and mounts `App.tsx` into `#root`
+- `App.tsx` — Top-level auth router (login / signup / otp / forgot / reset → AppShell)
+- `index.css` — Tailwind v4 import, theme tokens, font wiring
+- `components/layout/AppShell.tsx` — Authenticated shell; role-gated page switching
+- `components/layout/Sidebar.tsx` — Navigation, role filtering, password & sign-out modals
+- `components/auth/*` — Login, SignUp, OTP, ForgotPassword, ResetPassword
+- `components/cashier/*` — CashPaymentCalculator, PayMongoModal
+- `components/receipt/ReceiptModal.tsx` — Printable receipt
+- `pages/admin/*` — Dashboard, Analytics, MenuManager, StaffManager
+- `pages/cashier/PointOfSale.tsx` — POS with cart + inventory-aware checkout
+- `pages/inventory/Inventory.tsx` — Stock levels, adjustments, movement audit log
+- `pages/orders/OrdersList.tsx` — Transaction history and void
+- `hooks/useAuth.tsx` — Supabase auth context (session, profile, role)
+- `lib/supabase.ts` — Supabase browser client
+- `lib/api.ts` — Typed wrappers around the Express API
+- `types/index.ts` — Shared TypeScript types
 
 ## Dependencies
 
-- Runtime: React 19 and React DOM 19
+- Runtime: React 19, React DOM 19, react-router-dom 7, Recharts 3, `@supabase/supabase-js` 2
 - Styling: Tailwind CSS v4 with the `@tailwindcss/vite` plugin
 - Build tooling: Vite 8, TypeScript 5.7, and `@vitejs/plugin-react`
-- Formatting: oxfmt
 
 ## Styling
 
-This project uses **Tailwind CSS v4** through the `@tailwindcss/vite` plugin configured in `vite.config.ts`. `src/index.css` imports Tailwind with `@import 'tailwindcss';`. Use Tailwind utility classes directly in JSX and put global CSS or Tailwind v4 theme customization in `src/index.css`. This scaffold does not need a Tailwind config file or PostCSS config.
+This project uses **Tailwind CSS v4** through the `@tailwindcss/vite` plugin configured in `client/vite.config.ts`. `client/src/index.css` imports Tailwind with `@import 'tailwindcss';`. Use Tailwind utility classes directly in JSX and put global CSS or Tailwind v4 theme customisation in `client/src/index.css`. No Tailwind config file or PostCSS config is needed.
 
-`src/main.tsx` imports `src/index.css`, so global font wiring belongs in `src/index.css`. Keep CSS `@import` statements first, then add any `@font-face` rules and font-family defaults there.
+`client/src/main.tsx` imports `client/src/index.css`, so global font wiring belongs in `client/src/index.css`. Keep CSS `@import` statements first, then add any `@font-face` rules and font-family defaults there.
+
+## Security notes
+
+- `server/.env` holds `SUPABASE_SERVICE_ROLE_KEY` — it bypasses RLS and must never reach the client.
+- Client-exposed values go in `client/.env.local` (`VITE_*` only).
+- `.env`, `.env.local`, `dist/`, and `node_modules/` are gitignored — keep build output out of version control.
