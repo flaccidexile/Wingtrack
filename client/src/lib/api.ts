@@ -360,6 +360,29 @@ export async function apiSignUp(payload: {
 
 
 
+/**
+ * POST /api/auth/check-registered  (Public)
+ * Reports whether an email belongs to a provisioned staff account.
+ * Deliberately unauthenticated: it runs before login, and it returns only a
+ * boolean pair — never a name, role, or id.
+ */
+export async function apiCheckRegistered(email: string): Promise<{
+  registered: boolean
+  active: boolean
+  message?: string
+}> {
+  const res = await fetch(`${API_BASE}/auth/check-registered`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Unable to verify this email right now.' }))
+    throw new Error(err.message ?? 'Unable to verify this email right now.')
+  }
+  return res.json()
+}
+
 
 // --- PayMongo Sandbox Helpers --------------------------------
 

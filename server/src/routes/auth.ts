@@ -1,9 +1,13 @@
-import { Router, type Response } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
 
 const router = Router()
+
+/** Generic, enumeration-safe message returned for any unregistered email. */
+const NOT_REGISTERED_MESSAGE =
+  'This email is not registered as staff. Ask an administrator to create your account before using code sign-in.'
 
 /** Roles that may be assigned to a newly provisioned staff account. */
 const ASSIGNABLE_ROLES = ['admin', 'cashier', 'inventory_personnel'] as const
@@ -12,6 +16,52 @@ type AssignableRole = (typeof ASSIGNABLE_ROLES)[number]
 function isAssignableRole(value: unknown): value is AssignableRole {
   return typeof value === 'string' && (ASSIGNABLE_ROLES as readonly string[]).includes(value)
 }
+
+/**
+ * POST /api/auth/check-registered — Public.
+ *
+ * Reports whether an email belongs to a provisioned staff account. Used by
+ * the login page to gate OTP sign-in: one-time codes are a login method, not
+ * a registration method, so an unregistered address must never receive one.
+ *
+ * Privacy: this necessarily reveals whether a given email is staff (an
+ * enumeration surface), so the response is deliberately minimal — a boolean
+ * pair and nothing else. No names, roles, or ids are returned. Responses are
+ * uniform in shape and timing-irrelevant, and the endpoint is rate-limited at
+ * the edge alongside the rest of the auth surface.
+ */
+router.post('/check-registered', async (req: Request, res: Response): Promise<void> => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+
+  if (!email || !email.includes('@')) {
+    res.status(400).json({ message: 'A valid email address is required.' })
+    return
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('staff_profiles')
+      .select('is_active')
+      .ilike('email', email)
+      .maybeSingle()
+
+    if (error) {
+      console.error('check-registered lookup error:', error)
+      res.status(500).json({ message: 'Unable to verify this email right now. Please try again.' })
+      return
+    }
+
+    // Uniform 200: absence is a normal outcome, not an error.
+    res.json({
+      registered: Boolean(data),
+      active: Boolean(data?.is_active),
+      message: data ? undefined : NOT_REGISTERED_MESSAGE,
+    })
+  } catch (err: unknown) {
+    console.error('check-registered error:', err)
+    res.status(500).json({ message: 'Unable to verify this email right now. Please try again.' })
+  }
+})
 
 /**
  * POST /api/auth/signup — Admin only.
