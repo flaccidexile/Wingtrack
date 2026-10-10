@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { apiCreateStaff, apiDeactivateStaff, apiReactivateStaff } from '@/lib/api'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import type { StaffProfile, StaffRole } from '@/types'
 
 const ROLES: { value: StaffRole; label: string }[] = [
@@ -24,6 +25,14 @@ export default function StaffManager() {
   const [showPassword, setShowPassword] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [formLoading, setFormLoading] = useState(false)
+
+  /** Pending activate/deactivate action awaiting in-app confirmation. */
+  const [pendingAction, setPendingAction] = useState<
+    { kind: 'deactivate' | 'reactivate'; id: string; name: string } | null
+  >(null)
+  const [actionBusy, setActionBusy] = useState(false)
+  /** Non-blocking error banner for failed activate/deactivate calls. */
+  const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
     if (showModal) {
@@ -62,23 +71,24 @@ export default function StaffManager() {
     }
   }
 
-  async function handleDeactivate(id: string, name: string) {
-    if (!confirm(`Deactivate ${name}? They will no longer be able to log in.`)) return
+  /** Runs the confirmed activate / deactivate request. */
+  async function runPendingAction() {
+    if (!pendingAction) return
+    setActionBusy(true)
+    setActionError(null)
     try {
-      await apiDeactivateStaff(id)
+      if (pendingAction.kind === 'deactivate') {
+        await apiDeactivateStaff(pendingAction.id)
+      } else {
+        await apiReactivateStaff(pendingAction.id)
+      }
       await fetchStaff()
+      setPendingAction(null)
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Deactivation failed')
-    }
-  }
-
-  async function handleReactivate(id: string, name: string) {
-    if (!confirm(`Reactivate ${name}? They will regain access to their account.`)) return
-    try {
-      await apiReactivateStaff(id)
-      await fetchStaff()
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Reactivation failed')
+      setActionError(err instanceof Error ? err.message : 'That action could not be completed.')
+      setPendingAction(null)
+    } finally {
+      setActionBusy(false)
     }
   }
 
@@ -89,9 +99,9 @@ export default function StaffManager() {
   }
 
   return (
-    <div style={{ padding: '28px 36px', minHeight: '100vh' }}>
+    <div className="page">
       {/* Header */}
-      <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+      <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Staff Manager</h1>
           <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Provision and manage Wingtrack staff accounts</p>
@@ -106,6 +116,28 @@ export default function StaffManager() {
         </button>
       </div>
 
+      {/* Action error banner */}
+      {actionError && (
+        <div
+          role="alert"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            padding: '12px 16px', marginBottom: 16, background: '#fee2e2', color: '#991b1b',
+            borderRadius: 8, fontSize: 13, fontWeight: 500,
+          }}
+        >
+          <span>{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            aria-label="Dismiss error"
+            style={{ background: 'transparent', border: 'none', color: '#991b1b', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Staff table */}
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}>
@@ -113,7 +145,8 @@ export default function StaffManager() {
         </div>
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px 170px 90px 110px', gap: 0, padding: '12px 22px', borderBottom: '1px solid var(--border)' }}>
+          <div className="scroll-x">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px 170px 90px 110px', gap: 0, padding: '12px 22px', borderBottom: '1px solid var(--border)', minWidth: 700 }}>
             {['Name', 'Email', 'Role', 'Status', 'Actions'].map(h => (
               <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
             ))}
@@ -124,7 +157,7 @@ export default function StaffManager() {
               style={{
                 display: 'grid', gridTemplateColumns: '1fr 220px 170px 90px 110px', gap: 0,
                 padding: '16px 22px', borderBottom: i < staff.length - 1 ? '1px solid var(--muted)' : 'none',
-                alignItems: 'center', transition: 'background 0.1s',
+                alignItems: 'center', transition: 'background 0.1s', minWidth: 700,
               }}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--muted)'}
               onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
@@ -154,7 +187,7 @@ export default function StaffManager() {
                 {s.is_active ? (
                   <button
                     id={`btn-deactivate-${s.id}`}
-                    onClick={() => handleDeactivate(s.id, s.full_name)}
+                    onClick={() => { setActionError(null); setPendingAction({ kind: 'deactivate', id: s.id, name: s.full_name }) }}
                     style={{
                       fontSize: 12, padding: '5px 12px', borderRadius: 6,
                       background: 'transparent', border: '1px solid #fca5a5',
@@ -166,7 +199,7 @@ export default function StaffManager() {
                 ) : (
                   <button
                     id={`btn-reactivate-${s.id}`}
-                    onClick={() => handleReactivate(s.id, s.full_name)}
+                    onClick={() => { setActionError(null); setPendingAction({ kind: 'reactivate', id: s.id, name: s.full_name }) }}
                     style={{
                       fontSize: 12, padding: '5px 12px', borderRadius: 6,
                       background: 'transparent', border: '1px solid #86efac',
@@ -182,6 +215,7 @@ export default function StaffManager() {
           {staff.length === 0 && (
             <p style={{ padding: '40px 24px', fontSize: 14, color: 'var(--muted-foreground)' }}>No staff accounts yet. Add your first staff member above.</p>
           )}
+          </div>
         </div>
       )}
 
@@ -308,6 +342,26 @@ export default function StaffManager() {
         </div>,
         document.body
       )}
+
+      {/* Activate / deactivate confirmation */}
+      <ConfirmDialog
+        open={pendingAction !== null}
+        busy={actionBusy}
+        tone={pendingAction?.kind === 'deactivate' ? 'danger' : 'default'}
+        title={
+          pendingAction?.kind === 'deactivate'
+            ? `Deactivate ${pendingAction.name}?`
+            : `Reactivate ${pendingAction?.name ?? ''}?`
+        }
+        message={
+          pendingAction?.kind === 'deactivate'
+            ? 'They will no longer be able to sign in. Their past sales and audit records are kept, and you can reactivate the account at any time.'
+            : 'They will regain access to their account and be able to sign in again with their existing password.'
+        }
+        confirmLabel={pendingAction?.kind === 'deactivate' ? 'Deactivate' : 'Reactivate'}
+        onConfirm={runPendingAction}
+        onCancel={() => setPendingAction(null)}
+      />
     </div>
   )
 }

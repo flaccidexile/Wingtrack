@@ -4,6 +4,7 @@ import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
 import { sendMail, isSmtpConfigured, buildOtpEmail } from '../lib/mailer'
+import { validatePassword } from '../lib/validation'
 
 const router = Router()
 
@@ -352,8 +353,9 @@ router.post(
       return
     }
 
-    if (password.length < 8) {
-      res.status(400).json({ message: 'Password must be at least 8 characters.' })
+    const pwdError = validatePassword(password)
+    if (pwdError) {
+      res.status(400).json({ message: pwdError })
       return
     }
 

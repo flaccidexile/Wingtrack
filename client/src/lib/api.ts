@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { CheckoutPayload, InventoryAdjustmentPayload } from '@/types'
+import type { CheckoutPayload, InventoryAdjustmentPayload, Order } from '@/types'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api'
 
@@ -145,17 +145,47 @@ async function toApiError(res: Response, fallback: string): Promise<Error> {
 
 /**
  * GET /api/orders (Cashier or Admin)
+ *
+ * Returns a page of orders plus the total row count, so the UI can show
+ * "showing X of Y" and offer pagination instead of silently truncating.
  */
-export async function apiGetOrders() {
+export async function apiGetOrders(params?: {
+  limit?: number
+  offset?: number
+  status?: 'completed' | 'void'
+  from?: string
+  to?: string
+  search?: string
+}): Promise<{ orders: Order[]; total: number; limit: number; offset: number }> {
   const headers = await getAuthHeader()
-  const res = await fetch(`${API_BASE}/orders`, {
+  const qs = new URLSearchParams()
+  if (params?.limit != null) qs.set('limit', String(params.limit))
+  if (params?.offset != null) qs.set('offset', String(params.offset))
+  if (params?.status) qs.set('status', params.status)
+  if (params?.from) qs.set('from', params.from)
+  if (params?.to) qs.set('to', params.to)
+  if (params?.search) qs.set('search', params.search)
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+
+  const res = await fetch(`${API_BASE}/orders${suffix}`, {
     method: 'GET',
     headers,
   })
   if (!res.ok) {
     throw await toApiError(res, 'Failed to fetch orders')
   }
-  return res.json()
+
+  const json = await res.json()
+  // Tolerate the legacy bare-array shape so an older server does not break the UI.
+  if (Array.isArray(json)) {
+    return { orders: json as Order[], total: json.length, limit: json.length, offset: 0 }
+  }
+  return {
+    orders: (json.orders ?? []) as Order[],
+    total: json.total ?? 0,
+    limit: json.limit ?? 100,
+    offset: json.offset ?? 0,
+  }
 }
 
 /**

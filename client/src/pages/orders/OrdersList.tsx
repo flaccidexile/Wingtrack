@@ -12,6 +12,10 @@ export default function OrdersList() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'void'>('all')
+  /** Total rows matching the current filter on the server, for pagination. */
+  const [total, setTotal] = useState(0)
+  const [limit, setLimit] = useState(100)
+  const [offset, setOffset] = useState(0)
 
   // Modals state
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<Order | null>(null)
@@ -19,6 +23,11 @@ export default function OrdersList() {
   const [voidReason, setVoidReason] = useState('')
   const [voidLoading, setVoidLoading] = useState(false)
   const [voidError, setVoidError] = useState<string | null>(null)
+
+  // Reset to the first page whenever a filter changes.
+  useEffect(() => {
+    setOffset(0)
+  }, [statusFilter])
 
   useEffect(() => {
     if (voidModalOrder) {
@@ -34,21 +43,27 @@ export default function OrdersList() {
     setLoading(true)
     setError(null)
     try {
-      const data = await apiGetOrders()
-      setOrders(data)
+      const page = await apiGetOrders({
+        limit: 100,
+        offset,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+      })
+      setOrders(page.orders)
+      setTotal(page.total)
+      setLimit(page.limit)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to fetch orders')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [offset, statusFilter])
 
-  useEffect(() => {
-    fetchOrders()
-  }, [fetchOrders])
+  useEffect(() => { fetchOrders() }, [fetchOrders])
 
+  // Client-side narrow of the current server page. The status filter is also
+  // applied server-side (see fetchOrders), and search matches against the
+  // rows already returned.
   const filteredOrders = orders.filter(order => {
-    if (statusFilter !== 'all' && order.status !== statusFilter) return false
     if (search.trim() !== '') {
       const q = search.toLowerCase()
       const matchesNum = String(order.order_number).includes(q)
@@ -77,12 +92,12 @@ export default function OrdersList() {
   }
 
   return (
-    <div style={{ padding: '28px 36px', minHeight: '100vh' }}>
+    <div className="page">
       {/* Header */}
       <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
-            Order History & Transactions
+            Transactions
           </h1>
           <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
             {role === 'admin' ? 'All store customer orders and transaction audits' : 'Your recorded sales and customer orders'}
@@ -136,8 +151,23 @@ export default function OrdersList() {
       </div>
 
       {error && (
-        <div style={{ padding: '12px 16px', background: '#fce8e8', border: '1px solid #fca5a5', borderRadius: 8, color: '#b91c1c', marginBottom: 20, fontSize: 13 }}>
-          {error}
+        <div
+          role="alert"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+            padding: '12px 16px', background: '#fce8e8', border: '1px solid #fca5a5',
+            borderRadius: 8, color: '#b91c1c', marginBottom: 20, fontSize: 13,
+          }}
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={fetchOrders}
+            className="btn-ghost"
+            style={{ padding: '6px 14px', fontSize: 13, border: '1px solid #fca5a5', color: '#b91c1c', whiteSpace: 'nowrap' }}
+          >
+            Try again
+          </button>
         </div>
       )}
 
@@ -148,7 +178,8 @@ export default function OrdersList() {
         </div>
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '80px 150px 1fr 100px 110px 100px 140px', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
+          <div className="scroll-x">
+          <div style={{ display: 'grid', gridTemplateColumns: '80px 150px 1fr 100px 110px 100px 140px', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)', minWidth: 780 }}>
             {['Order #', 'Date & Time', 'Items Summary', 'Payment', 'Total', 'Status', 'Actions'].map(h => (
               <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 {h}
@@ -180,6 +211,7 @@ export default function OrdersList() {
                   borderBottom: i < filteredOrders.length - 1 ? '1px solid var(--muted)' : 'none',
                   alignItems: 'center',
                   background: isVoid ? 'rgba(254, 242, 242, 0.4)' : 'transparent',
+                  minWidth: 780,
                 }}
               >
                 <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 13, color: 'var(--foreground)' }}>
@@ -273,6 +305,42 @@ export default function OrdersList() {
           {filteredOrders.length === 0 && (
             <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 14 }}>
               No orders found matching your criteria.
+            </div>
+          )}
+          </div>
+
+          {/* Pagination footer */}
+          {total > 0 && (
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+                padding: '14px 20px', borderTop: '1px solid var(--border)',
+              }}
+            >
+              <span style={{ fontSize: 12.5, color: 'var(--muted-foreground)' }}>
+                Showing <strong style={{ color: 'var(--foreground)' }}>{offset + 1}–{Math.min(offset + orders.length, total)}</strong> of{' '}
+                <strong style={{ color: 'var(--foreground)' }}>{total}</strong> transaction{total === 1 ? '' : 's'}
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setOffset(o => Math.max(0, o - limit))}
+                  disabled={offset === 0 || loading}
+                  className="btn-ghost"
+                  style={{ padding: '7px 14px', fontSize: 13, opacity: offset === 0 || loading ? 0.45 : 1, cursor: offset === 0 || loading ? 'not-allowed' : 'pointer' }}
+                >
+                  ← Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOffset(o => o + limit)}
+                  disabled={offset + orders.length >= total || loading}
+                  className="btn-ghost"
+                  style={{ padding: '7px 14px', fontSize: 13, opacity: offset + orders.length >= total || loading ? 0.45 : 1, cursor: offset + orders.length >= total || loading ? 'not-allowed' : 'pointer' }}
+                >
+                  Next →
+                </button>
+              </div>
             </div>
           )}
         </div>

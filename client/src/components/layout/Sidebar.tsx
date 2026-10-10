@@ -1,7 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { apiUpdatePassword } from '@/lib/api'
+import { MIN_PASSWORD_LENGTH } from '@/lib/validation'
 import type { StaffRole } from '@/types'
+
+/** Below this width the sidebar becomes a slide-in drawer. */
+const DRAWER_BREAKPOINT = 1024
 
 type Page =
   | 'dashboard'
@@ -96,9 +100,13 @@ const NAV_ITEMS: NavItem[] = [
 interface SidebarProps {
   page: Page
   setPage: (p: Page) => void
+  /** Whether the mobile drawer is open. Ignored on wide screens. */
+  mobileOpen?: boolean
+  /** Closes the mobile drawer. */
+  onCloseMobile?: () => void
 }
 
-export default function Sidebar({ page, setPage }: SidebarProps) {
+export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobile }: SidebarProps) {
   const { profile, role, signOut } = useAuth()
   const [showPwdModal, setShowPwdModal] = useState(false)
   const [newPwd, setNewPwd] = useState('')
@@ -109,6 +117,31 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
   const [pwdSuccess, setPwdSuccess] = useState(false)
   const [pwdLoading, setPwdLoading] = useState(false)
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
+  /** True when the viewport is narrower than the drawer breakpoint. */
+  const [isNarrow, setIsNarrow] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < DRAWER_BREAKPOINT,
+  )
+
+  // Track viewport width so the sidebar can switch between a fixed rail and a drawer.
+  useEffect(() => {
+    const query = window.matchMedia(`(max-width: ${DRAWER_BREAKPOINT - 1}px)`)
+    const sync = () => setIsNarrow(query.matches)
+    sync()
+    query.addEventListener('change', sync)
+    return () => query.removeEventListener('change', sync)
+  }, )
+
+  // Close the drawer with Escape.
+  useEffect(() => {
+    if (!isNarrow || !mobileOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCloseMobile?.()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isNarrow, mobileOpen, onCloseMobile])
+
+  const drawerOpen = isNarrow && mobileOpen
 
   const visibleNav = NAV_ITEMS.filter(item => role && item.roles.includes(role))
 
@@ -125,8 +158,8 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
   async function handlePasswordChange(e: React.FormEvent) {
     e.preventDefault()
     setPwdError(null)
-    if (newPwd.length < 6) {
-      setPwdError('Password must be at least 6 characters.')
+    if (newPwd.length < MIN_PASSWORD_LENGTH) {
+      setPwdError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`)
       return
     }
     if (newPwd !== confirmPwd) {
@@ -152,99 +185,143 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
   }
 
   return (
-    <aside
-      style={{
-        background: 'var(--sidebar)',
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100dvh',
-        width: 280,
-        flexShrink: 0,
-      }}
-    >
-      {/* Brand */}
-      <div style={{ padding: '26px 24px 22px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: '50%',
-              overflow: 'hidden',
-              flexShrink: 0,
-              boxShadow: '0 4px 14px rgba(234,88,12,0.3)',
-              border: '2px solid rgba(249,115,22,0.4)',
-              background: '#ea580c',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <img
-              src="/logo.png"
-              alt="Wingtrack Logo"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontFamily: 'Fraunces', fontSize: 21, fontWeight: 700, color: 'var(--sidebar-foreground)', letterSpacing: '-0.01em' }}>
-                WINGTRACK
-              </span>
-            </div>
-            <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--sidebar-active)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
-              POS & INVENTORY
-            </span>
-          </div>
-        </div>
-      </div>
+    <>
+      {/* Mobile backdrop — dims the page behind the open drawer */}
+      {drawerOpen && (
+        <div
+          onClick={onCloseMobile}
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(2px)',
+            WebkitBackdropFilter: 'blur(2px)',
+            zIndex: 190,
+          }}
+        />
+      )}
 
-      {/* Nav */}
-      <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {visibleNav.map(({ id, label, icon: Icon }) => {
-          const active = page === id
-          return (
-            <button
-              key={id}
-              id={`nav-${id}`}
-              onClick={() => setPage(id)}
+      <aside
+        style={{
+          background: 'var(--sidebar)',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100dvh',
+          width: 280,
+          flexShrink: 0,
+          ...(isNarrow
+            ? {
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                zIndex: 200,
+                transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+                transition: 'transform 0.24s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: drawerOpen ? '0 0 40px rgba(0,0,0,0.4)' : 'none',
+              }
+            : {}),
+        }}
+      >
+        {/* Brand */}
+        <div style={{ padding: '26px 24px 22px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div
               style={{
+                width: 44,
+                height: 44,
+                borderRadius: '50%',
+                overflow: 'hidden',
+                flexShrink: 0,
+                boxShadow: '0 4px 14px rgba(234,88,12,0.3)',
+                border: '2px solid rgba(249,115,22,0.4)',
+                background: '#ea580c',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 13,
-                padding: '11px 16px',
-                borderRadius: 9,
-                border: 'none',
-                cursor: 'pointer',
-                fontFamily: 'DM Sans',
-                fontSize: 14,
-                fontWeight: active ? 600 : 500,
-                textAlign: 'left',
-                width: '100%',
-                transition: 'all 0.15s ease',
-                background: active ? 'rgba(235,165,79,0.14)' : 'transparent',
-                color: active ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
-                position: 'relative',
-              }}
-              onMouseEnter={e => {
-                if (!active) {
-                  (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'
-                  ;(e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)'
-                }
-              }}
-              onMouseLeave={e => {
-                if (!active) {
-                  (e.currentTarget as HTMLElement).style.background = 'transparent'
-                  ;(e.currentTarget as HTMLElement).style.color = 'var(--sidebar-muted)'
-                }
+                justifyContent: 'center',
               }}
             >
-              <Icon active={active} />
-              {label}
-            </button>
-          )
-        })}
-      </nav>
+              <img
+                src="/logo.png"
+                alt="Wingtrack Logo"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontFamily: 'Fraunces', fontSize: 21, fontWeight: 700, color: 'var(--sidebar-foreground)', letterSpacing: '-0.01em' }}>
+                  WINGTRACK
+                </span>
+              </div>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--sidebar-active)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
+                POS &amp; INVENTORY
+              </span>
+            </div>
+            {isNarrow && (
+              <button
+                type="button"
+                onClick={onCloseMobile}
+                aria-label="Close navigation menu"
+                style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer', padding: 6,
+                  color: 'var(--sidebar-muted)', display: 'flex', alignItems: 'center',
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav style={{ flex: 1, overflowY: 'auto', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {visibleNav.map(({ id, label, icon: Icon }) => {
+            const active = page === id
+            return (
+              <button
+                key={id}
+                id={`nav-${id}`}
+                onClick={() => { setPage(id); onCloseMobile?.() }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 13,
+                  padding: '11px 16px',
+                  borderRadius: 9,
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontFamily: 'DM Sans',
+                  fontSize: 14,
+                  fontWeight: active ? 600 : 500,
+                  textAlign: 'left',
+                  width: '100%',
+                  transition: 'all 0.15s ease',
+                  background: active ? 'rgba(235,165,79,0.14)' : 'transparent',
+                  color: active ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
+                  position: 'relative',
+                }}
+                onMouseEnter={e => {
+                  if (!active) {
+                    (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'
+                    ;(e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)'
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!active) {
+                    (e.currentTarget as HTMLElement).style.background = 'transparent'
+                    ;(e.currentTarget as HTMLElement).style.color = 'var(--sidebar-muted)'
+                  }
+                }}
+              >
+                <Icon active={active} />
+                {label}
+              </button>
+            )
+          })}
+        </nav>
 
       {/* User + Sign Out */}
       <div style={{ padding: '18px 14px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
@@ -370,7 +447,7 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
           }}
           onClick={e => { if (e.target === e.currentTarget) setShowPwdModal(false) }}
         >
-          <div className="card fade-in" style={{ width: '100%', maxWidth: 380, padding: '26px' }}>
+          <div className="card fade-in" style={{ width: '100%', maxWidth: 380, maxHeight: '90dvh', overflowY: 'auto', padding: '26px' }}>
             <h3 style={{ fontFamily: 'Fraunces', fontSize: 18, color: 'var(--foreground)', marginBottom: 8 }}>
               Change Your Password
             </h3>
@@ -388,7 +465,7 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
                     className="input"
                     type={showNewPwd ? 'text' : 'password'}
                     required
-                    placeholder="Min 6 characters"
+                    placeholder={`Min ${MIN_PASSWORD_LENGTH} characters`}
                     value={newPwd}
                     onChange={e => setNewPwd(e.target.value)}
                     style={{ width: '100%', padding: '9px 36px 9px 12px', fontSize: 13 }}
@@ -511,7 +588,8 @@ export default function Sidebar({ page, setPage }: SidebarProps) {
           </div>
         </div>
       )}
-    </aside>
+      </aside>
+    </>
   )
 }
 

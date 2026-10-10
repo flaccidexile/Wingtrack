@@ -25,9 +25,11 @@ function AppContent() {
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true
   )
+  /** Inline notice shown after a failed "Retry Connection" attempt. */
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null)
 
   useEffect(() => {
-    function handleOnline()  { setIsOnline(true) }
+    function handleOnline()  { setIsOnline(true); setOfflineNotice(null) }
     function handleOffline() { setIsOnline(false) }
     window.addEventListener('online',  handleOnline)
     window.addEventListener('offline', handleOffline)
@@ -72,9 +74,24 @@ function AppContent() {
           <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 24, lineHeight: 1.5 }}>
             You cannot access WINGTRACK while offline. Please check your network connection.
           </p>
+          {offlineNotice && (
+            <p
+              role="alert"
+              style={{ fontSize: 13, color: '#b91c1c', background: '#fee2e2', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontWeight: 500 }}
+            >
+              {offlineNotice}
+            </p>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button id="retry-connection-btn" className="btn-primary"
-              onClick={() => { if (navigator.onLine) { setIsOnline(true); window.location.reload() } else { alert('Still offline. Please check your network connection.') } }}
+              onClick={() => {
+                if (navigator.onLine) {
+                  setIsOnline(true)
+                  window.location.reload()
+                } else {
+                  setOfflineNotice('Still offline — your device has no network connection yet. Reconnect to Wi-Fi or mobile data, then try again.')
+                }
+              }}
               style={{ width: '100%', padding: '12px', fontWeight: 600 }}>
               Retry Connection
             </button>

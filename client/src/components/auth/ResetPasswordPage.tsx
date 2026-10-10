@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
+import { checkPasswordStrength, MIN_PASSWORD_LENGTH } from '@/lib/validation'
 
 interface ResetPasswordPageProps {
   onDone: () => void
@@ -9,11 +10,12 @@ interface ResetPasswordPageProps {
 type Step = 'choose' | 'verify-email' | 'verify-phone' | 'new-password' | 'done'
 
 function checkPwd(p: string) {
+  const rules = checkPasswordStrength(p)
   return {
-    length:    p.length >= 8,
-    uppercase: /[A-Z]/.test(p),
-    number:    /[0-9]/.test(p),
-    special:   /[^A-Za-z0-9]/.test(p),
+    length: rules[0].met,
+    uppercase: rules[1].met,
+    number: rules[2].met,
+    special: rules[3].met,
   }
 }
 
@@ -538,7 +540,7 @@ export default function ResetPasswordPage({ onDone }: ResetPasswordPageProps) {
                 </div>
                 {password.length > 0 && (
                   <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 5, padding: '10px 12px', background: 'var(--muted)', borderRadius: 8 }}>
-                    <Req met={reqs.length}    label="At least 8 characters" />
+                    <Req met={reqs.length}    label={`At least ${MIN_PASSWORD_LENGTH} characters`} />
                     <Req met={reqs.uppercase} label="One uppercase letter (A–Z)" />
                     <Req met={reqs.number}    label="One number (0–9)" />
                     <Req met={reqs.special}   label="One special character (!@#$…)" />

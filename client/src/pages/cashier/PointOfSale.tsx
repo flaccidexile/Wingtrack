@@ -7,6 +7,7 @@ import type { Product, ProductCategory, CartItem, Order } from '@/types'
 import ReceiptModal from '@/components/receipt/ReceiptModal'
 import CashPaymentCalculator from '@/components/cashier/CashPaymentCalculator'
 import PayMongoModal from '@/components/cashier/PayMongoModal'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 
 const DEFAULT_CATS = ['All', 'Wings', 'Sizzling', 'Silog', 'Shake', 'Burger', 'Fries & Pure Cheesestick']
 
@@ -276,9 +277,11 @@ export default function PointOfSale() {
     }
   }
 
+  /** Whether the clear-cart confirmation is showing. */
+  const [showVoidConfirm, setShowVoidConfirm] = useState(false)
+
   function handleVoid() {
-    if (!confirm('Void this order? All items will be cleared.')) return
-    setCart([])
+    setShowVoidConfirm(true)
   }
 
   function dismissSuccess() {
@@ -291,9 +294,9 @@ export default function PointOfSale() {
   }
 
   return (
-    <div style={{ display: 'flex', width: '100%', height: '100%', minHeight: '100dvh', maxHeight: '100dvh', overflow: 'hidden' }}>
+    <div className="pos-shell">
       {/* Menu Panel */}
-      <div style={{ flex: 1, minWidth: 0, padding: '28px 32px', overflowY: 'auto', height: '100%' }}>
+      <div className="pos-menu">
         <div style={{ marginBottom: 22 }}>
           <h1 style={{ fontFamily: 'Fraunces', fontSize: 30, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Point of Sale</h1>
           <p style={{ fontSize: 15, color: 'var(--muted-foreground)' }}>
@@ -309,7 +312,7 @@ export default function PointOfSale() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search products..."
-            style={{ width: 220, padding: '9px 14px', fontSize: 13 }}
+            style={{ width: 220, maxWidth: '100%', padding: '9px 14px', fontSize: 13 }}
           />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {categories.map(c => (
@@ -366,11 +369,8 @@ export default function PointOfSale() {
 
       {/* Cart Panel */}
       <div
+        className="pos-cart"
         style={{
-          width: 420,
-          minWidth: 420,
-          maxWidth: 420,
-          flexShrink: 0,
           background: 'var(--sidebar)',
           display: 'flex',
           flexDirection: 'column',
@@ -631,6 +631,17 @@ export default function PointOfSale() {
       {showReceipt && completedOrder && (
         <ReceiptModal order={completedOrder} onClose={() => setShowReceipt(false)} />
       )}
+
+      {/* Clear cart confirmation */}
+      <ConfirmDialog
+        open={showVoidConfirm}
+        tone="danger"
+        title="Clear this order?"
+        message={`All ${cart.length} item${cart.length !== 1 ? 's' : ''} will be removed from the current cart. Nothing is charged, and inventory is not affected.`}
+        confirmLabel="Clear cart"
+        onConfirm={() => { setCart([]); setShowVoidConfirm(false) }}
+        onCancel={() => setShowVoidConfirm(false)}
+      />
     </div>
   )
 }

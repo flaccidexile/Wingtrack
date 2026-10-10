@@ -256,7 +256,7 @@ export default function Inventory() {
   }
 
   return (
-    <div style={{ padding: '28px 36px', minHeight: '100vh' }}>
+    <div className="page">
       {/* Header */}
       <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
@@ -545,7 +545,8 @@ export default function Inventory() {
             </div>
           ) : (
             <div className="card" style={{ overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 80px 105px 105px 115px 150px 90px 110px', gap: 0, padding: '12px 22px', borderBottom: '1px solid var(--border)' }}>
+              <div className="scroll-x">
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 80px 105px 105px 115px 150px 90px 110px', gap: 0, padding: '12px 22px', borderBottom: '1px solid var(--border)', minWidth: 920 }}>
                 {['Item Name', 'Unit', 'In Stock', 'Min Level', 'Unit Cost', 'Supplier', 'Status', 'Actions'].map(h => (
                   <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
                 ))}
@@ -560,7 +561,7 @@ export default function Inventory() {
                     style={{
                       display: 'grid', gridTemplateColumns: '2fr 80px 105px 105px 115px 150px 90px 110px', gap: 0,
                       padding: '14px 22px', borderBottom: i < filtered.length - 1 ? '1px solid var(--muted)' : 'none',
-                      alignItems: 'center', transition: 'background 0.1s',
+                      alignItems: 'center', transition: 'background 0.1s', minWidth: 920,
                     }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--muted)'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
@@ -590,6 +591,7 @@ export default function Inventory() {
               {filtered.length === 0 && (
                 <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 14 }}>No items match your filter.</div>
               )}
+              </div>
             </div>
           )}
         </>
@@ -606,7 +608,8 @@ export default function Inventory() {
             </div>
           ) : (
             <div className="card" style={{ overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '150px 200px 110px 100px 140px 140px 1fr', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
+              <div className="scroll-x">
+              <div style={{ display: 'grid', gridTemplateColumns: '150px 200px 110px 100px 140px 140px 1fr', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)', minWidth: 940 }}>
                 {['Timestamp', 'Item', 'Type', 'Change', 'Before → After', 'Staff', 'Notes'].map(h => (
                   <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
                 ))}
@@ -629,7 +632,7 @@ export default function Inventory() {
                     style={{
                       display: 'grid', gridTemplateColumns: '150px 200px 110px 100px 140px 140px 1fr', gap: 0,
                       padding: '12px 20px', borderBottom: i < movements.length - 1 ? '1px solid var(--muted)' : 'none',
-                      alignItems: 'center', fontSize: 13,
+                      alignItems: 'center', fontSize: 13, minWidth: 940,
                     }}
                   >
                     <span style={{ fontSize: 12, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>{dateStr}</span>
@@ -659,6 +662,7 @@ export default function Inventory() {
                   No inventory movements recorded yet.
                 </div>
               )}
+              </div>
             </div>
           )}
         </div>

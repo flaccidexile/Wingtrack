@@ -5,6 +5,62 @@ import { supabaseAdmin } from '../lib/supabase'
 
 const router = Router()
 
+/** Upper bound for a menu price. Keeps values inside the numeric(10,2) column. */
+const MAX_PRICE = 1_000_000
+/** Upper bound for a recipe quantity per unit sold. */
+const MAX_QTY_PER_UNIT = 1_000_000
+
+/**
+ * Validate a price coming from the client.
+ * Returns the normalised number, or an error message.
+ */
+function parsePrice(raw: unknown): { ok: true; value: number } | { ok: false; message: string } {
+  if (typeof raw !== 'number' && typeof raw !== 'string') {
+    return { ok: false, message: 'Price must be a number.' }
+  }
+  const value = Number(raw)
+  if (!Number.isFinite(value)) {
+    return { ok: false, message: 'Price must be a valid number.' }
+  }
+  if (value < 0) {
+    return { ok: false, message: 'Price must be 0 or greater.' }
+  }
+  if (value > MAX_PRICE) {
+    return { ok: false, message: `Price must not exceed ${MAX_PRICE.toLocaleString()}.` }
+  }
+  return { ok: true, value: Math.round(value * 100) / 100 }
+}
+
+/**
+ * Validate and normalise the recipe list.
+ * Silently drops malformed rows rather than failing the whole request,
+ * but never lets a non-finite / out-of-range quantity reach the database.
+ */
+function parseRecipes(
+  raw: unknown,
+  productId: string,
+): Array<{ product_id: string; inventory_id: string; qty_per_unit: number }> {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((r): r is { inventory_id?: unknown; qty_per_unit?: unknown } => !!r && typeof r === 'object')
+    .map(r => {
+      const qty = Number(r.qty_per_unit)
+      return { inventory_id: typeof r.inventory_id === 'string' ? r.inventory_id : '', qty }
+    })
+    .filter(
+      r =>
+        r.inventory_id !== '' &&
+        Number.isFinite(r.qty) &&
+        r.qty > 0 &&
+        r.qty <= MAX_QTY_PER_UNIT,
+    )
+    .map(r => ({
+      product_id: productId,
+      inventory_id: r.inventory_id,
+      qty_per_unit: r.qty,
+    }))
+}
+
 /**
  * GET /api/products
  * List all products, optionally including inactive/unavailable items.
@@ -91,13 +147,24 @@ router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedReq
     recipes?: Array<{ inventory_id: string; qty_per_unit: number }>
   }
 
-  if (!name?.trim() || !category_id || price == null) {
-    res.status(400).json({ message: 'Name, category, and price are required.' })
+  if (typeof name !== 'string' || !name.trim()) {
+    res.status(400).json({ message: 'Product name is required.' })
     return
   }
 
-  if (Number(price) < 0) {
-    res.status(400).json({ message: 'Price must be 0 or greater.' })
+  if (typeof category_id !== 'string' || !category_id) {
+    res.status(400).json({ message: 'Category is required.' })
+    return
+  }
+
+  if (price == null) {
+    res.status(400).json({ message: 'Price is required.' })
+    return
+  }
+
+  const parsedPrice = parsePrice(price)
+  if (!parsedPrice.ok) {
+    res.status(400).json({ message: parsedPrice.message })
     return
   }
 
@@ -106,42 +173,47 @@ router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedReq
     const { data: newProduct, error: prodErr } = await supabaseAdmin
       .from('products')
       .insert({
-        name: name.trim(),
+        name: name.trim().slice(0, 120),
         category_id,
-        price: Number(price),
-        is_available,
-        image_url: image_url?.trim() || null,
+        price: parsedPrice.value,
+        is_available: Boolean(is_available),
+        image_url: typeof image_url === 'string' ? image_url.trim().slice(0, 500) || null : null,
       })
       .select('*, category:product_categories(id, name, sort_order)')
       .single()
 
-    if (prodErr) throw prodErr
+    if (prodErr) {
+      if (prodErr.code === '23503') {
+        res.status(400).json({ message: 'That category no longer exists. Please pick another one.' })
+        return
+      }
+      throw prodErr
+    }
 
     // 2. Insert recipes if provided
-    if (recipes && Array.isArray(recipes) && recipes.length > 0) {
-      const validRecipes = recipes
-        .filter(r => r.inventory_id && Number(r.qty_per_unit) > 0)
-        .map(r => ({
-          product_id: newProduct.id,
-          inventory_id: r.inventory_id,
-          qty_per_unit: Number(r.qty_per_unit),
-        }))
+    const validRecipes = parseRecipes(recipes, newProduct.id)
+    if (validRecipes.length > 0) {
+      const { error: recErr } = await supabaseAdmin
+        .from('product_recipes')
+        .insert(validRecipes)
 
-      if (validRecipes.length > 0) {
-        const { error: recErr } = await supabaseAdmin
-          .from('product_recipes')
-          .insert(validRecipes)
-
-        if (recErr) {
-          console.warn('[Products] Product created, but recipe mapping had error:', recErr)
+      if (recErr) {
+        // Roll the product back so the caller never ends up with a half-created item.
+        console.warn('[Products] Recipe mapping failed — rolling back product creation:', recErr)
+        const { error: rollbackErr } = await supabaseAdmin.from('products').delete().eq('id', newProduct.id)
+        if (rollbackErr) {
+          console.error('CRITICAL: failed to roll back product after recipe failure:', rollbackErr)
         }
+        res.status(400).json({ message: 'Could not save the recipe ingredients, so the product was not created. Please check the ingredient quantities and try again.' })
+        return
       }
     }
 
     res.status(201).json(newProduct)
   } catch (err: unknown) {
+    // Log the real error server-side; never hand raw database text to the client.
     console.error('[Products] Failed to create product:', err)
-    res.status(500).json({ message: (err as Error).message || 'Failed to create product.' })
+    res.status(500).json({ message: 'Failed to create product. Please try again.' })
   }
 })
 
@@ -150,7 +222,7 @@ router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedReq
  * Update product details and optionally update recipe ingredients (Admin only).
  */
 router.patch('/:id', requireAuth, requireRole('admin'), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { id } = req.params
+  const { id } = req.params as { id: string }
   const { name, category_id, price, is_available, image_url, recipes } = req.body as {
     name?: string
     category_id?: string
@@ -163,11 +235,32 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req: Authenticate
   const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   }
-  if (name !== undefined) updates.name = name.trim()
-  if (category_id !== undefined) updates.category_id = category_id
-  if (price !== undefined) updates.price = Number(price)
-  if (is_available !== undefined) updates.is_available = is_available
-  if (image_url !== undefined) updates.image_url = image_url?.trim() || null
+  if (name !== undefined) {
+    if (typeof name !== 'string' || !name.trim()) {
+      res.status(400).json({ message: 'Product name cannot be empty.' })
+      return
+    }
+    updates.name = name.trim().slice(0, 120)
+  }
+  if (category_id !== undefined) {
+    if (typeof category_id !== 'string' || !category_id) {
+      res.status(400).json({ message: 'Category cannot be empty.' })
+      return
+    }
+    updates.category_id = category_id
+  }
+  if (price !== undefined) {
+    const parsedPrice = parsePrice(price)
+    if (!parsedPrice.ok) {
+      res.status(400).json({ message: parsedPrice.message })
+      return
+    }
+    updates.price = parsedPrice.value
+  }
+  if (is_available !== undefined) updates.is_available = Boolean(is_available)
+  if (image_url !== undefined) {
+    updates.image_url = typeof image_url === 'string' ? image_url.trim().slice(0, 500) || null : null
+  }
 
   try {
     const { data: updatedProduct, error: updateErr } = await supabaseAdmin
@@ -175,32 +268,41 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req: Authenticate
       .update(updates)
       .eq('id', id)
       .select('*, category:product_categories(id, name, sort_order)')
-      .single()
+      .maybeSingle()
 
-    if (updateErr) throw updateErr
+    if (updateErr) {
+      if (updateErr.code === '23503') {
+        res.status(400).json({ message: 'That category no longer exists. Please pick another one.' })
+        return
+      }
+      throw updateErr
+    }
+
+    if (!updatedProduct) {
+      res.status(404).json({ message: 'Product not found.' })
+      return
+    }
 
     // Update recipes if provided
     if (recipes && Array.isArray(recipes)) {
       // Delete existing recipes for this product
       await supabaseAdmin.from('product_recipes').delete().eq('product_id', id)
 
-      const validRecipes = recipes
-        .filter(r => r.inventory_id && Number(r.qty_per_unit) > 0)
-        .map(r => ({
-          product_id: id,
-          inventory_id: r.inventory_id,
-          qty_per_unit: Number(r.qty_per_unit),
-        }))
-
+      const validRecipes = parseRecipes(recipes, id)
       if (validRecipes.length > 0) {
-        await supabaseAdmin.from('product_recipes').insert(validRecipes)
+        const { error: recErr } = await supabaseAdmin.from('product_recipes').insert(validRecipes)
+        if (recErr) {
+          console.warn('[Products] Recipe update had an error:', recErr)
+          res.status(400).json({ message: 'Product details were saved, but the recipe ingredients could not be. Please review the ingredient quantities.' })
+          return
+        }
       }
     }
 
     res.json(updatedProduct)
   } catch (err: unknown) {
     console.error('[Products] Failed to update product:', err)
-    res.status(500).json({ message: (err as Error).message || 'Failed to update product.' })
+    res.status(500).json({ message: 'Failed to update product. Please try again.' })
   }
 })
 

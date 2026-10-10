@@ -147,3 +147,116 @@ code, .mono { font-family: 'DM Mono', monospace; }
   70%  { transform: scale(1.15); opacity: 1; }
   100% { transform: scale(1); }
 }
+
+/* ── Responsive layout ──────────────────────────────────── */
+/*
+ * Pages are written with generous desktop padding inline. Rather than editing
+ * every page, `.page` clamps the horizontal padding on small screens and keeps
+ * content inside the viewport.
+ */
+.page {
+  padding: 30px 36px;
+  min-height: 100%;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+/* Any table-like block gets a horizontal scroll container on narrow screens. */
+.scroll-x {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Modal cards: never taller or wider than the viewport. */
+.dialog-card {
+  max-width: min(520px, calc(100vw - 32px));
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+
+/* ── Point of Sale ──────────────────────────────────────── */
+/* Desktop: menu grid on the left, a fixed-width cart rail on the right.
+   The shell must fill the available height exactly — never grow past it —
+   so the cart rail always reaches the bottom of the viewport. */
+.pos-shell {
+  display: flex;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.pos-menu {
+  flex: 1;
+  min-width: 0;
+  padding: 28px 32px;
+  overflow-y: auto;
+  height: 100%;
+}
+.pos-cart {
+  width: 420px;
+  min-width: 420px;
+  max-width: 420px;
+  flex-shrink: 0;
+  height: 100%;
+  max-height: 100%;
+}
+
+@media (max-width: 1023px) {
+  .pos-menu { padding: 20px 18px; }
+  .pos-cart { width: 340px; min-width: 340px; max-width: 340px; }
+}
+
+/* Small screens: stack the cart underneath the menu and let the page scroll. */
+@media (max-width: 767px) {
+  .pos-shell {
+    flex-direction: column;
+    flex: none;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+  .pos-menu {
+    height: auto;
+    overflow-y: visible;
+    flex: none;
+  }
+  .pos-cart {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    border-left: none;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+}
+
+@media (max-width: 1023px) {
+  .page { padding: 20px 18px; }
+}
+
+@media (max-width: 640px) {
+  .page { padding: 16px 14px; }
+
+  /* Headings shrink so long titles do not force horizontal overflow. */
+  .page h1 { font-size: 22px !important; }
+
+  /* Stack any two-column split that uses a fixed side panel. */
+  .stack-sm { flex-direction: column !important; align-items: stretch !important; }
+}
+
+/* Respect users who ask for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .fade-in { animation: none; }
+  .spinner { animation-duration: 1.4s; }
+  * { transition-duration: 0.01ms !important; }
+}
+

@@ -5,6 +5,10 @@ import { supabaseAdmin } from '../lib/supabase'
 
 const router = Router()
 
+/** Default and maximum number of orders returned in one page. */
+const DEFAULT_PAGE_SIZE = 100
+const MAX_PAGE_SIZE = 500
+
 // GET /api/orders — List orders (cashier reads own, admin reads all)
 router.get(
   '/',
@@ -32,25 +36,71 @@ router.get(
         return
       }
 
+      // Pagination: `limit` is clamped to a sane range so a client cannot ask
+      // for the entire table (or a negative/NaN window) in one request.
+      const rawLimit = Number(req.query.limit)
+      const rawOffset = Number(req.query.offset)
+      const limit = Number.isFinite(rawLimit) && rawLimit > 0
+        ? Math.min(Math.floor(rawLimit), MAX_PAGE_SIZE)
+        : DEFAULT_PAGE_SIZE
+      const offset = Number.isFinite(rawOffset) && rawOffset > 0
+        ? Math.floor(rawOffset)
+        : 0
+
+      // Optional filters pushed down to the database. Search used to run
+      // entirely client-side over a capped 100-row window, which silently hid
+      // older matches.
+      const { status, from, to, search } = req.query as {
+        status?: string
+        from?: string
+        to?: string
+        search?: string
+      }
+
       let query = supabaseAdmin
         .from('orders')
-        .select('*, order_items(*), cashier:cashier_id(full_name, email)')
+        .select('*, order_items(*), cashier:cashier_id(full_name, email)', { count: 'exact' })
         .order('created_at', { ascending: false })
-        .limit(100)
+        .range(offset, offset + limit - 1)
 
       // Cashiers can only see their own orders per proposal & RLS rules
       if (staffProfile.role === 'cashier') {
         query = query.eq('cashier_id', staffProfile.id)
       }
 
-      const { data: orders, error } = await query
+      if (status === 'completed' || status === 'void') {
+        query = query.eq('status', status)
+      }
+
+      if (from && !Number.isNaN(Date.parse(from))) {
+        query = query.gte('created_at', new Date(from).toISOString())
+      }
+      if (to && !Number.isNaN(Date.parse(to))) {
+        // `to` is treated as inclusive of the whole day.
+        const end = new Date(to)
+        end.setHours(23, 59, 59, 999)
+        query = query.lte('created_at', end.toISOString())
+      }
+
+      // Free-text search by order number when the term is numeric.
+      if (search && /^\d+$/.test(search.trim())) {
+        query = query.eq('order_number', Number(search.trim()))
+      }
+
+      const { data: orders, error, count } = await query
 
       if (error) {
-        res.status(500).json({ message: error.message })
+        console.error('Fetch orders — query failed:', error)
+        res.status(500).json({ message: 'Failed to fetch orders.' })
         return
       }
 
-      res.json(orders ?? [])
+      res.json({
+        orders: orders ?? [],
+        total: count ?? (orders?.length ?? 0),
+        limit,
+        offset,
+      })
     } catch (err) {
       console.error('Fetch orders error:', err)
       res.status(500).json({ message: 'Internal server error while fetching orders.' })

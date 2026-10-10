@@ -121,7 +121,7 @@ export default function Analytics() {
   const bestMonth = monthlyData.reduce((best, m) => m.revenue > (best?.revenue ?? 0) ? m : best, monthlyData[0])
 
   return (
-    <div style={{ padding: '28px 36px', minHeight: '100vh' }}>
+    <div className="page">
       {/* Header */}
       <div style={{ marginBottom: 26, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div>

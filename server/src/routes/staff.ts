@@ -2,6 +2,7 @@ import { Router, type Response } from 'express'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
+import { validatePassword } from '../lib/validation'
 
 const router = Router()
 
@@ -34,6 +35,18 @@ router.post(
       return
     }
 
+    const pwdError = validatePassword(password)
+    if (pwdError) {
+      res.status(400).json({ message: pwdError })
+      return
+    }
+
+    const ROLES = ['admin', 'cashier', 'inventory_personnel'] as const
+    if (!ROLES.includes(role)) {
+      res.status(400).json({ message: 'Role must be admin, cashier, or inventory_personnel.' })
+      return
+    }
+
     // Create auth user using admin API (bypasses email confirmation)
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -42,7 +55,13 @@ router.post(
     })
 
     if (authError || !authData?.user) {
-      res.status(400).json({ message: authError?.message ?? 'Failed to create auth user.' })
+      // Surface a clean, user-facing message for the common duplicate-email case.
+      const duplicate = /already registered|already been registered|exists/i.test(authError?.message ?? '')
+      res.status(duplicate ? 409 : 400).json({
+        message: duplicate
+          ? 'An account with that email already exists.'
+          : 'Failed to create the staff account. Please check the details and try again.',
+      })
       return
     }
 
@@ -133,13 +152,14 @@ router.patch(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const { password } = req.body as { password?: string }
 
-    if (!password || password.length < 6) {
-      res.status(400).json({ message: 'Password must be at least 6 characters long.' })
+    const pwdError = validatePassword(password)
+    if (pwdError) {
+      res.status(400).json({ message: pwdError })
       return
     }
 
     const { error } = await supabaseAdmin.auth.admin.updateUserById(req.userId!, {
-      password,
+      password: password!,
     })
 
     if (error) {

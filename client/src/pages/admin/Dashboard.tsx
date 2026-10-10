@@ -185,7 +185,7 @@ export default function Dashboard() {
     : `${customFrom} → ${customTo}`
 
   return (
-    <div style={{ padding: '30px 36px', minHeight: '100vh' }}>
+    <div className="page">
       {/* Header */}
       <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
@@ -279,7 +279,7 @@ export default function Dashboard() {
       ) : (
         <>
           {/* KPIs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 28 }}>
             <KpiCard label="Total Revenue"    value={`\u20B1${totalRevenue.toLocaleString('en-PH', { minimumFractionDigits: 0 })}`}  sub="Completed orders only"   color="#9b5e28"  trend="up"   />
             <KpiCard label="Total Orders"     value={totalOrders.toString()}   sub="Completed transactions"   color="#c47a2e"  trend="up"   />
             <KpiCard label="Avg. Order Value" value={`\u20B1${avgOrder.toFixed(2)}`}   sub="Per completed order"      color="#7a4520"  trend={avgOrder > 150 ? 'up' : 'down'} />
@@ -287,9 +287,9 @@ export default function Dashboard() {
           </div>
 
           {/* Charts */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 18, marginBottom: 28 }}>
-            <div className="card" style={{ padding: '24px 26px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18, marginBottom: 28 }}>
+            <div className="card" style={{ padding: '24px 26px', gridColumn: 'span 2', minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
                 <div>
                   <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, color: 'var(--foreground)' }}>Revenue Trend</h3>
                   <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 3 }}>{periodLabel}</p>
@@ -346,7 +346,7 @@ export default function Dashboard() {
           </div>
 
           {/* Bottom row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18 }}>
             {/* Recent transactions */}
             <div className="card" style={{ padding: '24px 26px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
@@ -356,14 +356,14 @@ export default function Dashboard() {
               {recentOrders.length === 0 ? (
                 <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>No recent orders.</p>
               ) : (
-                <div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 90px 80px', gap: 10, padding: '0 0 10px', borderBottom: '1px solid var(--border)', marginBottom: 10 }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(70px, 1fr) 80px 90px 80px', gap: 10, padding: '0 0 10px', borderBottom: '1px solid var(--border)', marginBottom: 10, minWidth: 360 }}>
                     {['Order #', 'Method', 'Total', 'Status'].map(h => (
                       <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
                     ))}
                   </div>
                   {recentOrders.map(o => (
-                    <div key={o.id} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 90px 80px', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--muted)', alignItems: 'center' }}>
+                    <div key={o.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(70px, 1fr) 80px 90px 80px', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--muted)', alignItems: 'center', minWidth: 360 }}>
                       <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--foreground)', fontWeight: 500 }}>#{o.order_number}</span>
                       <span style={{ fontSize: 12, color: 'var(--muted-foreground)', textTransform: 'capitalize' }}>{o.payment_method}</span>
                       <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--foreground)', fontWeight: 600 }}>&#8369;{Number(o.total_amount).toLocaleString()}</span>

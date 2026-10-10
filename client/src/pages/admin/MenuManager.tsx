@@ -10,6 +10,7 @@ import {
   apiDeleteProduct,
 } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import type { Product, ProductCategory, InventoryItem } from '@/types'
 
 interface RecipeRow {
@@ -227,14 +228,23 @@ export default function MenuManager() {
     }
   }
 
-  async function handleDeleteProduct(prod: Product) {
-    if (!confirm(`Are you sure you want to delete "${prod.name}" from the menu?`)) return
+  /** Product awaiting delete confirmation, set from the row action. */
+  const [pendingDelete, setPendingDelete] = useState<Product | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+
+  async function runDeleteProduct() {
+    if (!pendingDelete) return
+    const prod = pendingDelete
+    setDeleteBusy(true)
     try {
       await apiDeleteProduct(prod.id)
       setProducts(prev => prev.filter(p => p.id !== prod.id))
       showBanner('success', `"${prod.name}" deleted from menu.`)
     } catch (err: unknown) {
       showBanner('error', err instanceof Error ? err.message : 'Failed to delete product')
+    } finally {
+      setDeleteBusy(false)
+      setPendingDelete(null)
     }
   }
 
@@ -278,7 +288,7 @@ export default function MenuManager() {
   const outOfStockItems = totalItems - activeItems
 
   return (
-    <div style={{ padding: '32px 36px', maxWidth: 1400, margin: '0 auto' }}>
+    <div className="page" style={{ maxWidth: 1400, margin: '0 auto' }}>
       {/* Header */}
       <div
         style={{
@@ -300,7 +310,7 @@ export default function MenuManager() {
               marginBottom: 6,
             }}
           >
-            Menu & Food Items
+            Menu Items
           </h1>
           <p style={{ fontSize: 15, color: 'var(--muted-foreground)' }}>
             Add new food items, update prices, configure raw ingredient consumption, and toggle POS availability.
@@ -361,12 +371,28 @@ export default function MenuManager() {
           }}
         >
           <span>{banner.message}</span>
-          <button
-            onClick={() => setBanner(null)}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit', fontWeight: 700 }}
-          >
-            &times;
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {banner.type === 'error' && (
+              <button
+                type="button"
+                onClick={() => { setBanner(null); loadData() }}
+                style={{
+                  background: 'transparent', border: '1px solid currentColor', borderRadius: 6,
+                  cursor: 'pointer', color: 'inherit', fontWeight: 600, fontSize: 12, padding: '4px 12px',
+                  fontFamily: 'DM Sans',
+                }}
+              >
+                Try again
+              </button>
+            )}
+            <button
+              onClick={() => setBanner(null)}
+              aria-label="Dismiss message"
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit', fontWeight: 700, fontSize: 16, lineHeight: 1 }}
+            >
+              &times;
+            </button>
+          </div>
         </div>
       )}
 
@@ -648,7 +674,7 @@ export default function MenuManager() {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleDeleteProduct(prod)}
+                            onClick={() => setPendingDelete(prod)}
                             style={{
                               padding: '6px 12px',
                               fontSize: 12,
@@ -1072,6 +1098,18 @@ export default function MenuManager() {
         </div>,
         document.body
       )}
+
+      {/* Delete product confirmation */}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        busy={deleteBusy}
+        tone="danger"
+        title={`Delete "${pendingDelete?.name ?? ''}"?`}
+        message="This removes the item from the menu permanently. Products with past order records cannot be deleted — mark them &quot;Unavailable&quot; instead."
+        confirmLabel="Delete"
+        onConfirm={runDeleteProduct}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   )
 }
