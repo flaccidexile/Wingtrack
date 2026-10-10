@@ -393,6 +393,34 @@ export async function apiCheckRegistered(email: string): Promise<{
 }
 
 /**
+ * POST /api/auth/send-login-otp  (Public, staff-gated)
+ *
+ * Asks the server to email a sign-in code. The server only mails when a custom
+ * SMTP relay is configured; otherwise it replies `{ sent: false, reason: 'smtp' }`
+ * so the caller can fall back to Supabase's mailer. A `registered: false`
+ * outcome surfaces as an Error carrying the server's guidance message.
+ */
+export async function apiSendLoginOtp(email: string): Promise<{
+  sent: boolean
+  reason?: 'smtp' | 'schema'
+  message?: string
+}> {
+  const res = await fetch(`${API_BASE}/auth/send-login-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  const body = await res.json().catch(() => null) as
+    | { sent?: boolean; reason?: 'smtp' | 'schema'; message?: string }
+    | null
+
+  if (!res.ok) {
+    throw new Error(body?.message ?? 'Unable to send a code right now. Please try again.')
+  }
+  return { sent: Boolean(body?.sent), reason: body?.reason, message: body?.message }
+}
+
+/**
  * POST /api/auth/provision-self  (Authenticated)
  * Completes self-service sign-up by creating the caller's staff_profiles row.
  * Idempotent: safe to call on every sign-in. The server clamps the role to

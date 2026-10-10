@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import { apiCheckRegistered, apiProvisionSelf } from '@/lib/api'
+import { apiCheckRegistered, apiProvisionSelf, apiSendLoginOtp } from '@/lib/api'
 import type { StaffProfile, StaffRole } from '@/types'
 
 /**
@@ -14,6 +14,36 @@ export class RegistrationError extends Error {
     super(message)
     this.name = 'RegistrationError'
   }
+}
+
+/**
+ * Raised when Supabase accepts an OTP request but cannot deliver the message.
+ * This is a server-side mail configuration problem (no custom SMTP), not a
+ * client bug — so it is surfaced as guidance rather than as a generic failure.
+ */
+export class OtpDeliveryError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'OtpDeliveryError'
+  }
+}
+
+/**
+ * Turns raw Supabase auth errors into messages a staff member can act on.
+ *
+ * The important case is rate limiting: the default Supabase mailer allows only
+ * a couple of messages per hour and will not deliver to addresses outside the
+ * project's team. Without this mapping those failures read as "email sent".
+ */
+function describeOtpError(raw: string): string {
+  const msg = raw.toLowerCase()
+  if (msg.includes('rate limit') || msg.includes('over_email_send_rate_limit')) {
+    return 'Email rate limit reached. Supabase allows only a few codes per hour on the default mailer — please wait about an hour, then try again.'
+  }
+  if (msg.includes('not authorized') || msg.includes('email address not authorized')) {
+    return "This project's mail service can only deliver to the Supabase team's own inboxes. Ask an administrator to configure custom SMTP before using emailed codes."
+  }
+  return raw
 }
 
 interface AuthContextValue {
@@ -276,11 +306,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const normalized = email.trim().toLowerCase()
     await checkStaffRegistered(normalized) // throws if not registered / inactive
 
+    // Prefer the server's own mailer when it has SMTP configured: Supabase's
+    // built-in mailer only reaches the project team and is capped at a couple
+    // of messages per hour, which silently drops codes for real staff.
+    const viaServer = await apiSendLoginOtp(normalized)
+    if (viaServer.sent) return
+
+    // No SMTP on the server (local development, or setup not finished yet) —
+    // fall back to Supabase's mailer so the flow still works where it can.
     const { error } = await supabase.auth.signInWithOtp({
       email: normalized,
       options: { shouldCreateUser: false }, // never create accounts from the login page
     })
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(describeOtpError(error.message))
   }
 
   /** Verifies a login OTP, which establishes the session on success. */
@@ -290,7 +328,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token,
       type: 'email',
     })
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(describeOtpError(error.message))
     setSessionOrigin('otp')
   }
 

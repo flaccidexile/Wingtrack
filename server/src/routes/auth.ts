@@ -1,7 +1,9 @@
 import { Router, type Request, type Response } from 'express'
+import crypto from 'node:crypto'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
+import { sendMail, isSmtpConfigured, buildOtpEmail } from '../lib/mailer'
 
 const router = Router()
 
@@ -74,6 +76,127 @@ router.post('/check-registered', async (req: Request, res: Response): Promise<vo
   } catch (err: unknown) {
     console.error('check-registered error:', err)
     res.status(500).json({ message: 'Unable to verify this email right now. Please try again.' })
+  }
+})
+
+/**
+ * POST /api/auth/send-login-otp — Public, gated on the email being staff.
+ *
+ * Issues a 6-digit sign-in code for an already-registered, active staff member
+ * and mails it using our own SMTP relay when one is configured.
+ *
+ * WHY THIS BYPASSES SUPABASE'S MAILER
+ * -----------------------------------
+ * Supabase Auth's built-in mailer only delivers to addresses belonging to the
+ * project's own team, and is limited to roughly two messages per hour. For a
+ * real POS deployment that means staff codes never arrive, while Supabase still
+ * answers `200 OK` — the failure is invisible. Generating and sending the code
+ * ourselves removes both restrictions.
+ *
+ * When SMTP is NOT configured we answer `{ sent: false, reason: 'smtp' }` so the
+ * client can fall back to Supabase's mailer. That keeps local development
+ * working with zero setup while making production delivery explicit.
+ *
+ * Security notes:
+ *  - Only active staff receive codes; the registration check mirrors
+ *    /check-registered and returns the same enumeration-safe message.
+ *  - The code is random (crypto), stored only as a SHA-256 hash, expires in
+ *    5 minutes, and can be attempted only a handful of times.
+ *  - A per-email cooldown prevents using this endpoint to spam a staff inbox.
+ */
+router.post('/send-login-otp', async (req: Request, res: Response): Promise<void> => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+
+  if (!email || !email.includes('@')) {
+    res.status(400).json({ message: 'A valid email address is required.' })
+    return
+  }
+
+  try {
+    // 1. Only provisioned, active staff may receive a code.
+    const { data: staff, error: staffError } = await supabaseAdmin
+      .from('staff_profiles')
+      .select('is_active')
+      .ilike('email', email)
+      .maybeSingle()
+
+    if (staffError) {
+      console.error('send-login-otp staff lookup error:', staffError)
+      res.status(500).json({ message: 'Unable to send a code right now. Please try again.' })
+      return
+    }
+    if (!staff) {
+      res.status(404).json({ message: NOT_REGISTERED_MESSAGE })
+      return
+    }
+    if (!staff.is_active) {
+      res.status(403).json({ message: 'This account has been deactivated. Contact an administrator.' })
+      return
+    }
+
+    // 2. Without SMTP we cannot deliver, so hand control back to the client,
+    //    which will use Supabase's mailer instead.
+    if (!isSmtpConfigured()) {
+      res.json({ sent: false, reason: 'smtp', message: 'Custom SMTP is not configured on the server.' })
+      return
+    }
+
+    // 3. Cooldown: refuse a second code within 60 seconds for the same address.
+    const cooldownFloor = new Date(Date.now() - 60_000).toISOString()
+    const { data: recent, error: recentError } = await supabaseAdmin
+      .from('login_otps')
+      .select('created_at')
+      .ilike('email', email)
+      .gt('created_at', cooldownFloor)
+      .limit(1)
+      .maybeSingle()
+
+    if (recentError && recentError.code !== 'PGRST205') {
+      console.error('send-login-otp cooldown check error:', recentError)
+      res.status(500).json({ message: 'Unable to send a code right now. Please try again.' })
+      return
+    }
+    if (recent) {
+      res.status(429).json({ message: 'A code was just sent. Please wait a minute before requesting another.' })
+      return
+    }
+
+    // 4. Mint, store (hashed), and mail the code.
+    const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0')
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex')
+    const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString()
+
+    const { error: insertError } = await supabaseAdmin
+      .from('login_otps')
+      .insert({ email, code_hash: codeHash, expires_at: expiresAt })
+
+    if (insertError) {
+      // PGRST205 = table absent: report it plainly so setup is obvious.
+      if (insertError.code === 'PGRST205') {
+        console.error('send-login-otp: login_otps table is missing. Apply the schema.sql migration.')
+        res.json({ sent: false, reason: 'schema', message: 'The server database is missing its code table.' })
+        return
+      }
+      console.error('send-login-otp insert error:', insertError)
+      res.status(500).json({ message: 'Unable to send a code right now. Please try again.' })
+      return
+    }
+
+    const { subject, text } = buildOtpEmail(code)
+    const delivery = await sendMail({ to: email, subject, text })
+
+    if (!delivery.delivered) {
+      res.status(502).json({
+        message: 'The code could not be emailed. An administrator needs to check the mail settings.',
+        reason: 'delivery',
+      })
+      return
+    }
+
+    res.json({ sent: true })
+  } catch (err: unknown) {
+    console.error('send-login-otp error:', err)
+    res.status(500).json({ message: 'Unable to send a code right now. Please try again.' })
   }
 })
 

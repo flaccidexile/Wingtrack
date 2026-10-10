@@ -459,3 +459,38 @@ CREATE INDEX IF NOT EXISTS idx_order_items_order ON public.order_items (order_id
 CREATE INDEX IF NOT EXISTS idx_inv_mov_inventory ON public.inventory_movements (inventory_id);
 CREATE INDEX IF NOT EXISTS idx_inv_mov_order     ON public.inventory_movements (order_id);
 CREATE INDEX IF NOT EXISTS idx_staff_user_id     ON public.staff_profiles (user_id);
+
+-- ============================================================
+-- 8. LOGIN ONE-TIME CODES (Idempotent)
+-- ============================================================
+--
+-- Stores short-lived sign-in codes for staff who use the "OTP" login tab.
+--
+-- WHY THIS EXISTS
+-- ---------------
+-- Supabase's built-in mailer refuses to deliver to anyone outside the project's
+-- own team and is capped at ~2 messages/hour, so emailed login codes silently
+-- never arrive. When custom SMTP is configured the server generates the code
+-- here and mails it directly, removing both restrictions.
+--
+-- Codes are stored only as a SHA-256 hash: a leaked database dump cannot be
+-- used to sign in. Consumption is single-use and sets consumed_at.
+
+CREATE TABLE IF NOT EXISTS public.login_otps (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    email       text NOT NULL,
+    code_hash   text NOT NULL,
+    expires_at  timestamptz NOT NULL,
+    consumed_at timestamptz,
+    attempts    integer NOT NULL DEFAULT 0,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- Lookup path: newest live code for an email.
+CREATE INDEX IF NOT EXISTS idx_login_otps_email_created
+    ON public.login_otps (email, created_at DESC);
+
+-- No RLS policies are defined: this table is only ever touched by the server
+-- using the service-role key. RLS is enabled so the anon/authenticated roles
+-- can never read codes even if a policy is added later by mistake.
+ALTER TABLE public.login_otps ENABLE ROW LEVEL SECURITY;

@@ -563,6 +563,12 @@ export default function LoginPage({ onSwitchToSignUp, onForgotPassword }: LoginP
                     ) : 'Verify & Sign In'}
                   </button>
 
+                  {/* Delivery hint — helps when a code is delayed or filtered */}
+                  <p style={{ fontSize: 12.5, color: 'var(--muted-foreground)', textAlign: 'center', margin: 0, lineHeight: 1.5 }}>
+                    Didn&apos;t get the code? Check your spam folder, then use{' '}
+                    <strong>Resend</strong> below.
+                  </p>
+
                   {/* Resend / change email */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                     <button
