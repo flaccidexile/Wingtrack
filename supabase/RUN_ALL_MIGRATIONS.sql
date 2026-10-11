@@ -67,29 +67,50 @@ DECLARE
     v_new_qty      numeric;
 BEGIN
     -- ── 1. Order header ──────────────────────────────────────
+    --
+    -- The ::public.payment_method cast below is load-bearing — do not remove it.
+    --
+    -- p_payment_method is declared `text`, but orders.payment_method is the
+    -- public.payment_method ENUM. PostgreSQL silently coerces an *unknown-typed
+    -- literal* into an enum (that is why 'completed' needs no cast), but a value
+    -- whose type is already known — like this text parameter — is NOT implicitly
+    -- castable to an enum. Without the cast every single call aborts with:
+    --
+    --     42804  column "payment_method" is of type payment_method
+    --            but expression is of type text
+    --
+    -- which surfaced to cashiers as "Failed to record the order. Nothing was
+    -- saved." on every checkout.
     INSERT INTO public.orders (
         cashier_id, status, payment_method,
         subtotal, vat_amount, total_amount, notes
     )
     VALUES (
-        p_cashier_id, 'completed', p_payment_method,
+        p_cashier_id, 'completed', p_payment_method::public.payment_method,
         p_subtotal, p_vat_amount, p_total_amount, p_notes
     )
     RETURNING orders.id, orders.order_number INTO v_order_id, v_order_number;
 
     -- ── 2. Line items ────────────────────────────────────────
+    --
+    -- line_total is deliberately absent from this column list: it is a
+    -- GENERATED ALWAYS column (unit_price * quantity), and Postgres rejects any
+    -- explicit value with:
+    --
+    --     428C9  column "line_total" can only be updated to DEFAULT
+    --
+    -- The database computes it. Do not add it back.
     FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
     LOOP
         INSERT INTO public.order_items (
-            order_id, product_id, product_name, unit_price, quantity, line_total
+            order_id, product_id, product_name, unit_price, quantity
         )
         VALUES (
             v_order_id,
             (v_item->>'product_id')::uuid,
             v_item->>'product_name',
             (v_item->>'unit_price')::numeric,
-            (v_item->>'quantity')::integer,
-            (v_item->>'line_total')::numeric
+            (v_item->>'quantity')::integer
         );
     END LOOP;
 

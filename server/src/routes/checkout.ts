@@ -122,19 +122,26 @@ router.post(
     const productMap = new Map(products.map(p => [p.id, p]))
 
     // ── Step 2: Calculate totals ─────────────────────────────
+    //
+    // `orderItems` doubles as the `order_items` write payload (both the RPC's
+    // p_items and the fallback INSERT), so it must contain ONLY writable
+    // columns. `line_total` is a GENERATED ALWAYS column
+    // (unit_price * quantity) — including it made Postgres reject the write
+    // with 428C9 ("column line_total can only be updated to DEFAULT") and broke
+    // checkout outright. The database derives it, so we compute the subtotal
+    // from the operands instead.
     const orderItems = items.map(i => {
       const p = productMap.get(i.product_id)!
-      const unitPrice = Number(p.price)
       return {
         product_id:   i.product_id,
         product_name: p.name as string,
-        unit_price:   unitPrice,
+        unit_price:   Number(p.price),
         quantity:     i.quantity,
-        line_total:   Math.round(unitPrice * i.quantity * 100) / 100,
       }
     })
 
-    const subtotal     = orderItems.reduce((s, i) => s + i.line_total, 0)
+    // Round once, after summing, so float drift cannot leak into stored money.
+    const subtotal     = Math.round(orderItems.reduce((s, i) => s + i.unit_price * i.quantity, 0) * 100) / 100
     const vat_amount   = Math.round(subtotal * VAT_RATE * 100) / 100
     const total_amount = Math.round((subtotal + vat_amount) * 100) / 100
 
@@ -232,13 +239,49 @@ router.post(
       })),
     })
 
-    // PGRST202 = function not found → this deployment has not run the migration.
-    const rpcMissing =
-      rpcResult.error &&
-      (rpcResult.error.code === 'PGRST202' ||
-        /create_order/i.test(rpcResult.error.message ?? ''))
+    // A failed RPC is not one situation — it is two, and they need opposite
+    // responses:
+    //
+    //   (a) the function itself cannot execute — it was never applied, or it
+    //       was created against a schema it no longer matches. Nothing is wrong
+    //       with the order, so we degrade to the non-atomic fallback below and
+    //       the sale still goes through.
+    //   (b) the function executed and rejected the order (it RAISEs on a
+    //       business rule, e.g. an inventory row that vanished mid-sale). The
+    //       write must not be retried non-atomically — that would defeat the
+    //       point of the function and hide a real data problem.
+    //
+    // Before this split, only (a)-style *missing function* errors fell through
+    // to the fallback. Anything else returned 500 with no fallback — so when
+    // create_order had a type bug (42804) checkout was bricked outright, with
+    // no order possible at all. Hence the code list below.
+    const rpcError = rpcResult.error
 
-    if (!rpcResult.error && rpcResult.data) {
+    /**
+     * Codes meaning "the function cannot run", as opposed to "the function
+     * refused this order". 42804 is included because it is exactly the fault we
+     * hit: a text parameter inserted into an enum column, which Postgres
+     * rejects at call time (see the migration's comment).
+     *
+     * P0001 (raise_exception) is deliberately absent — that is the function's
+     * own business rejection and must reach the cashier.
+     */
+    const RPC_UNUSABLE_CODES = new Set([
+      'PGRST202', // PostgREST: could not find the function
+      'PGRST203', // PostgREST: function is ambiguous
+      '42883',    // undefined_function
+      '42804',    // datatype_mismatch — the function's own signature/body is broken
+      '42P13',    // invalid_function_definition
+      '3F000',    // invalid_schema_name
+    ])
+
+    const rpcUnusable =
+      !!rpcError &&
+      (RPC_UNUSABLE_CODES.has(rpcError.code ?? '') ||
+        /create_order/i.test(rpcError.message ?? '') ||
+        /could not find the function|function .* does not exist/i.test(rpcError.message ?? ''))
+
+    if (!rpcError && rpcResult.data) {
       const row = (Array.isArray(rpcResult.data) ? rpcResult.data[0] : rpcResult.data) as {
         id: string
         order_number: number
@@ -252,16 +295,24 @@ router.post(
       return
     }
 
-    if (rpcResult.error && !rpcMissing) {
-      console.error('create_order RPC error:', rpcResult.error)
-      res.status(500).json({ message: 'Failed to record the order. Nothing was saved.' })
+    if (rpcError && !rpcUnusable) {
+      // The function ran and refused the order. Report it verbatim rather than
+      // pretending nothing happened; `detail` keeps the DB's own wording
+      // available in the network tab without putting it in front of a cashier.
+      console.error('create_order rejected the order:', rpcError)
+      res.status(500).json({
+        message: 'Failed to record the order. Nothing was saved.',
+        detail:  rpcError.message,
+      })
       return
     }
 
-    // ── Fallback path (migration not applied) ────────────────
+    // ── Fallback path (RPC absent or unusable) ───────────────
     console.warn(
-      '[checkout] create_order() RPC unavailable — using non-atomic fallback. ' +
-        'Apply supabase/migrations/20261010_create_order.sql for guaranteed atomicity.'
+      '[checkout] create_order() unusable' +
+        (rpcError ? ` (${rpcError.code ?? 'unknown'}: ${rpcError.message})` : '') +
+        ' — using non-atomic fallback. Re-apply ' +
+        'supabase/migrations/20261010_create_order.sql for guaranteed atomicity.'
     )
 
     const { data: order, error: orderError } = await supabaseAdmin
@@ -298,7 +349,18 @@ router.post(
 
     const { error: itemsError } = await supabaseAdmin
       .from('order_items')
-      .insert(orderItems.map(i => ({ ...i, order_id: order.id })))
+      .insert(
+        orderItems.map(i => ({
+          order_id:     order.id,
+          product_id:   i.product_id,
+          product_name: i.product_name,
+          unit_price:   i.unit_price,
+          quantity:     i.quantity,
+          // line_total is deliberately omitted — it is a GENERATED column.
+          // Listing the columns explicitly means a future field added to
+          // `orderItems` cannot silently break this insert.
+        }))
+      )
 
     if (itemsError) {
       await rollback('order_items insert failed: ' + itemsError.message)
