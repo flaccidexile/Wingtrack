@@ -45,9 +45,14 @@ app.use((_req, res) => {
 })
 
 // ── Error handler ────────────────────────────────────────────
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[WINGTRACK API Error]', err)
-  res.status(500).json({ message: 'Internal server error.' })
+app.use((err: Error & { status?: number; statusCode?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // Body-parser rejections (payload too large, malformed JSON) carry a status
+  // of their own — honour it instead of reporting every failure as a 500.
+  const status = err.status ?? err.statusCode ?? 500
+  if (status >= 500) console.error('[WINGTRACK API Error]', err)
+  res.status(status).json({
+    message: status === 413 ? 'That file is too large. The maximum size is 5 MB.' : 'Internal server error.',
+  })
 })
 
 app.listen(PORT, () => {

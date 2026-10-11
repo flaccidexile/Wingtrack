@@ -8,6 +8,7 @@ import ReceiptModal from '@/components/receipt/ReceiptModal'
 import CashPaymentCalculator from '@/components/cashier/CashPaymentCalculator'
 import PayMongoModal from '@/components/cashier/PayMongoModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import FoodImage from '@/components/ui/FoodImage'
 
 const DEFAULT_CATS = ['All', 'Wings', 'Sizzling', 'Silog', 'Shake', 'Burger', 'Fries & Pure Cheesestick']
 
@@ -360,15 +361,22 @@ export default function PointOfSale() {
                   style={{
                     background: inCart ? 'rgba(234,88,12,0.08)' : 'var(--card)',
                     border: `1px solid ${inCart ? 'var(--primary)' : 'var(--border)'}`,
-                    borderRadius: 14, padding: '22px 20px', cursor: 'pointer', textAlign: 'left',
+                    borderRadius: 14, padding: 0, cursor: 'pointer', textAlign: 'left',
                     transition: 'all 0.15s',
+                    display: 'flex', flexDirection: 'column', overflow: 'hidden',
                   }}
                 >
-                  <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 10, fontFamily: 'DM Mono', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{catName}</p>
-                  <p style={{ fontSize: 17, fontWeight: 600, color: 'var(--foreground)', lineHeight: 1.3, marginBottom: 14 }}>{item.name}</p>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 18, fontFamily: 'DM Mono', fontWeight: 700, color: 'var(--primary)' }}>&#8369;{Number(item.price).toFixed(2)}</span>
-                    {inCart && <span style={{ fontSize: 13, background: 'var(--primary)', color: 'var(--primary-foreground)', borderRadius: 12, padding: '4px 12px', fontWeight: 700 }}>x{inCart.qty}</span>}
+                  {/* Photo banner. `overflow: hidden` on the button clips the
+                      top corners, so the image needs no radius of its own. */}
+                  <FoodImage name={item.name} src={item.image_url} height={132} />
+
+                  <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                    <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 10, fontFamily: 'DM Mono', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{catName}</p>
+                    <p style={{ fontSize: 17, fontWeight: 600, color: 'var(--foreground)', lineHeight: 1.3, marginBottom: 14, flex: 1 }}>{item.name}</p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 18, fontFamily: 'DM Mono', fontWeight: 700, color: 'var(--primary)' }}>&#8369;{Number(item.price).toFixed(2)}</span>
+                      {inCart && <span style={{ fontSize: 13, background: 'var(--primary)', color: 'var(--primary-foreground)', borderRadius: 12, padding: '4px 12px', fontWeight: 700 }}>x{inCart.qty}</span>}
+                    </div>
                   </div>
                 </button>
               )

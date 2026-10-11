@@ -9,7 +9,24 @@ export interface StaffProfile {
   email: string
   role: StaffRole
   is_active: boolean
+  /** Public URL of the member's photo in the `avatars` bucket, if any. */
+  avatar_url?: string | null
+  /** Stamped by the heartbeat while the app is open — drives "online now". */
+  last_seen_at?: string | null
+  /** Stamped once per browser session, so it survives sign-out. */
+  last_sign_in_at?: string | null
+  /** `staff_profiles.id` of the admin who provisioned this account. */
+  created_by?: string | null
   created_at: string
+  updated_at?: string | null
+}
+
+/** Fields an administrator may change from the Edit Staff Member dialog. */
+export interface StaffUpdatePayload {
+  full_name?: string
+  email?: string
+  role?: StaffRole
+  is_active?: boolean
 }
 
 export interface ProductCategory {

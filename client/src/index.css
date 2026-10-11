@@ -148,6 +148,14 @@ code, .mono { font-family: 'DM Mono', monospace; }
   100% { transform: scale(1); }
 }
 
+/* Live indicator on the Staff Manager — a slow breath, not a blink, so it
+   reads as "connected" without pulling attention away from the list. */
+@keyframes pulseDot {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.82); }
+}
+.live-dot { animation: pulseDot 2s ease-in-out infinite; }
+
 /* ── Responsive layout ──────────────────────────────────── */
 /*
  * Pages are written with generous desktop padding inline. Rather than editing
@@ -316,5 +324,7 @@ code, .mono { font-family: 'DM Mono', monospace; }
   .fade-in { animation: none; }
   .spinner { animation-duration: 1.4s; }
   * { transition-duration: 0.01ms !important; }
+  /* The LIVE dot stays solid rather than pulsing. */
+  .live-dot { animation: none !important; }
 }
 

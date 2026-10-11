@@ -1,18 +1,20 @@
 /**
- * Transactional email sender for WINGTRACK authentication codes.
+ * Transactional email sender for WINGTRACK authentication mail.
+ *
+ * Carries both the sign-in one-time code and the password-reset link.
  *
  * WHY THIS EXISTS
  * ---------------
  * Supabase's built-in mailer is restricted: it only delivers to addresses that
  * belong to the project's own team, and it is rate-limited to roughly two
  * messages per hour. Any staff member outside the Supabase team therefore never
- * receives a login code, and Supabase still answers `200 OK` — so the failure is
- * completely silent from the app's point of view.
+ * receives a login code or a reset link, and Supabase still answers `200 OK` —
+ * so the failure is completely silent from the app's point of view.
  *
- * When `SMTP_*` variables are present we send the code ourselves, which removes
- * both restrictions. When they are absent we return `{ configured: false }` and
- * the caller falls back to Supabase's mailer, so the app keeps working in
- * development without any extra setup.
+ * When `SMTP_*` variables are present we send the message ourselves, which
+ * removes both restrictions. When they are absent we return
+ * `{ configured: false }` and the caller falls back to Supabase's mailer, so the
+ * app keeps working in development without any extra setup.
  *
  * This module intentionally uses Node's built-in `tls` socket rather than
  * pulling in a dependency: we only ever need to submit one small, plain-text
@@ -172,6 +174,39 @@ export function buildOtpEmail(code: string): { subject: string; text: string } {
       '',
       'This code expires in 5 minutes.',
       'If you did not request this code, you can safely ignore this email.',
+      '',
+      '— WINGTRACK POS',
+    ].join('\n'),
+  }
+}
+
+/**
+ * The email body for a password reset link.
+ *
+ * Sent through our own relay for the same reason as the sign-in code: Supabase
+ * Auth's built-in mailer only delivers to the project's own team addresses, is
+ * rate-limited to a couple of messages per hour, and answers `200 OK` even when
+ * nothing was sent — so a forgotten-password request appears to succeed and the
+ * mail never arrives.
+ *
+ * The link is printed on its own line so every mail client can find it, and the
+ * ignore-me line matters: a reset link is a credential-bearing URL, and an
+ * unexpected one is usually a mistyped address.
+ */
+export function buildPasswordResetEmail(link: string): { subject: string; text: string } {
+  return {
+    subject: 'Reset your WINGTRACK password',
+    text: [
+      'WINGTRACK',
+      '',
+      'Someone asked to reset the password for this Wingtrack account.',
+      'Open the link below to choose a new password:',
+      '',
+      link,
+      '',
+      'This link can only be used once and expires shortly.',
+      'If you did not request a password reset, you can safely ignore this email —',
+      'your password will not change until the link above is opened.',
       '',
       '— WINGTRACK POS',
     ].join('\n'),

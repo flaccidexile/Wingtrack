@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import { apiCheckRegistered, apiProvisionSelf, apiSendLoginOtp } from '@/lib/api'
+import { apiCheckRegistered, apiProvisionSelf, apiSendHeartbeat, apiSendLoginOtp, apiSendPasswordReset } from '@/lib/api'
+import { HEARTBEAT_INTERVAL_MS } from '@/lib/presence'
 import type { StaffProfile, StaffRole } from '@/types'
 
 /**
@@ -46,6 +47,38 @@ function describeOtpError(raw: string): string {
   return raw
 }
 
+/**
+ * How confident we can be that a reset email is on its way.
+ *
+ * `sent` means our own SMTP relay accepted the message — it was handed to a
+ * mail server we control. `unconfirmed` means the request was accepted by
+ * Supabase's built-in mailer, which only delivers to the project's own team
+ * addresses and answers `200 OK` regardless, so the link may never arrive. The
+ * caller shows different copy for the two, because promising an email that was
+ * never queued is exactly the bug this replaced.
+ */
+export type PasswordResetOutcome = 'sent' | 'unconfirmed'
+
+/**
+ * Turns Supabase's reset errors into something a staff member can act on.
+ *
+ * The two cases worth naming are the ones its default mailer produces: a
+ * restricted-delivery refusal, and a rate limit that reads like a bug.
+ */
+function describeResetError(raw: string): string {
+  const msg = raw.toLowerCase()
+
+  if (msg.includes('not authorized') || msg.includes('email address not authorized')) {
+    return "This project's mail service can only deliver to the Supabase team's own inboxes. Ask an administrator to configure custom SMTP before using password reset."
+  }
+
+  if (msg.includes('rate limit') || msg.includes('you can only request this after')) {
+    return `Too many reset requests for now. ${raw}`
+  }
+
+  return raw
+}
+
 interface AuthContextValue {
   session: Session | null
   user: User | null
@@ -62,7 +95,7 @@ interface AuthContextValue {
   signUp: (email: string, password: string, fullName: string, role?: StaffRole) => Promise<{ requiresConfirmation: boolean }>
   signOut: () => Promise<void>
   signInWithGoogle: () => Promise<void>
-  sendPasswordReset: (email: string) => Promise<void>
+  sendPasswordReset: (email: string) => Promise<PasswordResetOutcome>
   updatePassword: (newPassword: string) => Promise<void>
   /**
    * Looks up whether an email belongs to a provisioned, active staff member.
@@ -80,6 +113,11 @@ interface AuthContextValue {
    * for an existing staff member (who goes straight to the login page).
    */
   sessionOrigin: SessionOrigin
+  /**
+   * Re-reads the caller's staff profile. Used after a self-service edit, and
+   * by the heartbeat when it detects that an admin changed this account.
+   */
+  refreshProfile: () => Promise<void>
 }
 
 /** How the current session was established — drives the unprovisioned screen. */
@@ -96,6 +134,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accountState, setAccountState] = useState<AccountState>(null)
   const [sessionOrigin, setSessionOrigin] = useState<SessionOrigin>(null)
   const [loading, setLoading] = useState(true)
+
+  /**
+   * Mirrors of the latest profile and profile-refresh function, read by the
+   * heartbeat interval. The interval is deliberately created once per session
+   * rather than re-created on every profile change, so it cannot see the
+   * current values through its closure — hence the refs.
+   */
+  const profileRef = useRef<StaffProfile | null>(null)
+  useEffect(() => { profileRef.current = profile }, [profile])
 
   /**
    * Resolves the staff profile for an authenticated user.
@@ -165,7 +212,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return null
         }
         setAccountState('active')
-        return profile
+
+        // `avatar_url` lives on the auth user until the presence migration adds
+        // the column to staff_profiles. Reading it from the session user keeps
+        // the sidebar and Settings photo working on an un-migrated database.
+        const metaAvatar = currentUser.user_metadata?.avatar_url
+        return {
+          ...profile,
+          avatar_url:
+            profile.avatar_url ?? (typeof metaAvatar === 'string' ? metaAvatar : null),
+        }
       }
     } catch (err) {
       console.warn('Profile lookup failed:', err)
@@ -175,6 +231,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccountState('unprovisioned')
     return null
   }
+
+  /**
+   * Re-reads the current user's profile and republishes it.
+   *
+   * Called after a self-service profile edit, and by the heartbeat when it
+   * notices the account's role or access flag changed underneath us — that is
+   * what lets a deactivation take effect in an already-open tab.
+   */
+  const refreshProfile = useCallback(async () => {
+    // `getUser()` re-reads the user from the auth server, so an avatar URL that
+    // was just written to user metadata is visible straight away. Reading the
+    // session alone would return the stale copy embedded at sign-in time, and
+    // the photo would appear to upload but never show.
+    const { data: fresh } = await supabase.auth.getUser()
+    const currentUser = fresh.user ?? (await supabase.auth.getSession()).data.session?.user
+    if (!currentUser) {
+      setProfile(null)
+      setAccountState(null)
+      return
+    }
+    setProfile(await fetchProfile(currentUser))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const refreshProfileRef = useRef(refreshProfile)
+  useEffect(() => { refreshProfileRef.current = refreshProfile }, [refreshProfile])
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
@@ -203,6 +285,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => listener.subscription.unsubscribe()
   }, [])
+
+  /**
+   * Presence heartbeat.
+   *
+   * Two jobs:
+   *
+   * 1. Keeps `last_seen_at` fresh so the Staff Manager can show who is online
+   *    right now. A hidden tab stops beating, so closing the app clears the
+   *    indicator within the online window instead of leaving a ghost.
+   *
+   * 2. Carries admin changes back to an already-open session. The response
+   *    echoes this account's live role and access flag, so a demotion or a
+   *    deactivation is picked up on the next beat and the profile is re-read —
+   *    the affected tab locks down without needing a reload.
+   *
+   * Runs once per signed-in session; the interval reads current values through
+   * refs so it never has to be torn down and rebuilt.
+   */
+  useEffect(() => {
+    if (!session || !profile) return
+
+    /** Marks the browser session as having stamped `last_sign_in_at`. */
+    const SIGNED_IN_FLAG = 'wingtrack.session-stamped'
+    let cancelled = false
+
+    async function beat() {
+      // A hidden tab is not "online" — it just has the app open.
+      if (document.visibilityState === 'hidden') return
+
+      try {
+        const signIn = !sessionStorage.getItem(SIGNED_IN_FLAG)
+        const { profile: live } = await apiSendHeartbeat({ signIn })
+        if (signIn) sessionStorage.setItem(SIGNED_IN_FLAG, '1')
+        if (cancelled) return
+
+        const current = profileRef.current
+        if (!current) return
+
+        // Anything an admin can change about this account that affects what
+        // the UI is allowed to show or do.
+        const changed =
+          live.is_active === false ||
+          live.role !== current.role ||
+          live.full_name !== current.full_name
+
+        if (changed) await refreshProfileRef.current()
+      } catch {
+        // A missed beat is not worth surfacing: the next tick retries, and the
+        // online window tolerates a gap.
+      }
+    }
+
+    beat()
+    const timer = window.setInterval(beat, HEARTBEAT_INTERVAL_MS)
+
+    // Coming back to the tab should read as online immediately, not up to
+    // 45 seconds later.
+    const onWake = () => { if (document.visibilityState === 'visible') void beat() }
+    document.addEventListener('visibilitychange', onWake)
+    window.addEventListener('focus', onWake)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onWake)
+      window.removeEventListener('focus', onWake)
+    }
+  }, [session, profile?.id])
 
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
@@ -246,11 +396,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionOrigin('google')
   }
 
-  async function sendPasswordReset(email: string) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}?mode=reset`,
-    })
-    if (error) throw new Error(error.message)
+  /**
+   * Sends a password-reset link.
+   *
+   * Tries our own SMTP relay first, because Supabase's built-in mailer only
+   * delivers to the project's own team addresses, is rate-limited to a couple
+   * of messages per hour, and returns `200 OK` even when nothing was sent — so
+   * it cannot be relied on to deliver to a real staff inbox.
+   *
+   * Falls back to Supabase's mailer when no relay is configured, or when the
+   * API is unreachable, so the flow still works in a minimal setup. The return
+   * value says which of the two happened, so the UI never claims a delivery it
+   * cannot stand behind.
+   */
+  async function sendPasswordReset(email: string): Promise<PasswordResetOutcome> {
+    const redirectTo = `${window.location.origin}?mode=reset`
+
+    let viaServer: Awaited<ReturnType<typeof apiSendPasswordReset>> | null = null
+    try {
+      viaServer = await apiSendPasswordReset(email, redirectTo)
+    } catch {
+      // Server unreachable — fall through to Supabase rather than blocking the
+      // user entirely.
+    }
+
+    if (viaServer?.sent) return 'sent'
+
+    // A definitive answer from our own API (unknown email, deactivated
+    // account, cooldown, or a relay that refused the message) is the real
+    // problem. Retrying through Supabase would only hide it behind a success
+    // screen.
+    if (viaServer?.reason === 'refused' || viaServer?.reason === 'delivery') {
+      throw new Error(viaServer.message ?? 'That reset link could not be sent.')
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+    if (error) throw new Error(describeResetError(error.message))
+
+    return 'unconfirmed'
   }
 
   /**
@@ -281,6 +464,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.warn('Sign out warning:', err)
     }
+    // Clear the "already stamped" marker so the next sign-in records a fresh
+    // last_sign_in_at rather than inheriting this session's.
+    try { sessionStorage.removeItem('wingtrack.session-stamped') } catch { /* private mode */ }
     setSession(null)
     setUser(null)
     setProfile(null)
@@ -351,7 +537,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, role: profile?.role ?? null, loading, accountState, sessionOrigin, signIn, signUp, signOut, signInWithGoogle, sendPasswordReset, updatePassword, checkStaffRegistered, sendLoginOtp, verifyLoginOtp }}
+      value={{ session, user, profile, role: profile?.role ?? null, loading, accountState, sessionOrigin, refreshProfile, signIn, signUp, signOut, signInWithGoogle, sendPasswordReset, updatePassword, checkStaffRegistered, sendLoginOtp, verifyLoginOtp }}
     >
       {children}
     </AuthContext.Provider>

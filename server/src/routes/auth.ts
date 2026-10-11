@@ -3,7 +3,7 @@ import crypto from 'node:crypto'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
-import { sendMail, isSmtpConfigured, buildOtpEmail } from '../lib/mailer'
+import { sendMail, isSmtpConfigured, buildOtpEmail, buildPasswordResetEmail } from '../lib/mailer'
 import { validatePassword } from '../lib/validation'
 
 const router = Router()
@@ -32,6 +32,58 @@ type SelfSignupRole = (typeof SELF_SIGNUP_ROLES)[number]
 
 function isSelfSignupRole(value: unknown): value is SelfSignupRole {
   return typeof value === 'string' && (SELF_SIGNUP_ROLES as readonly string[]).includes(value)
+}
+
+/** How long one address must wait between reset-link requests. */
+const RESET_COOLDOWN_MS = 60_000
+
+/**
+ * Per-address cooldown for reset requests.
+ *
+ * In memory on purpose: this guards against a single caller hammering the
+ * endpoint into someone's inbox, not against a distributed attack, and losing
+ * it on restart is harmless. Supabase's own mailer has an equivalent limit, so
+ * this keeps our behaviour consistent with the fallback path.
+ */
+const resetCooldowns = new Map<string, number>()
+
+/** Seconds the caller must still wait, or 0 when the address is clear. */
+function resetCooldownRemaining(email: string): number {
+  const until = resetCooldowns.get(email)
+  if (!until) return 0
+
+  const remainingMs = until - Date.now()
+  if (remainingMs <= 0) {
+    resetCooldowns.delete(email)
+    return 0
+  }
+
+  return Math.ceil(remainingMs / 1000)
+}
+
+/**
+ * Picks the post-reset landing page.
+ *
+ * The client sends its own origin so the link returns the user to the right
+ * host. That value is only ever a redirect target handed to Supabase, but it
+ * still arrives in a request body, so it is parsed and restricted to http/https
+ * rather than trusted. Anything unusable falls back to CLIENT_URL — the same
+ * page the app already sends users to.
+ */
+function safeRedirectTarget(requested: string): string {
+  const fallback = process.env.CLIENT_URL?.trim() || 'http://localhost:5173'
+
+  if (!requested) return `${fallback}?mode=reset`
+
+  try {
+    const url = new URL(requested)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return `${fallback}?mode=reset`
+    // Force the mode the client uses to recognise a recovery landing.
+    url.searchParams.set('mode', 'reset')
+    return url.toString()
+  } catch {
+    return `${fallback}?mode=reset`
+  }
 }
 
 /**
@@ -198,6 +250,129 @@ router.post('/send-login-otp', async (req: Request, res: Response): Promise<void
   } catch (err: unknown) {
     console.error('send-login-otp error:', err)
     res.status(500).json({ message: 'Unable to send a code right now. Please try again.' })
+  }
+})
+
+/**
+ * POST /api/auth/send-password-reset — Public, gated on the email being staff.
+ *
+ * Mails a password-reset link using our own SMTP relay when one is configured.
+ *
+ * WHY THIS BYPASSES SUPABASE'S MAILER
+ * -----------------------------------
+ * The client used to call `supabase.auth.resetPasswordForEmail()` directly.
+ * That goes through Supabase's built-in mailer, which only delivers to the
+ * project's own team addresses and is limited to roughly two messages per hour.
+ * Worse, it answers `200 OK` with an empty body even when nothing was sent, so
+ * the UI said "check your email" for a message that was never queued. That is
+ * exactly the reported symptom: request accepted, nothing in the inbox.
+ *
+ * We therefore mint the recovery link ourselves with the admin API (which does
+ * NOT send mail) and deliver it through the same relay the sign-in code uses.
+ *
+ * When SMTP is NOT configured we answer `{ sent: false, reason: 'smtp' }` so the
+ * client can fall back to Supabase's mailer. That keeps local development
+ * working with zero setup while making production delivery explicit.
+ *
+ * Security notes:
+ *  - Only active staff receive a link; the lookup mirrors /check-registered.
+ *  - A per-address cooldown prevents using this endpoint to spam an inbox, and
+ *    is applied *before* minting so a refused request cannot burn a token.
+ *  - The link is single-use and expires on Supabase's own schedule.
+ */
+router.post('/send-password-reset', async (req: Request, res: Response): Promise<void> => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+  const requestedRedirect = typeof req.body?.redirectTo === 'string' ? req.body.redirectTo.trim() : ''
+
+  if (!email || !email.includes('@')) {
+    res.status(400).json({ message: 'A valid email address is required.' })
+    return
+  }
+
+  try {
+    // 1. Only provisioned, active staff may reset a password.
+    const { data: staff, error: staffError } = await supabaseAdmin
+      .from('staff_profiles')
+      .select('is_active')
+      .ilike('email', email)
+      .maybeSingle()
+
+    if (staffError) {
+      console.error('send-password-reset staff lookup error:', staffError)
+      res.status(500).json({ message: 'Unable to send a reset link right now. Please try again.' })
+      return
+    }
+    if (!staff) {
+      res.status(404).json({
+        // Deliberately its own wording: the shared NOT_REGISTERED_MESSAGE talks
+        // about "code sign-in", which is meaningless on the reset screen.
+        message: 'This email is not registered as staff. Ask an administrator to create your account.',
+        reason: 'refused',
+      })
+      return
+    }
+    if (!staff.is_active) {
+      res.status(403).json({
+        message: 'This account has been deactivated. Ask an administrator to restore access.',
+        reason: 'refused',
+      })
+      return
+    }
+
+    // 2. Without SMTP we cannot deliver, so hand control back to the client,
+    //    which will use Supabase's mailer instead.
+    if (!isSmtpConfigured()) {
+      res.json({ sent: false, reason: 'smtp', message: 'Custom SMTP is not configured on the server.' })
+      return
+    }
+
+    // 3. Cooldown: refuse a second link within 60 seconds for the same address.
+    const waitSeconds = resetCooldownRemaining(email)
+    if (waitSeconds > 0) {
+      res.status(429).json({
+        message: `A reset link was just requested. Please wait ${waitSeconds} seconds before trying again.`,
+        reason: 'refused',
+      })
+      return
+    }
+
+    // 4. Mint the recovery link. This does NOT send an email — we deliver it.
+    const redirectTo = safeRedirectTarget(requestedRedirect)
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'recovery',
+      email,
+      options: { redirectTo },
+    })
+
+    const actionLink = linkData?.properties?.action_link
+
+    if (linkError || !actionLink) {
+      console.error('send-password-reset generateLink error:', linkError)
+      res.status(502).json({
+        message: 'Unable to create a reset link for this account. Ask an administrator to check the mail settings.',
+        reason: 'delivery',
+      })
+      return
+    }
+
+    // 5. Deliver it ourselves.
+    const { subject, text } = buildPasswordResetEmail(actionLink)
+    const delivery = await sendMail({ to: email, subject, text })
+
+    if (!delivery.delivered) {
+      res.status(502).json({
+        message: 'The reset link could not be emailed. An administrator needs to check the mail settings.',
+        reason: 'delivery',
+      })
+      return
+    }
+
+    // Only start the cooldown once a link has actually gone out.
+    resetCooldowns.set(email, Date.now() + RESET_COOLDOWN_MS)
+    res.json({ sent: true })
+  } catch (err: unknown) {
+    console.error('send-password-reset error:', err)
+    res.status(500).json({ message: 'Unable to send a reset link right now. Please try again.' })
   }
 })
 

@@ -1,5 +1,11 @@
 import { supabase } from './supabase'
-import type { CheckoutPayload, InventoryAdjustmentPayload, Order } from '@/types'
+import type {
+  CheckoutPayload,
+  InventoryAdjustmentPayload,
+  Order,
+  StaffProfile,
+  StaffUpdatePayload,
+} from '@/types'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api'
 
@@ -109,6 +115,154 @@ export async function apiReactivateStaff(staffId: string) {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: 'Failed to reactivate staff' }))
     throw new Error(err.message ?? 'Failed to reactivate staff')
+  }
+  return res.json()
+}
+
+/**
+ * GET /api/staff (Admin only)
+ *
+ * The Staff Manager loads through the API rather than reading `staff_profiles`
+ * directly. The server merges in `auth.users.last_sign_in_at` and the avatar
+ * URL from auth metadata — neither is reachable from the browser, and both are
+ * what keep the ACTIVITY column meaningful before the presence migration has
+ * been applied.
+ */
+export async function apiGetStaff(): Promise<StaffProfile[]> {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/staff`, { method: 'GET', headers })
+  if (!res.ok) {
+    throw await toApiError(res, 'Failed to load staff')
+  }
+  return res.json()
+}
+
+/**
+ * PATCH /api/staff/:id (Admin only)
+ *
+ * Edits a staff member's name, sign-in email, role or access. The server
+ * rejects changes that would leave the shop without an active administrator,
+ * and mirrors an email change onto the underlying auth account.
+ */
+export async function apiUpdateStaff(staffId: string, payload: StaffUpdatePayload) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/staff/${staffId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Failed to update staff member')
+  }
+  return res.json() as Promise<StaffProfile>
+}
+
+/**
+ * PATCH /api/staff/me (Authenticated)
+ * Updates the caller's own display name.
+ */
+export async function apiUpdateMyProfile(payload: { full_name: string }) {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/staff/me`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Failed to update your profile')
+  }
+  return res.json() as Promise<StaffProfile>
+}
+
+/**
+ * POST /api/staff/heartbeat (Authenticated)
+ *
+ * Stamps `last_seen_at` so the Staff Manager can show who is online. The
+ * response echoes the caller's live role and access flag, which is how an
+ * admin's change reaches an already-open session without a page reload.
+ *
+ * Pass `sign_in: true` once per browser session to also stamp
+ * `last_sign_in_at`.
+ */
+export async function apiSendHeartbeat(options?: { signIn?: boolean }): Promise<{
+  last_seen_at: string | null
+  /** False when the presence migration has not been applied yet. */
+  presence_available?: boolean
+  profile: Pick<StaffProfile, 'id' | 'role' | 'is_active' | 'full_name'>
+}> {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/staff/heartbeat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ sign_in: options?.signIn === true }),
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Presence update failed')
+  }
+  return res.json()
+}
+
+/**
+ * POST /api/staff/me/avatar (Authenticated)
+ *
+ * Uploads the raw image bytes rather than multipart form data — a single
+ * file field does not justify a multipart parser. The server stores the file
+ * with the service-role key, so no Storage RLS policy is involved.
+ */
+export async function apiUploadAvatar(file: File): Promise<StaffProfile> {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/staff/me/avatar`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': file.type },
+    body: file,
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Failed to upload your photo')
+  }
+  return res.json()
+}
+
+/** DELETE /api/staff/me/avatar (Authenticated) — removes the caller's photo. */
+export async function apiRemoveAvatar(): Promise<StaffProfile> {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/staff/me/avatar`, {
+    method: 'DELETE',
+    headers,
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Failed to remove your photo')
+  }
+  return res.json()
+}
+
+/**
+ * POST /api/staff/:id/avatar (Admin only)
+ *
+ * Sets another member's photo. Most staff never open Settings, so this is how
+ * an administrator supplies the picture the Staff Manager displays.
+ */
+export async function apiUploadStaffAvatar(staffId: string, file: File): Promise<StaffProfile> {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/staff/${staffId}/avatar`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': file.type },
+    body: file,
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Failed to upload that photo')
+  }
+  return res.json()
+}
+
+/** DELETE /api/staff/:id/avatar (Admin only) — clears another member's photo. */
+export async function apiRemoveStaffAvatar(staffId: string): Promise<StaffProfile> {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/staff/${staffId}/avatar`, {
+    method: 'DELETE',
+    headers,
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Failed to remove that photo')
   }
   return res.json()
 }
@@ -447,6 +601,38 @@ export async function apiSendLoginOtp(email: string): Promise<{
   if (!res.ok) {
     throw new Error(body?.message ?? 'Unable to send a code right now. Please try again.')
   }
+  return { sent: Boolean(body?.sent), reason: body?.reason, message: body?.message }
+}
+
+/** Why a password-reset request did not result in a delivered email. */
+export type PasswordResetReason = 'smtp' | 'refused' | 'delivery'
+
+/**
+ * POST /api/auth/send-password-reset  (Public, staff-gated)
+ *
+ * Asks the server to email a password-reset link. The server only mails when a
+ * custom SMTP relay is configured; otherwise it replies
+ * `{ sent: false, reason: 'smtp' }` so the caller can fall back to Supabase's
+ * mailer — whose own delivery is restricted and unverifiable.
+ *
+ * Deliberately does NOT throw on a non-2xx response: every outcome here is a
+ * decision the caller has to make (fall back, or show the user why not), so the
+ * result is returned rather than raised. Only a transport failure throws.
+ */
+export async function apiSendPasswordReset(
+  email: string,
+  redirectTo: string,
+): Promise<{ sent: boolean; reason?: PasswordResetReason; message?: string }> {
+  const res = await fetch(`${API_BASE}/auth/send-password-reset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, redirectTo }),
+  })
+
+  const body = await res.json().catch(() => null) as
+    | { sent?: boolean; reason?: PasswordResetReason; message?: string }
+    | null
+
   return { sent: Boolean(body?.sent), reason: body?.reason, message: body?.message }
 }
 

@@ -3,6 +3,13 @@
 -- PostgreSQL DDL — Run in Supabase SQL Editor
 -- (Idempotent & Rerunnable Migration)
 -- ============================================================
+--
+-- This file is the canonical definition for a BRAND-NEW database.
+--
+-- To bring an EXISTING database up to date, run
+-- `supabase/RUN_ALL_MIGRATIONS.sql` instead — it is the concatenation of
+-- everything under supabase/migrations/ and is what the application expects
+-- to have been applied.
 
 -- Enable UUID extension (already available in Supabase)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -45,9 +52,22 @@ CREATE TABLE IF NOT EXISTS public.staff_profiles (
     role           public.staff_role NOT NULL DEFAULT 'cashier',
     is_active      BOOLEAN NOT NULL DEFAULT TRUE,
     created_by     UUID REFERENCES public.staff_profiles(id),
+    -- Public URL of the member's photo in the `avatars` Storage bucket.
+    avatar_url      TEXT,
+    -- Stamped by the client heartbeat (~45s) while the app is open; drives
+    -- the "online now" indicator on the Staff Manager screen.
+    last_seen_at    TIMESTAMPTZ,
+    -- Stamped once per browser session; shown in the staff detail panel.
+    last_sign_in_at TIMESTAMPTZ,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Existing installs: bring a pre-presence table up to date (idempotent).
+ALTER TABLE public.staff_profiles
+    ADD COLUMN IF NOT EXISTS avatar_url      TEXT,
+    ADD COLUMN IF NOT EXISTS last_seen_at    TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS last_sign_in_at TIMESTAMPTZ;
 
 -- PRODUCT CATEGORIES
 CREATE TABLE IF NOT EXISTS public.product_categories (
@@ -459,6 +479,28 @@ CREATE INDEX IF NOT EXISTS idx_order_items_order ON public.order_items (order_id
 CREATE INDEX IF NOT EXISTS idx_inv_mov_inventory ON public.inventory_movements (inventory_id);
 CREATE INDEX IF NOT EXISTS idx_inv_mov_order     ON public.inventory_movements (order_id);
 CREATE INDEX IF NOT EXISTS idx_staff_user_id     ON public.staff_profiles (user_id);
+CREATE INDEX IF NOT EXISTS idx_staff_last_seen   ON public.staff_profiles (last_seen_at DESC);
+
+-- ============================================================
+-- 7b. REALTIME (Idempotent)
+-- ============================================================
+--
+-- The Staff Manager subscribes to postgres_changes on staff_profiles so a
+-- rename, role change or deactivation lands in every open admin session
+-- without a manual refresh. RLS still applies to Realtime, so only admins
+-- (via `admin_all_staff`) receive rows from this table.
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables
+        WHERE pubname    = 'supabase_realtime'
+          AND schemaname = 'public'
+          AND tablename  = 'staff_profiles'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.staff_profiles;
+    END IF;
+END $$;
 
 -- ============================================================
 -- 8. LOGIN ONE-TIME CODES (Idempotent)

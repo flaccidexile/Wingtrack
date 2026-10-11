@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { apiUpdatePassword } from '@/lib/api'
 import { MIN_PASSWORD_LENGTH } from '@/lib/validation'
+import Avatar from '@/components/ui/Avatar'
 import type { StaffRole } from '@/types'
 
 /** Below this width the sidebar becomes a slide-in drawer. */
@@ -15,6 +16,7 @@ type Page =
   | 'inventory'
   | 'analytics'
   | 'staff'
+  | 'settings'
 
 interface NavItem {
   id: Page
@@ -87,14 +89,26 @@ function StaffIcon({ active }: { active: boolean }) {
   )
 }
 
+function SettingsIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--sidebar-active)' : 'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  )
+}
+
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard',     roles: ['admin'],                       icon: DashIcon   },
-  { id: 'pos',       label: 'Point of Sale',  roles: ['admin', 'cashier'],            icon: PosIcon    },
-  { id: 'orders',    label: 'Transactions',   roles: ['admin'],                       icon: OrdersIcon },
-  { id: 'menu',      label: 'Menu Items',     roles: ['admin'],                       icon: MenuIcon   },
-  { id: 'inventory', label: 'Inventory',      roles: ['admin', 'inventory_personnel'], icon: InvIcon    },
-  { id: 'analytics', label: 'Analytics',      roles: ['admin'],                       icon: AnaIcon    },
-  { id: 'staff',     label: 'Staff Manager',  roles: ['admin'],                       icon: StaffIcon  },
+  { id: 'dashboard', label: 'Dashboard',     roles: ['admin'],                       icon: DashIcon     },
+  { id: 'pos',       label: 'Point of Sale',  roles: ['admin', 'cashier'],            icon: PosIcon      },
+  { id: 'orders',    label: 'Transactions',   roles: ['admin'],                       icon: OrdersIcon   },
+  { id: 'menu',      label: 'Menu Items',     roles: ['admin'],                       icon: MenuIcon     },
+  { id: 'inventory', label: 'Inventory',      roles: ['admin', 'inventory_personnel'], icon: InvIcon      },
+  { id: 'analytics', label: 'Analytics',      roles: ['admin'],                       icon: AnaIcon      },
+  { id: 'staff',     label: 'Staff Manager',  roles: ['admin'],                       icon: StaffIcon    },
+  // Settings is for everyone: it holds your own profile and password. The
+  // User Accounts section inside it is admin-only.
+  { id: 'settings',  label: 'Settings',       roles: ['admin', 'cashier', 'inventory_personnel'], icon: SettingsIcon },
 ]
 
 interface SidebarProps {
@@ -150,10 +164,6 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
     cashier: 'Cashier',
     inventory_personnel: 'Inventory Personnel',
   }
-
-  const initials = profile?.full_name
-    ? profile.full_name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
-    : '?'
 
   async function handlePasswordChange(e: React.FormEvent) {
     e.preventDefault()
@@ -326,16 +336,8 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
       {/* User + Sign Out */}
       <div style={{ padding: '18px 14px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8 }}>
-          <div
-            style={{
-              width: 40, height: 40, borderRadius: '50%',
-              background: 'var(--primary)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 14, fontWeight: 700, color: '#fdfaf6', flexShrink: 0,
-            }}
-          >
-            {initials}
-          </div>
+          {/* The signed-in user's own photo, falling back to initials. */}
+          <Avatar name={profile?.full_name} src={profile?.avatar_url} size={40} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--sidebar-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {profile?.full_name ?? 'Staff'}

@@ -12,6 +12,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useIsCompact } from '@/hooks/useMediaQuery'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import FoodImage from '@/components/ui/FoodImage'
 import type { Product, ProductCategory, InventoryItem } from '@/types'
 
 /** Badge styling per product type, shared by the table row and the mobile card. */
@@ -45,16 +46,23 @@ function MenuCard({
 
   return (
     <div className="card" style={{ padding: '14px 16px', opacity: prod.is_available ? 1 : 0.65 }}>
-      {/* Name + type badge */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-        <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--foreground)', minWidth: 0, overflowWrap: 'anywhere' }}>
-          {prod.name}
-        </span>
-        {prodType !== 'Regular' && (
-          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: tc.bg, color: tc.color, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
-            {tc.label}
-          </span>
-        )}
+      {/* Photo + name + type badge */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
+        <div style={{ width: 52, flexShrink: 0 }}>
+          <FoodImage name={prod.name} src={prod.image_url} height={52} radius={8} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--foreground)', minWidth: 0, overflowWrap: 'anywhere' }}>
+              {prod.name}
+            </span>
+            {prodType !== 'Regular' && (
+              <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: tc.bg, color: tc.color, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {tc.label}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Category + price */}
@@ -718,15 +726,20 @@ export default function MenuManager() {
                     >
                       {/* Name */}
                       <td style={{ padding: '16px 20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--foreground)' }}>
-                            {prod.name}
-                          </span>
-                          {prodType !== 'Regular' && (
-                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: tc.bg, color: tc.color, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                              {tc.label}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ width: 44, flexShrink: 0 }}>
+                            <FoodImage name={prod.name} src={prod.image_url} height={44} radius={8} />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
+                            <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--foreground)' }}>
+                              {prod.name}
                             </span>
-                          )}
+                            {prodType !== 'Regular' && (
+                              <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: tc.bg, color: tc.color, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                {tc.label}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
 

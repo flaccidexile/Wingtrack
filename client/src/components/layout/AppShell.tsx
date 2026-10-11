@@ -12,6 +12,7 @@ import MenuManager from '@/pages/admin/MenuManager'
 import PointOfSale from '@/pages/cashier/PointOfSale'
 import Inventory from '@/pages/inventory/Inventory'
 import OrdersList from '@/pages/orders/OrdersList'
+import Settings from '@/pages/settings/Settings'
 
 const DEFAULT_PAGE: Record<StaffRole, Page> = {
   admin: 'dashboard',
@@ -21,9 +22,9 @@ const DEFAULT_PAGE: Record<StaffRole, Page> = {
 
 /** Which pages each role is allowed to access */
 const PAGE_ACCESS: Record<StaffRole, Page[]> = {
-  admin: ['dashboard', 'pos', 'orders', 'menu', 'inventory', 'analytics', 'staff'],
-  cashier: ['pos'],
-  inventory_personnel: ['inventory'],
+  admin: ['dashboard', 'pos', 'orders', 'menu', 'inventory', 'analytics', 'staff', 'settings'],
+  cashier: ['pos', 'settings'],
+  inventory_personnel: ['inventory', 'settings'],
 }
 
 function canAccess(role: StaffRole | null, page: Page): boolean {
@@ -40,6 +41,7 @@ const PAGE_TITLES: Record<Page, string> = {
   inventory: 'Inventory',
   analytics: 'Analytics',
   staff: 'Staff Manager',
+  settings: 'Settings',
 }
 
 /** Below this width the sidebar collapses into a drawer and a top bar appears. */
@@ -173,6 +175,7 @@ export default function AppShell() {
               {safePage === 'inventory'  && <Inventory />}
               {safePage === 'analytics'  && <Analytics />}
               {safePage === 'staff'      && <StaffManager />}
+              {safePage === 'settings'   && <Settings />}
             </ErrorBoundary>
           </div>
         </main>

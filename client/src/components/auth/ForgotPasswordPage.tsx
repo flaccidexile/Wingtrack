@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAuth } from '@/hooks/useAuth'
+import { useAuth, type PasswordResetOutcome } from '@/hooks/useAuth'
 
 interface ForgotPasswordPageProps {
   onBack: () => void
@@ -9,8 +9,17 @@ export default function ForgotPasswordPage({ onBack }: ForgotPasswordPageProps) 
   const { sendPasswordReset } = useAuth()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
-  const [sent, setSent] = useState(false)
+  /**
+   * How the request resolved. `null` = the form is still showing.
+   *
+   * `sent` means our own mail relay took the message; `unconfirmed` means the
+   * request was accepted by Supabase's built-in mailer, which only delivers to
+   * the project's own team addresses — so we must not promise an email.
+   */
+  const [outcome, setOutcome] = useState<PasswordResetOutcome | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const sent = outcome !== null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -18,8 +27,7 @@ export default function ForgotPasswordPage({ onBack }: ForgotPasswordPageProps) 
     setError(null)
     setLoading(true)
     try {
-      await sendPasswordReset(email.trim())
-      setSent(true)
+      setOutcome(await sendPasswordReset(email.trim()))
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to send reset email. Please try again.')
     } finally {
@@ -95,14 +103,41 @@ export default function ForgotPasswordPage({ onBack }: ForgotPasswordPageProps) 
               <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 10 }}>
                 Check Your Email
               </h2>
-              <p style={{ fontSize: 14, color: 'var(--muted-foreground)', lineHeight: 1.6, marginBottom: 24 }}>
-                A password reset link has been sent to <strong style={{ color: 'var(--foreground)' }}>{email}</strong>.
-                Please check your inbox and follow the link to reset your password.
+              <p style={{ fontSize: 14, color: 'var(--muted-foreground)', lineHeight: 1.6, marginBottom: 20 }}>
+                {outcome === 'sent'
+                  ? <>A password reset link has been sent to <strong style={{ color: 'var(--foreground)' }}>{email}</strong>.</>
+                  : <>If <strong style={{ color: 'var(--foreground)' }}>{email}</strong> belongs to a staff account, a reset link is on its way.</>}
+                {' '}Please check your inbox and follow the link to reset your password.
               </p>
+
+              {/* Honest delivery notice. Supabase's built-in mailer accepts the
+                  request and returns 200 even when it delivers nothing, so
+                  without a configured relay we cannot promise an arrival. */}
+              {outcome === 'unconfirmed' && (
+                <div
+                  style={{
+                    textAlign: 'left',
+                    background: '#fffbeb',
+                    border: '1px solid #fcd34d',
+                    borderRadius: 8,
+                    padding: '12px 14px',
+                    fontSize: 12.5,
+                    color: '#92400e',
+                    lineHeight: 1.55,
+                    marginBottom: 20,
+                  }}
+                >
+                  <strong style={{ display: 'block', marginBottom: 3 }}>Not arrived within a few minutes?</strong>
+                  This project has no custom mail server configured, so password emails can be
+                  delayed or dropped. Ask an administrator to set up SMTP, or have them reset
+                  your password from Staff Manager.
+                </div>
+              )}
+
               <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 24 }}>
                 {"Didn't receive the email? Check your spam folder or "}
                 <button
-                  onClick={() => setSent(false)}
+                  onClick={() => setOutcome(null)}
                   style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', fontSize: 12 }}
                 >
                   try again
