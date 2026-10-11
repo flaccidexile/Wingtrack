@@ -350,7 +350,7 @@ export default function OrdersList() {
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
           <div className="scroll-x">
-          <div style={{ display: 'grid', gridTemplateColumns: '80px 150px 1fr 100px 110px 100px 140px', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)', minWidth: 780 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '62px 120px minmax(0, 1fr) 82px 98px 94px 126px', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)', minWidth: 720 }}>
             {['Order #', 'Date & Time', 'Items Summary', 'Payment', 'Total', 'Status', 'Actions'].map(h => (
               <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 {h}
@@ -376,13 +376,13 @@ export default function OrdersList() {
                 key={order.id}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '80px 150px 1fr 100px 110px 100px 140px',
+                  gridTemplateColumns: '62px 120px minmax(0, 1fr) 82px 98px 94px 126px',
                   gap: 0,
                   padding: '14px 20px',
                   borderBottom: i < filteredOrders.length - 1 ? '1px solid var(--muted)' : 'none',
                   alignItems: 'center',
                   background: isVoid ? 'rgba(254, 242, 242, 0.4)' : 'transparent',
-                  minWidth: 780,
+                  minWidth: 720,
                 }}
               >
                 <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 13, color: 'var(--foreground)' }}>
@@ -393,7 +393,7 @@ export default function OrdersList() {
                   {dateStr}
                 </span>
 
-                <div style={{ paddingRight: 16 }}>
+                <div style={{ paddingRight: 16, minWidth: 0 }}>
                   <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {itemsSummary || 'No items'}
                   </p>
