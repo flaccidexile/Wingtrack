@@ -226,10 +226,10 @@ export default function Settings() {
   return (
     <div className="page">
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
+        <h1 className="page-title" style={{ fontSize: 26 }}>
           Settings
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
+        <p className="page-subtitle">
           Manage your account, staff details and store preferences
         </p>
       </div>

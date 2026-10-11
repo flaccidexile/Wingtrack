@@ -29,6 +29,35 @@
   --warning-bg:          #fff7e6;
   --success:             #15803d;
   --success-bg:          #e8f5e9;
+
+  /* ── Elevation ──────────────────────────────────────────
+   * Warm-tinted shadows (they carry the page's brown hue rather than pure
+   * black) so raised surfaces read as part of the palette instead of grey
+   * smudges. Kept deliberately soft — this is a POS that runs all day, and
+   * heavy drop shadows get tiring fast.
+   */
+  --shadow-xs:    0 1px 2px rgba(25, 21, 18, 0.04);
+  --shadow-sm:    0 1px 3px rgba(25, 21, 18, 0.06), 0 1px 2px rgba(25, 21, 18, 0.04);
+  --shadow-md:    0 4px 12px rgba(25, 21, 18, 0.07), 0 2px 4px rgba(25, 21, 18, 0.04);
+  --shadow-lg:    0 12px 28px rgba(25, 21, 18, 0.10), 0 4px 8px rgba(25, 21, 18, 0.05);
+  --shadow-xl:    0 24px 56px rgba(25, 21, 18, 0.16), 0 8px 16px rgba(25, 21, 18, 0.06);
+  /* Brand-tinted glow, for primary actions only. */
+  --shadow-brand: 0 4px 14px rgba(234, 88, 12, 0.26);
+
+  /* Motion. One duration scale keeps transitions feeling like one system. */
+  --ease:      cubic-bezier(0.4, 0, 0.2, 1);
+  --t-fast:    0.13s;
+  --t-base:    0.2s;
+
+  /*
+   * The WINGTRACK background motif (public/bg-wings.svg).
+   *
+   * Kept as a token because it is consumed as a CSS *mask* on three different
+   * surfaces — .page, .pos-shell and the login screen — each tinting it
+   * differently via `background-color`. One file, one source of truth for the
+   * artwork; swapping the SVG swaps the motif everywhere.
+   */
+  --wing-motif: url('/bg-wings.svg');
 }
 
 .sidebar-textarea::placeholder {
@@ -56,27 +85,748 @@ body {
   font-size: 1rem;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-h1, h2, h3, h4, h5, h6 { font-family: 'Fraunces', serif; }
+h1, h2, h3, h4, h5, h6 { font-family: 'Fraunces', serif; letter-spacing: -0.01em; }
 
 code, .mono { font-family: 'DM Mono', monospace; }
 
+/* Brand-tinted selection so highlighting text still feels like the app. */
+::selection { background: rgba(234, 88, 12, 0.18); color: var(--foreground); }
+
+/* ── Focus ──────────────────────────────────────────────── */
+/*
+ * Keyboard focus was previously invisible on every button in the app, which
+ * makes the POS unusable without a mouse. `:focus-visible` (not `:focus`) so
+ * mouse clicks stay clean while tabbing gets an unmistakable ring.
+ */
+button:focus-visible,
+a:focus-visible,
+[role='button']:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+/* The sidebar sits on a near-black rail — the orange ring needs to be brighter
+   there or it disappears into the background. */
+aside button:focus-visible,
+aside a:focus-visible {
+  outline-color: var(--sidebar-active);
+}
+
 /* ── Scrollbar ──────────────────────────────────────────── */
-::-webkit-scrollbar          { width: 7px; height: 7px; }
+::-webkit-scrollbar          { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track    { background: transparent; }
-::-webkit-scrollbar-thumb    { background: var(--muted); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+::-webkit-scrollbar-thumb    {
+  background: var(--muted);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--primary); background-clip: content-box; }
+* { scrollbar-color: var(--muted) transparent; scrollbar-width: thin; }
+
+/* ── Sidebar rail ───────────────────────────────────────── */
+/*
+ * The rail is the largest flat surface in the app and was a single block of
+ * near-black. Two very quiet layers give it depth without adding noise:
+ *
+ *   ::before — the WINGTRACK motif, barely there on this dark ground
+ *   ::after  — a warm glow rising from behind the brand mark
+ *
+ * Both are absolutely positioned so they stay out of the flex layout, and both
+ * sit at negative z-index inside the rail's own stacking context. The inline
+ * `position: fixed` the rail takes on narrow screens overrides the `relative`
+ * here, which is fine — fixed also contains absolutely positioned children.
+ */
+.sidebar-rail {
+  position: relative;
+  isolation: isolate;
+}
+
+.sidebar-rail::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: rgba(249, 115, 22, 0.15);
+  -webkit-mask-image: var(--wing-motif);
+  mask-image: var(--wing-motif);
+  -webkit-mask-size: 280px 280px;
+  mask-size: 280px 280px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+}
+
+.sidebar-rail::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background: radial-gradient(
+    130% 55% at 50% 0%,
+    rgba(249, 115, 22, 0.16) 0%,
+    rgba(249, 115, 22, 0) 62%
+  );
+}
+
+/* ── Auth shell (sign in / sign up / recovery) ──────────── */
+/*
+ * Split layout: a photographic brand panel on the left, a warm cream form pane
+ * on the right.
+ *
+ * This is the one surface in the app that does NOT use the --wing-motif mask.
+ * A real, low-lit room does the emotional work a flat gradient could not, and
+ * the cream pane carries the brand's geometric language instead — corner
+ * bands, a dot grid, faint rings. The motif still runs behind every signed-in
+ * page and the sidebar, so the identity is continuous; the front door simply
+ * gets its own treatment.
+ */
+.auth-shell {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--background);
+}
+
+/*
+ * On the split layout the shell is pinned to exactly one viewport and the form
+ * pane scrolls internally.
+ *
+ * This is load-bearing. With only `min-height`, the shell grows to fit the
+ * form card — 755px at a 720px viewport — so the whole page scrolls and the
+ * brand panel's footer drops below the fold. Note the cause is the RIGHT pane,
+ * not the left: the card is the tallest thing on the screen, and trimming the
+ * brand panel's spacing does nothing about it. That misdiagnosis cost a round
+ * of edits that made the symptom slightly worse.
+ *
+ * Scoped to the split layout so narrow screens keep a normally scrolling page
+ * instead of a nested scroll container, which is awkward on mobile.
+ */
+@media (min-width: 961px) {
+  .auth-shell {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .auth-pane,
+  .auth-pane__scroll { min-height: 0; }
+}
+
+/* ── Left: brand panel ───────────────────────────────────── */
+.auth-brand {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  flex: 0 0 52%;
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 40px;
+  padding: 52px 54px 44px;
+  color: #fffdfa;
+  /* Only ever seen if the photograph fails to load, so it is set to the
+     photograph's own dominant tone rather than a neutral black. */
+  background-color: #16100c;
+}
+
+/* The photograph, as its own layer rather than the panel's `background`, so
+   the scrim can sit above it without the copy having to fight the image. */
+.auth-brand__photo {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image: url('/auth-bg.jpg');
+  background-size: cover;
+  background-position: center right;
+}
+
+/*
+ * The scrim does the accessibility work. The photo is warm and busy, so
+ * without it the headline would clear contrast over some regions and fail over
+ * others depending on the viewport. The left edge is nearly opaque and it
+ * opens up toward the right, where the image is most interesting.
+ *
+ * Tuned against measurement, not by eye: with the copy hidden, the composite
+ * behind the headline sits around L=0.03, which is ~13:1 against white — and
+ * ~9:1 for the 70%-alpha tagline. An earlier, heavier scrim measured 18:1,
+ * which is not "safer", it just means the photograph has been crushed into
+ * flat near-black and may as well not be there.
+ */
+.auth-brand__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 85% at 3% 104%, rgba(234, 88, 12, 0.42) 0%, rgba(234, 88, 12, 0) 58%),
+    linear-gradient(100deg,
+      rgba(13, 9, 6, 0.88) 0%,
+      rgba(13, 9, 6, 0.74) 38%,
+      rgba(16, 10, 7, 0.50) 72%,
+      rgba(20, 12, 8, 0.36) 100%);
+}
+
+.auth-brand__top {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+/* The supplied logo asset, in a circular badge. */
+.auth-brand__mark {
+  width: 62px;
+  height: 62px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--primary);
+  border: 2px solid rgba(255, 253, 250, 0.85);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.38);
+}
+
+.auth-brand__mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/*
+ * Lockup order is deliberate and is the app's original: the eyebrow sits ABOVE
+ * the wordmark, and the wordmark is Fraunces with "WING" in orange. A logotype
+ * set in a serif against sans UI text is the intended pairing here, not an
+ * inconsistency to be tidied away.
+ */
+.auth-brand__eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(253, 186, 116, 0.95);
+  margin-bottom: 4px;
+}
+
+.auth-brand__wordmark {
+  font-family: 'Fraunces', serif;
+  font-weight: 700;
+  font-size: 27px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #fffdfa;
+}
+
+.auth-brand__wordmark span { color: #fb923c; }
+
+.auth-brand__kicker {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: rgba(253, 186, 116, 0.78);
+  margin-bottom: 14px;
+}
+
+.auth-brand__headline {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  font-size: 43px;
+  line-height: 1.13;
+  letter-spacing: -0.028em;
+  color: #fffdfa;
+  margin-bottom: 18px;
+}
+
+.auth-brand__headline span { color: #fb923c; }
+
+.auth-brand__tagline {
+  font-size: 15px;
+  line-height: 1.65;
+  color: rgba(255, 253, 250, 0.70);
+  max-width: 44ch;
+  margin-bottom: 32px;
+}
+
+.auth-brand__features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.auth-brand__feature {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(255, 253, 250, 0.90);
+}
+
+/* An outlined rounded square around each feature glyph. The boxes give the
+   list a rhythm that bare icons did not, and they survive being read at a
+   glance over a busy photograph. */
+.auth-brand__ficon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  border: 1.5px solid rgba(249, 115, 22, 0.55);
+  background: rgba(249, 115, 22, 0.10);
+  color: #fb923c;
+}
+
+.auth-brand__foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 253, 250, 0.48);
+}
+
+.auth-brand__footrule {
+  width: 26px;
+  height: 1.5px;
+  flex-shrink: 0;
+  background: currentColor;
+  opacity: 0.75;
+}
+
+/* ── Right: form pane ────────────────────────────────────── */
+.auth-pane {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(162deg, #fffaf5 0%, #fdf2e8 54%, #fbe7d7 100%);
+}
+
+/*
+ * Decorative geometry, clipped by the pane.
+ *
+ * Sits at z-index -1, which inside a stacking context paints above the pane's
+ * own background but below everything in flow — so the corner bands can bleed
+ * off the edge without ever covering the card.
+ */
+.auth-pane__decor {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/*
+ * The corner bands.
+ *
+ * Each is a long, thin rectangle rotated about its own right-hand end, which
+ * is parked 170px past the pane's right edge. Both ends therefore finish
+ * off-screen. Drawing the bands as a clipped shape inside a box would leave a
+ * cut edge somewhere in the middle of the pane, which reads as a bug rather
+ * than as a design.
+ *
+ * The rotation is positive (clockwise), so the left end lifts and the band
+ * descends to the right.
+ */
+.auth-pane__stripe {
+  position: absolute;
+  right: -170px;
+  width: 640px;
+  height: 46px;
+  transform: rotate(30deg);
+  transform-origin: right center;
+  border-radius: 3px;
+}
+
+.auth-pane__stripe--a { top: 210px; background: #f97316; }
+.auth-pane__stripe--b { top: 118px; background: #fb923c; }
+
+/* Faint rings anchored off the bottom-right corner. */
+.auth-pane__ring {
+  position: absolute;
+  right: -130px;
+  bottom: -190px;
+  width: 470px;
+  height: 470px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(234, 88, 12, 0.12);
+  box-shadow: inset 0 0 0 26px rgba(234, 88, 12, 0.035);
+}
+
+/* A dot grid — the one piece of the pattern language that reads as texture
+   rather than as a shape. */
+.auth-pane__dots {
+  position: absolute;
+  right: 52px;
+  bottom: 44px;
+  width: 164px;
+  height: 126px;
+  background-image: radial-gradient(circle, rgba(234, 88, 12, 0.26) 2.1px, transparent 2.3px);
+  background-size: 33px 32px;
+}
+
+/* Warm bloom, bottom-left, so the cream pane does not read as flat paper. */
+.auth-pane__glow {
+  position: absolute;
+  left: -190px;
+  bottom: -230px;
+  width: 540px;
+  height: 540px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.13) 0%, rgba(249, 115, 22, 0) 68%);
+}
+
+/*
+ * The scroll container.
+ *
+ * `margin: auto` on the child rather than `align-items: center` on this
+ * element: a centred flex child taller than the viewport overflows past the
+ * top edge and cannot be scrolled back into view.
+ */
+.auth-pane__scroll {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.auth-pane__inner {
+  width: 100%;
+  max-width: 520px;
+  margin: auto;
+  padding: 44px 28px;
+}
+
+/* Only shown once the brand panel is hidden — see the media query below. */
+.auth-pane__mobilebrand { display: none; }
+
+/* ── Auth card ───────────────────────────────────────────── */
+.auth-card {
+  background: #ffffff;
+  border: 1px solid rgba(25, 21, 18, 0.07);
+  border-radius: 16px;
+  padding: 30px 30px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+  box-shadow:
+    0 18px 44px rgba(124, 45, 18, 0.13),
+    0 2px 8px rgba(124, 45, 18, 0.05);
+}
+
+.auth-card__head { margin-bottom: 1px; }
+
+.auth-card__eyebrow {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--primary);
+  margin-bottom: 9px;
+}
+
+.auth-card__title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  color: var(--foreground);
+  margin-bottom: 7px;
+}
+
+.auth-card__subtitle {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--muted-foreground);
+}
+
+/* The "need help" line sits under the card rather than inside it, so the card
+   itself ends on the sign-up call to action. */
+.auth-help {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 18px;
+  font-size: 12.5px;
+  color: var(--muted-foreground);
+}
+
+.auth-help svg { flex-shrink: 0; opacity: 0.75; }
+
+/*
+ * A leading icon inside a text field. The icon is positioned rather than laid
+ * out, so the input keeps its own full-width padding and the browser's native
+ * autofill styling is untouched.
+ */
+.auth-field { position: relative; }
+
+.auth-field__icon {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #a89a8c;
+  pointer-events: none;
+  display: flex;
+}
+
+/* The field lifts very slightly on focus, so the active row is obvious. */
+.auth-field:focus-within .auth-field__icon { color: var(--primary); }
+
+/* Auth inputs get their own class rather than reusing `.input`: the app's
+   inputs are tuned for dense data forms, and the sign-in screen wants a
+   taller, rounder field. */
+.auth-input {
+  width: 100%;
+  padding: 13px 16px 13px 45px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  color: var(--foreground);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+
+.auth-input::placeholder { color: #a89a8c; }
+
+.auth-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.13);
+}
+
+/* Fields with a trailing control (the password reveal) need the extra room. */
+.auth-input--trailing { padding-right: 47px; }
+
+/*
+ * Auth submit buttons.
+ *
+ * Deliberately NOT `.btn-primary`: that class sets its gradient through the
+ * `background` shorthand, so a `background-image: none` disabled state leaves
+ * `background-color` transparent and the button vanishes. Here the disabled
+ * state only changes opacity, which cannot produce an invisible control.
+ */
+.auth-submit {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 15px 18px;
+  border: none;
+  border-radius: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(180deg, #f97316 0%, #ea580c 100%);
+  box-shadow: 0 6px 16px rgba(234, 88, 12, 0.28);
+  transition: filter var(--t-fast) var(--ease), transform var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease);
+}
+
+.auth-submit:hover:not(:disabled) { filter: brightness(1.06); }
+.auth-submit:active:not(:disabled) { transform: translateY(1px); }
+
+.auth-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Secondary action — the Google button. */
+.auth-oauth {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 13px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--foreground);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+.auth-oauth:hover:not(:disabled) { background: #fbf9f6; border-color: #d8cec0; }
+
+/* The Email / OTP segmented control. */
+.auth-seg {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #f3efea;
+}
+
+.auth-seg__btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 12px;
+  border-radius: 9px;
+  /* A transparent border on the inactive segment too, so switching tabs does
+     not shift the labels by a pixel. */
+  border: 1.5px solid transparent;
+  background: transparent;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease);
+}
+
+.auth-seg__btn[aria-selected='true'] {
+  background: #fff;
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(25, 21, 18, 0.08);
+}
+
+/* ── Narrow screens: drop the brand panel, restore the wordmark ── */
+@media (max-width: 960px) {
+  .auth-brand { display: none; }
+  .auth-pane__inner { padding: 36px 20px; }
+
+  /* Scaled down with the pane, or the bands would swallow the whole corner. */
+  .auth-pane__stripe { width: 420px; right: -130px; height: 38px; }
+  .auth-pane__stripe--a { top: 158px; }
+  .auth-pane__stripe--b { top: 92px; }
+  .auth-pane__dots { display: none; }
+
+  .auth-pane__mobilebrand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+
+  .auth-pane__mobilebrand img {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 8px 20px rgba(154, 52, 18, 0.3);
+  }
+
+  .auth-pane__mobilebrand p {
+    font-family: 'Fraunces', serif;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--foreground);
+  }
+
+  .auth-pane__mobilebrand p span { color: #c2410c; }
+}
+
+/*
+ * Short viewports. The shell no longer grows with the card (see the
+ * min-width: 961px query above), so these only need to stop the brand panel
+ * from feeling cramped — the feature list is the last thing to go.
+ */
+@media (max-height: 780px) and (min-width: 961px) {
+  .auth-brand { padding: 38px 42px 32px; gap: 28px; }
+  .auth-brand__headline { font-size: 33px; }
+  .auth-brand__tagline { margin-bottom: 24px; }
+  .auth-brand__features { gap: 11px; }
+  .auth-brand__feature { font-size: 14px; }
+  .auth-brand__ficon { width: 31px; height: 31px; }
+}
+
+/* Drop the feature list entirely before letting the column overflow. */
+@media (max-height: 660px) and (min-width: 961px) {
+  .auth-brand__features { display: none; }
+}
+
+/*
+ * The form card is the tallest element on the screen, so it is the one that
+ * actually needs trimming when the viewport is short. At 720px it overflowed
+ * by ~35px and pushed the sign-up link below the fold.
+ */
+@media (max-height: 820px) and (min-width: 961px) {
+  .auth-pane__inner { padding: 30px 28px; }
+  .auth-card { padding: 26px 28px 24px; gap: 14px; }
+}
+
+@media (max-height: 700px) and (min-width: 961px) {
+  .auth-pane__inner { padding: 22px 28px; }
+  .auth-card { padding: 22px 26px 20px; gap: 12px; }
+  .auth-card__title { font-size: 26px; }
+}
+
+@media (max-width: 420px) {
+  .auth-card { padding: 26px 20px 24px; border-radius: 14px; }
+  .auth-card__title { font-size: 25px; }
+}
 
 /* ── Utility Classes ────────────────────────────────────── */
+/*
+ * `.card` is the app's single surface primitive. It now carries a soft warm
+ * shadow so panels read as sitting *above* the page rather than being painted
+ * onto it — the previous flat border-only card is what made every screen feel
+ * like a wireframe.
+ */
 .card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
+  box-shadow: var(--shadow-sm);
 }
 
+/* Opt-in lift for cards that are clickable. Static cards stay put, so hover
+   motion always means "this does something". */
+.card-hover {
+  transition: transform var(--t-base) var(--ease),
+              box-shadow var(--t-base) var(--ease),
+              border-color var(--t-base) var(--ease);
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  border-color: rgba(234, 88, 12, 0.28);
+}
+.card-hover:active { transform: translateY(0); }
+
 .btn-primary {
-  background: var(--primary);
+  background: linear-gradient(180deg, #f97316 0%, var(--primary) 100%);
   color: var(--primary-foreground);
   border: none;
   border-radius: var(--radius);
@@ -85,14 +835,23 @@ code, .mono { font-family: 'DM Mono', monospace; }
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.15s, transform 0.1s;
+  box-shadow: var(--shadow-brand);
+  transition: box-shadow var(--t-fast) var(--ease),
+              transform var(--t-fast) var(--ease),
+              filter var(--t-fast) var(--ease);
 }
-.btn-primary:hover { opacity: 0.88; }
-.btn-primary:active { transform: scale(0.98); }
-.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary:hover { filter: brightness(1.06); box-shadow: 0 6px 20px rgba(234, 88, 12, 0.34); }
+.btn-primary:active { transform: translateY(1px); box-shadow: var(--shadow-xs); }
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
 
 .btn-ghost {
-  background: transparent;
+  background: var(--card);
   color: var(--muted-foreground);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -101,9 +860,35 @@ code, .mono { font-family: 'DM Mono', monospace; }
   font-size: 0.9375rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  box-shadow: var(--shadow-xs);
+  transition: background var(--t-fast) var(--ease),
+              color var(--t-fast) var(--ease),
+              border-color var(--t-fast) var(--ease),
+              box-shadow var(--t-fast) var(--ease);
 }
-.btn-ghost:hover { background: var(--muted); color: var(--foreground); }
+.btn-ghost:hover {
+  background: var(--card);
+  color: var(--foreground);
+  border-color: rgba(234, 88, 12, 0.35);
+  box-shadow: var(--shadow-sm);
+}
+.btn-ghost:active { transform: translateY(1px); box-shadow: none; }
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 10px 20px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(185, 28, 28, 0.24);
+  transition: filter var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.btn-danger:hover { filter: brightness(1.08); }
+.btn-danger:active { transform: translateY(1px); }
 
 .input {
   padding: 12px 16px;
@@ -114,12 +899,85 @@ code, .mono { font-family: 'DM Mono', monospace; }
   font-size: 1rem;
   font-family: 'DM Sans', sans-serif;
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--t-fast) var(--ease),
+              box-shadow var(--t-fast) var(--ease);
   width: 100%;
 }
+.input::placeholder { color: var(--muted-foreground); opacity: 0.7; }
+.input:hover:not(:focus) { border-color: #d6cabb; }
 .input:focus {
   border-color: var(--ring);
   box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.16);
+}
+
+/* ── Section headings ───────────────────────────────────── */
+/*
+ * A small overline above a Fraunces heading. Used for page sub-sections so
+ * long screens get visual anchors instead of one continuous scroll.
+ */
+.overline {
+  font-family: 'DM Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* ── Badges ─────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.badge-success { background: var(--success-bg); color: var(--success); }
+.badge-danger  { background: var(--danger-bg);  color: var(--danger);  }
+.badge-warning { background: var(--warning-bg); color: var(--warning); }
+.badge-brand   { background: var(--secondary);  color: var(--secondary-foreground); }
+.badge-muted   { background: var(--muted);      color: var(--muted-foreground); }
+
+/* ── Empty states ───────────────────────────────────────── */
+/*
+ * A bare "No data." line reads as a bug. Every empty state gets an icon well
+ * plus a title and a hint, so an empty screen still looks intentional.
+ */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 24px;
+  gap: 4px;
+}
+.empty-state-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--secondary);
+  color: var(--primary);
+  margin-bottom: 12px;
+}
+.empty-state-title {
+  font-family: 'Fraunces', serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.empty-state-hint {
+  font-size: 13px;
+  color: var(--muted-foreground);
+  max-width: 32ch;
 }
 
 /* ── Animations ─────────────────────────────────────────── */
@@ -140,6 +998,27 @@ code, .mono { font-family: 'DM Mono', monospace; }
   border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
+}
+
+/* Skeleton shimmer — for content that has a known shape. A bare spinner in the
+   middle of an empty page gives no sense of what is coming; a shimmer that
+   matches the final layout does. */
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--muted);
+  border-radius: 6px;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  animation: shimmer 1.4s infinite;
 }
 
 @keyframes pop {
@@ -170,6 +1049,68 @@ code, .mono { font-family: 'DM Mono', monospace; }
   max-width: 100%;
   min-width: 0;
   overflow-x: hidden;
+  /*
+   * A very faint warm wash behind the content. Purely tonal — it stops the
+   * background reading as flat printer paper on tall screens without competing
+   * with the cards sitting on top of it.
+   *
+   * Painted as a background on .page (not a fixed ::before overlay) so it stays
+   * behind the content and can never end up above a modal.
+   */
+  background-image: radial-gradient(
+    120% 100% at 50% 0%,
+    rgba(234, 88, 12, 0.055) 0%,
+    rgba(234, 88, 12, 0) 68%
+  );
+  background-repeat: no-repeat;
+  background-position: top center;
+  background-size: 100% 320px;
+  position: relative;
+  /*
+   * `isolation` is load-bearing: it makes .page its own stacking context so the
+   * z-index:-1 motif below paints ABOVE .page's own background but BELOW all of
+   * its content. Without it the motif would drop behind `main`'s background and
+   * vanish.
+   */
+  isolation: isolate;
+}
+
+/*
+ * The WINGTRACK motif — scattered drumsticks, tiled behind every page.
+ *
+ * Applied as a mask rather than an <img> so the artwork is tinted by
+ * `background-color` (brand orange at ~5%) instead of shipping a coloured
+ * bitmap. At this alpha it reads as paper texture: you notice it on an empty
+ * screen and never notice it behind a table.
+ */
+.page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: rgba(234, 88, 12, 0.095);
+  -webkit-mask-image: var(--wing-motif);
+  mask-image: var(--wing-motif);
+  -webkit-mask-size: 300px 300px;
+  mask-size: 300px 300px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+}
+
+/* Page title block: overline + heading + supporting line. */
+.page-header { margin-bottom: 24px; }
+.page-title {
+  font-family: 'Fraunces', serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--foreground);
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+.page-subtitle {
+  font-size: 14px;
+  color: var(--muted-foreground);
 }
 
 /* Any table-like block gets a horizontal scroll container on narrow screens. */
@@ -189,6 +1130,39 @@ code, .mono { font-family: 'DM Mono', monospace; }
 }
 
 /* ── Point of Sale ──────────────────────────────────────── */
+/*
+ * A product tile. Inline styles cannot express :hover, so the interaction
+ * lives here while the layout stays inline on the button.
+ *
+ * The lift is deliberately larger than `.card-hover` — this is the one place
+ * in the app where a tap target needs to feel unmistakably picked.
+ */
+.pos-item {
+  transition: transform var(--t-fast) var(--ease),
+              box-shadow var(--t-base) var(--ease),
+              border-color var(--t-fast) var(--ease);
+  box-shadow: var(--shadow-sm);
+}
+.pos-item:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: rgba(234, 88, 12, 0.38) !important;
+}
+.pos-item:active { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+
+/* Checkout CTA in the cart rail. Sits on the dark rail, so the hover cue is a
+   brand glow rather than a border change. */
+.pos-checkout {
+  transition: filter var(--t-fast) var(--ease),
+              box-shadow var(--t-base) var(--ease),
+              transform var(--t-fast) var(--ease);
+}
+.pos-checkout:not(:disabled):hover {
+  filter: brightness(1.07);
+  box-shadow: 0 6px 20px rgba(249, 115, 22, 0.38);
+}
+.pos-checkout:not(:disabled):active { transform: translateY(1px); box-shadow: none; }
+
 /* Desktop: menu grid on the left, a fixed-width cart rail on the right.
    The shell must fill the available height exactly — never grow past it —
    so the cart rail always reaches the bottom of the viewport. */
@@ -199,6 +1173,33 @@ code, .mono { font-family: 'DM Mono', monospace; }
   min-height: 0;
   height: 100%;
   overflow: hidden;
+  /* Same reason as .page: own stacking context so z-index:-1 sits behind the
+     menu grid but above the shell's own background. */
+  position: relative;
+  isolation: isolate;
+}
+
+/*
+ * The motif goes on the shell, not on .pos-menu.
+ *
+ * .pos-menu is the scroll container — an absolutely positioned child there
+ * would scroll away with the grid. .pos-shell does not scroll (its children
+ * do), so the texture stays put behind the menu while the products move over
+ * it. The cart rail paints its own opaque background, so it covers its half.
+ */
+.pos-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: rgba(234, 88, 12, 0.10);
+  -webkit-mask-image: var(--wing-motif);
+  mask-image: var(--wing-motif);
+  -webkit-mask-size: 300px 300px;
+  mask-size: 300px 300px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
 }
 .pos-menu {
   flex: 1;
@@ -326,5 +1327,10 @@ code, .mono { font-family: 'DM Mono', monospace; }
   * { transition-duration: 0.01ms !important; }
   /* The LIVE dot stays solid rather than pulsing. */
   .live-dot { animation: none !important; }
+  /* Shimmer is replaced by a plain tint — still legible as "loading". */
+  .skeleton::after { animation: none; }
+  /* No hover lift; the shadow still conveys that the card is interactive. */
+  .card-hover:hover { transform: none; }
+  .pos-item:hover { transform: none; }
 }
 

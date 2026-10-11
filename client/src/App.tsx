@@ -180,7 +180,7 @@ function AppContent() {
           <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 24, lineHeight: 1.5 }}>
             Your sign-in succeeded, but no staff profile has been set up for you yet. Please contact an administrator to be provisioned.
           </p>
-          <button id="no-profile-signout" className="btn-primary" onClick={() => signOut()} style={{ width: '100%', padding: '12px', fontWeight: 600 }}>
+          <button id="unprovisioned-signout" className="btn-primary" onClick={() => signOut()} style={{ width: '100%', padding: '12px', fontWeight: 600 }}>
             Sign Out
           </button>
         </div>
@@ -208,7 +208,7 @@ function AppContent() {
           <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 24, lineHeight: 1.5 }}>
             An administrator has deactivated this account. Please contact your manager to restore access.
           </p>
-          <button id="no-profile-signout" className="btn-primary" onClick={() => signOut()} style={{ width: '100%', padding: '12px', fontWeight: 600 }}>
+          <button id="deactivated-signout" className="btn-primary" onClick={() => signOut()} style={{ width: '100%', padding: '12px', fontWeight: 600 }}>
             Sign Out
           </button>
         </div>

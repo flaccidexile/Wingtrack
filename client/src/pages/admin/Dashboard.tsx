@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { useChartWidth, tickInterval } from '@/hooks/useChartWidth'
+import EmptyState, { EMPTY_ICONS } from '@/components/ui/EmptyState'
 import type { Order } from '@/types'
 
 interface DailyStat {
@@ -19,15 +20,66 @@ interface TopItem { name: string; qty: number; revenue: number }
 
 type PeriodPreset = 'today' | 'week' | 'month' | 'custom'
 
-function KpiCard({ label, value, sub, color, trend }: { label: string; value: string; sub: string; color: string; trend: 'up' | 'down' | 'warn' }) {
-  const arrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '!'
-  const subColor = trend === 'up' ? '#4a7c4e' : trend === 'down' ? '#9b3a3a' : '#b84040'
+/** Small stroke icons for the KPI tiles. */
+function KpiIcon({ path }: { path: React.ReactNode }) {
   return (
-    <div className="card" style={{ padding: '20px 22px' }}>
-      <p style={{ fontSize: 11, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontFamily: 'DM Mono' }}>{label}</p>
-      <p style={{ fontFamily: 'Fraunces', fontSize: 28, fontWeight: 700, color, lineHeight: 1 }}>{value}</p>
-      <p style={{ fontSize: 12, color: subColor, marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <span>{arrow}</span>{sub}
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {path}
+    </svg>
+  )
+}
+
+const KPI_ICONS = {
+  revenue: <><path d="M12 2v20" /><path d="M17 6.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 3 5 3 5 1.1 5 3-2.2 3-5 3-5-1.1-5-3" /></>,
+  orders:  <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></>,
+  avg:     <><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></>,
+  stock:   <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12" y2="17.01" /></>,
+}
+
+/**
+ * A single KPI tile.
+ *
+ * Reads top-down: overline label, tinted icon, the number itself, then the
+ * supporting line. The left hairline is the only place the accent colour is
+ * used at full strength — it groups the tile with its metric without turning
+ * the dashboard into four competing blocks of colour.
+ */
+function KpiCard({ label, value, sub, color, trend, icon }: {
+  label: string
+  value: string
+  sub: string
+  color: string
+  trend: 'up' | 'down' | 'warn'
+  icon: React.ReactNode
+}) {
+  const trendMeta = {
+    up:   { arrow: '↑', color: 'var(--success)', bg: 'var(--success-bg)' },
+    down: { arrow: '↓', color: 'var(--danger)',  bg: 'var(--danger-bg)'  },
+    warn: { arrow: '!', color: 'var(--warning)', bg: 'var(--warning-bg)' },
+  }[trend]
+
+  return (
+    <div className="card" style={{ padding: '20px 22px 19px', position: 'relative', overflow: 'hidden' }}>
+      {/* Accent hairline — the tile's only saturated colour. */}
+      <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: color, opacity: 0.9 }} />
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+        <p className="overline">{label}</p>
+        <span style={{ width: 32, height: 32, borderRadius: 9, display: 'grid', placeItems: 'center', background: `${color}1a`, color, flexShrink: 0 }}>
+          <KpiIcon path={icon} />
+        </span>
+      </div>
+
+      <p style={{ fontFamily: 'Fraunces', fontSize: 29, fontWeight: 700, color: 'var(--foreground)', lineHeight: 1.05, letterSpacing: '-0.02em' }}>
+        {value}
+      </p>
+
+      <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 10, display: 'flex', alignItems: 'center', gap: 7 }}>
+        <span className="badge" style={{ background: trendMeta.bg, color: trendMeta.color, padding: '2px 7px' }}>
+          {trendMeta.arrow}
+        </span>
+        {sub}
       </p>
     </div>
   )
@@ -275,44 +327,67 @@ export default function Dashboard() {
   return (
     <div className="page">
       {/* Header */}
-      <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontFamily: 'Fraunces', fontSize: 28, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
+          <p className="overline" style={{ marginBottom: 7 }}>Overview</p>
+          <h1 className="page-title">
             {greeting}, Manager
           </h1>
-          <p style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>
+          <p className="page-subtitle">
             {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} · Wingtrack
           </p>
         </div>
 
-        {/* Period controls */}
+        {/* Period controls — a segmented control rather than four loose buttons,
+            so it reads as one choice with three states. */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {(['today', 'week', 'month'] as const).map((p, i) => (
-            <button
-              key={p}
-              id={`dashboard-period-${p}`}
-              onClick={() => { setPeriod(p); setShowCustom(false) }}
-              style={{
-                padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                border: '1px solid var(--border)',
-                background: period === p ? 'var(--primary)' : 'var(--card)',
-                color: period === p ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
-              }}
-            >
-              {['Today', 'This Week', 'This Month'][i]}
-            </button>
-          ))}
+          <div
+            role="group"
+            aria-label="Reporting period"
+            style={{
+              display: 'flex', gap: 2, padding: 3,
+              background: 'var(--muted)', borderRadius: 10,
+              boxShadow: 'inset 0 1px 2px rgba(25,21,18,0.05)',
+            }}
+          >
+            {(['today', 'week', 'month'] as const).map((p, i) => {
+              const active = period === p
+              return (
+                <button
+                  key={p}
+                  id={`dashboard-period-${p}`}
+                  aria-pressed={active}
+                  onClick={() => { setPeriod(p); setShowCustom(false) }}
+                  style={{
+                    padding: '7px 15px', borderRadius: 7, fontSize: 13, cursor: 'pointer',
+                    fontFamily: 'DM Sans', fontWeight: active ? 600 : 500,
+                    border: 'none',
+                    background: active ? 'var(--card)' : 'transparent',
+                    color: active ? 'var(--primary)' : 'var(--muted-foreground)',
+                    boxShadow: active ? 'var(--shadow-sm)' : 'none',
+                    transition: 'background var(--t-fast) var(--ease), color var(--t-fast) var(--ease)',
+                  }}
+                >
+                  {['Today', 'This Week', 'This Month'][i]}
+                </button>
+              )
+            })}
+          </div>
 
           {/* Custom date range toggle */}
           <button
             id="dashboard-period-custom"
+            aria-pressed={period === 'custom'}
             onClick={() => { setPeriod('custom'); setShowCustom(s => !s) }}
             style={{
               padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer',
+              fontFamily: 'DM Sans',
               border: '1px solid var(--border)',
               background: period === 'custom' ? 'var(--primary)' : 'var(--card)',
               color: period === 'custom' ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+              boxShadow: period === 'custom' ? 'var(--shadow-brand)' : 'var(--shadow-xs)',
               display: 'flex', alignItems: 'center', gap: 6,
+              transition: 'all var(--t-fast) var(--ease)',
             }}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -361,17 +436,79 @@ export default function Dashboard() {
       )}
 
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}>
-          <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+        /*
+         * Skeleton mirrors the real layout (four KPI tiles, a wide chart, a
+         * list panel) so the page does not visibly jump when data lands.
+         */
+        <div aria-busy="true" aria-label="Loading dashboard">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 28 }}>
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className="card" style={{ padding: '20px 22px 19px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <div className="skeleton" style={{ width: 88, height: 11 }} />
+                  <div className="skeleton" style={{ width: 32, height: 32, borderRadius: 9 }} />
+                </div>
+                <div className="skeleton" style={{ width: 132, height: 28, marginBottom: 13 }} />
+                <div className="skeleton" style={{ width: 150, height: 12 }} />
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18, marginBottom: 28 }}>
+            <div className="card" style={{ padding: '24px 26px', gridColumn: 'span 2', minWidth: 0 }}>
+              <div className="skeleton" style={{ width: 150, height: 16, marginBottom: 9 }} />
+              <div className="skeleton" style={{ width: 110, height: 12, marginBottom: 22 }} />
+              <div className="skeleton" style={{ width: '100%', height: 200 }} />
+            </div>
+            <div className="card" style={{ padding: '24px 26px' }}>
+              <div className="skeleton" style={{ width: 110, height: 16, marginBottom: 22 }} />
+              {[0, 1, 2, 3, 4].map(i => (
+                <div key={i} style={{ marginBottom: 15 }}>
+                  <div className="skeleton" style={{ width: `${78 - i * 8}%`, height: 12, marginBottom: 7 }} />
+                  <div className="skeleton" style={{ width: '100%', height: 6, borderRadius: 3 }} />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       ) : (
         <>
           {/* KPIs */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 28 }}>
-            <KpiCard label="Total Revenue"    value={`\u20B1${totalRevenue.toLocaleString('en-PH', { minimumFractionDigits: 0 })}`}  sub="Completed orders only"   color="#9b5e28"  trend="up"   />
-            <KpiCard label="Total Orders"     value={totalOrders.toString()}   sub="Completed transactions"   color="#c47a2e"  trend="up"   />
-            <KpiCard label="Avg. Order Value" value={`\u20B1${avgOrder.toFixed(2)}`}   sub="Per completed order"      color="#7a4520"  trend={avgOrder > 150 ? 'up' : 'down'} />
-            <KpiCard label="Low Stock Items"  value={lowStockCount.toString()} sub="Needs attention"           color="#b84040"  trend="warn" />
+            <KpiCard
+              label="Total Revenue"
+              value={`\u20B1${totalRevenue.toLocaleString('en-PH', { minimumFractionDigits: 0 })}`}
+              sub="Completed orders only"
+              color="#ea580c"
+              trend="up"
+              icon={KPI_ICONS.revenue}
+            />
+            <KpiCard
+              label="Total Orders"
+              value={totalOrders.toString()}
+              sub="Completed transactions"
+              color="#f97316"
+              trend="up"
+              icon={KPI_ICONS.orders}
+            />
+            <KpiCard
+              label="Avg. Order Value"
+              value={`\u20B1${avgOrder.toFixed(2)}`}
+              sub="Per completed order"
+              color="#c2410c"
+              trend={avgOrder > 150 ? 'up' : 'down'}
+              icon={KPI_ICONS.avg}
+            />
+            <KpiCard
+              label="Low Stock Items"
+              value={lowStockCount.toString()}
+              /* Zero low-stock items is the good outcome, so the tile flips to a
+                 positive signal rather than always reading as a warning. */
+              sub={lowStockCount > 0 ? 'Needs attention' : 'All stocked'}
+              color={lowStockCount > 0 ? '#b91c1c' : '#15803d'}
+              trend={lowStockCount > 0 ? 'warn' : 'up'}
+              icon={KPI_ICONS.stock}
+            />
           </div>
 
           {/* Charts */}
@@ -391,8 +528,8 @@ export default function Dashboard() {
                 <AreaChart data={chartData} margin={{ bottom: 20 }}>
                   <defs>
                     <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#c47a2e" stopOpacity={0.25}/>
-                      <stop offset="95%" stopColor="#c47a2e" stopOpacity={0}/>
+                      <stop offset="5%"  stopColor="#ea580c" stopOpacity={0.28}/>
+                      <stop offset="95%" stopColor="#ea580c" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -409,7 +546,7 @@ export default function Dashboard() {
                   />
                   <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} width={38} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Area type="monotone" dataKey="revenue" stroke="#c47a2e" strokeWidth={2} fill="url(#rev)" />
+                  <Area type="monotone" dataKey="revenue" stroke="#ea580c" strokeWidth={2.2} fill="url(#rev)" />
                   <Area type="monotone" dataKey="orders" stroke="transparent" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -419,7 +556,12 @@ export default function Dashboard() {
             <div className="card" style={{ padding: '24px 26px' }}>
               <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, color: 'var(--foreground)', marginBottom: 18 }}>Top Sellers</h3>
               {topItems.length === 0 ? (
-                <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>No sales data yet.</p>
+                <EmptyState
+                  compact
+                  icon={EMPTY_ICONS.chart}
+                  title="No sales yet"
+                  hint="Top sellers appear once orders are completed in this period."
+                />
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   {topItems.map((item, i) => (
@@ -450,7 +592,12 @@ export default function Dashboard() {
                 <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{periodLabel}</span>
               </div>
               {recentOrders.length === 0 ? (
-                <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>No recent orders.</p>
+                <EmptyState
+                  compact
+                  icon={EMPTY_ICONS.receipt}
+                  title="No transactions yet"
+                  hint="Completed orders for this period will show up here."
+                />
               ) : (
                 <div>
                   {/* Column budget: order numbers are short ("#282"), methods are

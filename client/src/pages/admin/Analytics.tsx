@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { useChartWidth, tickInterval } from '@/hooks/useChartWidth'
+import EmptyState, { EMPTY_ICONS } from '@/components/ui/EmptyState'
 import type { Order } from '@/types'
 
 const PIE_COLORS = ['#9b5e28', '#c47a2e', '#dba96a', '#ecddd0']
@@ -143,7 +144,7 @@ export default function Analytics() {
       {/* Header */}
       <div style={{ marginBottom: 26, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Sales Analytics</h1>
+          <h1 className="page-title" style={{ fontSize: 26 }}>Sales Analytics</h1>
           <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Performance overview for Wingtrack</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -256,7 +257,12 @@ export default function Analytics() {
               </div>
             ))}
             {topProducts.length === 0 && (
-              <p style={{ fontSize: 13, color: 'var(--muted-foreground)', paddingTop: 14 }}>No data for this period.</p>
+              <EmptyState
+                compact
+                icon={EMPTY_ICONS.chart}
+                title="No data for this period"
+                hint="Pick a wider date range, or check back after more orders are completed."
+              />
             )}
           </div>
         </>

@@ -8,6 +8,7 @@ import { activityColor, describeActivity, isOnline } from '@/lib/presence'
 import { ROLE_BADGE, STAFF_ROLES, roleLabel } from '@/lib/staff'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import Avatar from '@/components/ui/Avatar'
+import EmptyState, { EMPTY_ICONS } from '@/components/ui/EmptyState'
 import EditStaffModal from '@/components/staff/EditStaffModal'
 import StaffDetailModal from '@/components/staff/StaffDetailModal'
 import type { StaffProfile, StaffRole } from '@/types'
@@ -477,7 +478,7 @@ export default function StaffManager() {
       {/* Header */}
       <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Staff Manager</h1>
+          <h1 className="page-title" style={{ fontSize: 26 }}>Staff Manager</h1>
           <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Provision, manage and monitor Wingtrack staff accounts</p>
         </div>
         <button
@@ -677,7 +678,11 @@ export default function StaffManager() {
             })}
 
             {staff.length === 0 && (
-              <p style={{ padding: '40px 24px', fontSize: 14, color: 'var(--muted-foreground)' }}>No staff accounts yet. Add your first staff member above.</p>
+              <EmptyState
+                icon={EMPTY_ICONS.users}
+                title="No staff accounts yet"
+                hint="Add your first staff member to start tracking access and activity."
+              />
             )}
           </div>
         </div>

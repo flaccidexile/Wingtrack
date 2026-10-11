@@ -254,10 +254,10 @@ export default function OrdersList() {
       {/* Header */}
       <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
+          <h1 className="page-title" style={{ fontSize: 26 }}>
             Transactions
           </h1>
-          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
+          <p className="page-subtitle">
             {role === 'admin' ? 'All store customer orders and transaction audits' : 'Your recorded sales and customer orders'}
           </p>
         </div>

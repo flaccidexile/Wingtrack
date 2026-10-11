@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
+  <!--
+    WINGTRACK background motif: a scattered wing tile.
+
+    Used ONLY as a CSS mask (the wing motif token in index.css), never as a
+    painted image. That is deliberate. A mask carries the shape's alpha and
+    nothing else, so the same file can be tinted brand orange behind the app,
+    warm brown on the login gradient, and a faint ember on the dark sidebar. It
+    also stays crisp at any zoom and costs ~2 KB instead of a bitmap.
+
+    Three constraints, all learned the hard way:
+
+    1. NO DOUBLE HYPHEN ANYWHERE IN THIS FILE, comments included. A word written
+       with two leading dashes is a fatal XML token error, and a malformed SVG
+       used as a mask does not warn: it renders as an empty image, so the mask
+       silently paints nothing at all. Validate with an XML parser after editing.
+
+    2. The shapes are OUTLINES, which is why the tint alpha at the call site is
+       around 10 to 15 percent rather than 5. Hairline strokes carry only about
+       1% coverage of the tile, so a very low alpha washes out to flat cream.
+
+    3. It is a WING, not a drumstick. A drumstick outline was drawn first and
+       twice revised, but a rounded meat portion on a narrow shaft is
+       geometrically a balloon, and at background scale that is exactly how it
+       read. Slender feather blades have no such reading, and a wing matches the
+       brand name directly.
+
+    Strokes are fully opaque black so the mask has clean edges; the caller
+    controls intensity with the background-color alpha.
+
+    Every shape sits fully inside the tile with margin, so the tile repeats
+    seamlessly without clipping.
+  -->
+  <defs>
+    <!--
+      One feather blade: a slender curved lens that tapers to a point at the
+      tip. Root sits at the origin, tip at about (60,-3), so a blade is rotated
+      into place rather than redrawn.
+    -->
+    <path id="blade" d="M0,-6 Q32,-15 60,-3 Q32,3 0,6 Z"
+          fill="none" stroke="#000" stroke-width="2.6"
+          stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!--
+      A wing: four blades fanned out, each root stepped down and right along the
+      leading edge so the feathers overlap the way a real wing does. Without the
+      stagger the blades share a single root and read as a hand fan.
+    -->
+    <g id="wing">
+      <use href="#blade" transform="translate(0,0) rotate(-26)"/>
+      <use href="#blade" transform="translate(6,7) rotate(-8) scale(0.92)"/>
+      <use href="#blade" transform="translate(11,14) rotate(9) scale(0.82)"/>
+      <use href="#blade" transform="translate(15,21) rotate(25) scale(0.70)"/>
+    </g>
+  </defs>
+
+  <g fill="none" stroke="#000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#wing" transform="translate(62,60) rotate(-14) scale(0.82)"/>
+    <use href="#wing" transform="translate(178,84) rotate(22) scale(0.70)"/>
+    <use href="#wing" transform="translate(74,178) rotate(10) scale(0.74)"/>
+    <use href="#wing" transform="translate(186,190) rotate(-30) scale(0.80)"/>
+
+    <!-- A few dots break up the rhythm so the tile does not read as a grid. -->
+    <circle cx="126" cy="26" r="2.6"/>
+    <circle cx="28" cy="128" r="2.2"/>
+    <circle cx="212" cy="136" r="2.6"/>
+    <circle cx="126" cy="214" r="2.2"/>
+  </g>
+</svg>

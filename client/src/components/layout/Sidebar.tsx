@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { apiUpdatePassword } from '@/lib/api'
 import { MIN_PASSWORD_LENGTH } from '@/lib/validation'
 import Avatar from '@/components/ui/Avatar'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import type { StaffRole } from '@/types'
 
 /** Below this width the sidebar becomes a slide-in drawer. */
@@ -106,10 +108,25 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'inventory', label: 'Inventory',      roles: ['admin', 'inventory_personnel'], icon: InvIcon      },
   { id: 'analytics', label: 'Analytics',      roles: ['admin'],                       icon: AnaIcon      },
   { id: 'staff',     label: 'Staff Manager',  roles: ['admin'],                       icon: StaffIcon    },
-  // Settings is for everyone: it holds your own profile and password. The
-  // User Accounts section inside it is admin-only.
-  { id: 'settings',  label: 'Settings',       roles: ['admin', 'cashier', 'inventory_personnel'], icon: SettingsIcon },
 ]
+
+/**
+ * Settings is deliberately NOT part of NAV_ITEMS.
+ *
+ * The main nav group is about running the store — selling, stock, staff. The
+ * settings rail is about the account and the app, so it is pinned to the
+ * bottom of the sidebar beside the signed-in user instead of scrolling away
+ * with the operational items.
+ *
+ * It is still for everyone: it holds your own profile and password. The User
+ * Accounts section inside it is admin-only.
+ */
+const SETTINGS_ITEM: NavItem = {
+  id: 'settings',
+  label: 'Settings',
+  roles: ['admin', 'cashier', 'inventory_personnel'],
+  icon: SettingsIcon,
+}
 
 interface SidebarProps {
   page: Page
@@ -158,6 +175,52 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
   const drawerOpen = isNarrow && mobileOpen
 
   const visibleNav = NAV_ITEMS.filter(item => role && item.roles.includes(role))
+  const showSettings = !!role && SETTINGS_ITEM.roles.includes(role)
+
+  /** One nav row. Shared so the pinned Settings button matches the main group. */
+  function renderNavButton({ id, label, icon: Icon }: NavItem) {
+    const active = page === id
+    return (
+      <button
+        key={id}
+        id={`nav-${id}`}
+        onClick={() => { setPage(id); onCloseMobile?.() }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 13,
+          padding: '11px 16px',
+          borderRadius: 9,
+          border: 'none',
+          cursor: 'pointer',
+          fontFamily: 'DM Sans',
+          fontSize: 14,
+          fontWeight: active ? 600 : 500,
+          textAlign: 'left',
+          width: '100%',
+          transition: 'all 0.15s ease',
+          background: active ? 'rgba(235,165,79,0.14)' : 'transparent',
+          color: active ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
+          position: 'relative',
+        }}
+        onMouseEnter={e => {
+          if (!active) {
+            (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'
+            ;(e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)'
+          }
+        }}
+        onMouseLeave={e => {
+          if (!active) {
+            (e.currentTarget as HTMLElement).style.background = 'transparent'
+            ;(e.currentTarget as HTMLElement).style.color = 'var(--sidebar-muted)'
+          }
+        }}
+      >
+        <Icon active={active} />
+        {label}
+      </button>
+    )
+  }
 
   const roleLabel: Record<StaffRole, string> = {
     admin: 'Admin / Manager',
@@ -213,6 +276,7 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
       )}
 
       <aside
+        className="sidebar-rail"
         style={{
           background: 'var(--sidebar)',
           display: 'flex',
@@ -288,164 +352,108 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
 
         {/* Nav */}
         <nav style={{ flex: 1, overflowY: 'auto', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {visibleNav.map(({ id, label, icon: Icon }) => {
-            const active = page === id
-            return (
-              <button
-                key={id}
-                id={`nav-${id}`}
-                onClick={() => { setPage(id); onCloseMobile?.() }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 13,
-                  padding: '11px 16px',
-                  borderRadius: 9,
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontFamily: 'DM Sans',
-                  fontSize: 14,
-                  fontWeight: active ? 600 : 500,
-                  textAlign: 'left',
-                  width: '100%',
-                  transition: 'all 0.15s ease',
-                  background: active ? 'rgba(235,165,79,0.14)' : 'transparent',
-                  color: active ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
-                  position: 'relative',
-                }}
-                onMouseEnter={e => {
-                  if (!active) {
-                    (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'
-                    ;(e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)'
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (!active) {
-                    (e.currentTarget as HTMLElement).style.background = 'transparent'
-                    ;(e.currentTarget as HTMLElement).style.color = 'var(--sidebar-muted)'
-                  }
-                }}
-              >
-                <Icon active={active} />
-                {label}
-              </button>
-            )
-          })}
+          {visibleNav.map(renderNavButton)}
         </nav>
 
-      {/* User + Sign Out */}
-      <div style={{ padding: '18px 14px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8 }}>
-          {/* The signed-in user's own photo, falling back to initials. */}
-          <Avatar name={profile?.full_name} src={profile?.avatar_url} size={40} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--sidebar-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {profile?.full_name ?? 'Staff'}
-            </p>
-            <p style={{ fontSize: 11, color: 'var(--sidebar-muted)', fontWeight: 500 }}>
-              {role ? roleLabel[role] : ''}
-            </p>
+      {/* Bottom stack: the pinned Settings rail, then the account block.
+          One border-top covers both so the sidebar reads as a single footer. */}
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+        {showSettings && (
+          <div style={{ padding: '12px 12px 0' }}>{renderNavButton(SETTINGS_ITEM)}</div>
+        )}
+
+        <div style={{ padding: '14px 14px 18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8 }}>
+            {/* The signed-in user's own photo, falling back to initials. */}
+            <Avatar name={profile?.full_name} src={profile?.avatar_url} size={40} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--sidebar-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {profile?.full_name ?? 'Staff'}
+              </p>
+              <p style={{ fontSize: 11, color: 'var(--sidebar-muted)', fontWeight: 500 }}>
+                {role ? roleLabel[role] : ''}
+              </p>
+            </div>
+            <button
+              onClick={() => { setShowPwdModal(true); setPwdError(null); setPwdSuccess(false) }}
+              title="Change password"
+              style={{
+                background: 'transparent', border: 'none', color: 'var(--sidebar-muted)',
+                cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex', alignItems: 'center',
+              }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)'}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-muted)'}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </button>
           </div>
+
           <button
-            onClick={() => { setShowPwdModal(true); setPwdError(null); setPwdSuccess(false) }}
-            title="Change password"
+            id="btn-signout"
+            onClick={() => setShowSignOutConfirm(true)}
             style={{
-              background: 'transparent', border: 'none', color: 'var(--sidebar-muted)',
-              cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex', alignItems: 'center',
+              width: '100%', marginTop: 8, padding: '10px', background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8,
+              fontSize: 13, color: 'var(--sidebar-muted)', cursor: 'pointer',
+              fontFamily: 'DM Sans', fontWeight: 500, transition: 'all 0.15s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
             }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-muted)'}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLElement).style.background = 'rgba(185,28,28,0.16)'
+              ;(e.currentTarget as HTMLElement).style.color = '#fca5a5'
+              ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(252,165,165,0.3)'
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLElement).style.background = 'transparent'
+              ;(e.currentTarget as HTMLElement).style.color = 'var(--sidebar-muted)'
+              ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.14)'
+            }}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
             </svg>
+            Sign Out
           </button>
         </div>
-
-        <button
-          id="btn-signout"
-          onClick={() => setShowSignOutConfirm(true)}
-          style={{
-            width: '100%', marginTop: 8, padding: '10px', background: 'transparent',
-            border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8,
-            fontSize: 13, color: 'var(--sidebar-muted)', cursor: 'pointer',
-            fontFamily: 'DM Sans', fontWeight: 500, transition: 'all 0.15s',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-          }}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.background = 'rgba(185,28,28,0.16)'
-            ;(e.currentTarget as HTMLElement).style.color = '#fca5a5'
-            ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(252,165,165,0.3)'
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.background = 'transparent'
-            ;(e.currentTarget as HTMLElement).style.color = 'var(--sidebar-muted)'
-            ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.14)'
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-          Sign Out
-        </button>
       </div>
 
-      {/* Sign Out Confirmation Modal */}
-      {showSignOutConfirm && (
-        <div
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
-            backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400,
-          }}
-          onClick={e => { if (e.target === e.currentTarget) setShowSignOutConfirm(false) }}
-        >
-          <div className="card fade-in" style={{ width: '100%', maxWidth: 360, padding: '28px 26px', textAlign: 'center', boxShadow: '0 25px 60px rgba(0,0,0,0.35)' }}>
-            <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(185,28,28,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16 17 21 12 16 7"/>
-                <line x1="21" y1="12" x2="9" y2="12"/>
-              </svg>
-            </div>
-            <h3 style={{ fontFamily: 'Fraunces', fontSize: 18, fontWeight: 700, color: 'var(--foreground)', marginBottom: 8 }}>Sign Out?</h3>
-            <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 22 }}>You will be logged out of your current session. Any unsaved changes will be lost.</p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                id="btn-signout-cancel"
-                onClick={() => setShowSignOutConfirm(false)}
-                className="btn-ghost"
-                style={{ flex: 1, padding: '10px' }}
-              >
-                Cancel
-              </button>
-              <button
-                id="btn-signout-confirm"
-                onClick={() => { setShowSignOutConfirm(false); signOut() }}
-                style={{
-                  flex: 1, padding: '10px', borderRadius: 8, border: 'none',
-                  background: '#b91c1c', color: '#fff', fontSize: 13, fontWeight: 600,
-                  cursor: 'pointer', fontFamily: 'DM Sans', transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#991b1b'}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = '#b91c1c'}
-              >
-                Yes, Sign Out
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/*
+        Sign-out confirmation.
 
-      {/* Change Password Modal */}
-      {showPwdModal && (
+        This was previously a hand-rolled modal rendered inline right here, and
+        it was invisible: `.sidebar-rail` sets `isolation: isolate` (so the
+        motif pseudo-element can sit at z-index -1 without dropping behind the
+        page), which makes the rail its own stacking context. A z-index on a
+        descendant is then scoped *inside* that context, so the overlay painted
+        underneath the main content — clicking "Sign Out" appeared to do
+        nothing. ConfirmDialog portals to document.body, which escapes the rail
+        entirely; every other dialog in the app already does this.
+      */}
+      <ConfirmDialog
+        open={showSignOutConfirm}
+        tone="danger"
+        title="Sign out?"
+        message="You will be returned to the sign-in screen. Anything you have not saved will be lost."
+        confirmLabel="Yes, sign out"
+        cancelLabel="Cancel"
+        onConfirm={() => { setShowSignOutConfirm(false); signOut() }}
+        onCancel={() => setShowSignOutConfirm(false)}
+      />
+
+      {/* Change Password Modal — portalled for the same reason as the dialog
+          above: a fixed overlay rendered inside the rail's stacking context
+          paints behind the page, not over it. */}
+      {showPwdModal && typeof document !== 'undefined' && createPortal(
         <div
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300,
+            backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
           }}
           onClick={e => { if (e.target === e.currentTarget) setShowPwdModal(false) }}
         >
@@ -588,7 +596,8 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
       </aside>
     </>

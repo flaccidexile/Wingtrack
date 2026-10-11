@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { checkPasswordStrength, MIN_PASSWORD_LENGTH } from '@/lib/validation'
+import AuthShell from './AuthShell'
 
 interface ResetPasswordPageProps {
   onDone: () => void
@@ -262,18 +263,9 @@ export default function ResetPasswordPage({ onDone }: ResetPasswordPageProps) {
     : steps.indexOf(step as typeof steps[number])
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FFC8A7', padding: '24px 16px', overflowY: 'auto' }}>
-      <div className="fade-in" style={{ width: '100%', maxWidth: 480 }}>
-        {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{ width: 72, height: 72, borderRadius: '50%', overflow: 'hidden', margin: '0 auto 12px', boxShadow: '0 10px 28px rgba(154,52,18,0.3)', border: '3px solid rgba(255,255,255,0.8)', background: '#ea580c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <img src="/logo.png" alt="Wingtrack Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          </div>
-          <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: '#1c1917', lineHeight: 1.15 }}>
-            <span style={{ color: '#c2410c' }}>WING</span>TRACK
-          </h1>
-          <p style={{ fontSize: 13, color: '#431407', marginTop: 5, fontWeight: 600 }}>Change Password</p>
-        </div>
+    <AuthShell>
+      <div className="auth-card fade-in">
+        <p className="auth-card__eyebrow">Staff Portal</p>
 
         {/* Progress stepper */}
         {step !== 'done' && (
@@ -303,295 +295,290 @@ export default function ResetPasswordPage({ onDone }: ResetPasswordPageProps) {
           </div>
         )}
 
-        <div className="card" style={{ background: '#fff', padding: '30px 28px', borderRadius: 16, boxShadow: '0 16px 40px rgba(124,45,18,0.15)' }}>
+        {/* ── Step 1: Choose method ── */}
+        {step === 'choose' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div>
+              <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Verify Your Identity</h2>
+              <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.55 }}>
+                For your security, please verify your identity before changing your password. Choose how you'd like to receive your one-time code.
+              </p>
+            </div>
 
-          {/* ── Step 1: Choose method ── */}
-          {step === 'choose' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              <div>
-                <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Verify Your Identity</h2>
+            {/* Email option */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 16px', border: '1.5px solid var(--border)', borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--primary)'; (e.currentTarget as HTMLElement).style.background = 'rgba(234,88,12,0.03)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.background = '' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(234,88,12,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                    <polyline points="22,6 12,13 2,6"/>
+                  </svg>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--foreground)', marginBottom: 2 }}>Email OTP</p>
+                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>Receive a 6-digit code in your email</p>
+                </div>
+                <input
+                  type="radio"
+                  name="verify-method"
+                  value="email"
+                  defaultChecked
+                  style={{ width: 16, height: 16, accentColor: 'var(--primary)' }}
+                />
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 16px', border: '1.5px solid var(--border)', borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--primary)'; (e.currentTarget as HTMLElement).style.background = 'rgba(234,88,12,0.03)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.background = '' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(22,163,74,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 14 19.79 19.79 0 0 1 1.61 5.5 2 2 0 0 1 3.59 3h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 10a16 16 0 0 0 6 6l.85-.85a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 17.32z"/>
+                  </svg>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--foreground)', marginBottom: 2 }}>Phone OTP (SMS)</p>
+                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>Receive a 6-digit code via SMS</p>
+                </div>
+                <input
+                  type="radio"
+                  name="verify-method"
+                  value="phone"
+                  style={{ width: 16, height: 16, accentColor: 'var(--primary)' }}
+                />
+              </label>
+            </div>
+
+            {/* Email input */}
+            <div>
+              <label htmlFor="reset-email" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>
+                Email Address
+              </label>
+              <input
+                id="reset-email"
+                className="input"
+                type="email"
+                placeholder="you@wingtrack.ph"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                style={{ width: '100%', padding: '12px 14px', fontSize: 14 }}
+              />
+            </div>
+
+            {/* Phone input */}
+            <div>
+              <label htmlFor="reset-phone" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>
+                Phone Number <span style={{ color: 'var(--muted-foreground)', fontWeight: 400 }}>(for SMS only)</span>
+              </label>
+              <input
+                id="reset-phone"
+                className="input"
+                type="tel"
+                placeholder="+639XXXXXXXXX"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                style={{ width: '100%', padding: '12px 14px', fontSize: 14 }}
+              />
+            </div>
+
+            {otpError && (
+              <div style={{ background: '#fce8e8', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c' }}>
+                {otpError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                id="reset-send-email-otp"
+                onClick={() => { setOtpError(null); sendEmailOtp() }}
+                className="btn-primary"
+                disabled={otpLoading || !email.trim()}
+                style={{ flex: 1, padding: '12px', fontSize: 14, fontWeight: 600, borderRadius: 10 }}
+              >
+                {otpLoading ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span className="spinner" style={{ width: 16, height: 16 }} />Sending...</span> : 'Send via Email'}
+              </button>
+              <button
+                id="reset-send-phone-otp"
+                onClick={() => { setOtpError(null); sendPhoneOtp() }}
+                disabled={otpLoading || !phone.trim()}
+                style={{
+                  flex: 1, padding: '12px', fontSize: 14, fontWeight: 600, borderRadius: 10,
+                  border: '1.5px solid #16a34a', background: phone.trim() ? 'rgba(22,163,74,0.08)' : 'var(--muted)',
+                  color: phone.trim() ? '#16a34a' : 'var(--muted-foreground)', cursor: phone.trim() ? 'pointer' : 'not-allowed',
+                }}
+              >
+                Send via SMS
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 2: Verify OTP ── */}
+        {(step === 'verify-email' || step === 'verify-phone') && (() => {
+          const barPct = (expiry / OTP_EXPIRY) * 100
+          const barColor = expiry > 120 ? '#15803d' : expiry > 60 ? '#d97706' : '#b91c1c'
+          const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(234,88,12,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                  {step === 'verify-email'
+                    ? <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    : <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 14 19.79 19.79 0 0 1 1.61 5.5 2 2 0 0 1 3.59 3h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 10a16 16 0 0 0 6 6l.85-.85a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 17.32z"/></svg>
+                  }
+                </div>
+                <h2 style={{ fontFamily: 'Fraunces', fontSize: 19, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Enter Verification Code</h2>
                 <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.55 }}>
-                  For your security, please verify your identity before changing your password. Choose how you'd like to receive your one-time code.
+                  A 6-digit code was sent to<br />
+                  <strong style={{ color: 'var(--foreground)' }}>{step === 'verify-email' ? email : phone}</strong>
                 </p>
+                <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 4 }}>Open the message and type the code shown below.</p>
               </div>
 
-              {/* Email option */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 16px', border: '1.5px solid var(--border)', borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--primary)'; (e.currentTarget as HTMLElement).style.background = 'rgba(234,88,12,0.03)' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.background = '' }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(234,88,12,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                      <polyline points="22,6 12,13 2,6"/>
-                    </svg>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--foreground)', marginBottom: 2 }}>Email OTP</p>
-                    <p style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>Receive a 6-digit code in your email</p>
-                  </div>
-                  <input
-                    type="radio"
-                    name="verify-method"
-                    value="email"
-                    defaultChecked
-                    style={{ width: 16, height: 16, accentColor: 'var(--primary)' }}
-                  />
-                </label>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 16px', border: '1.5px solid var(--border)', borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--primary)'; (e.currentTarget as HTMLElement).style.background = 'rgba(234,88,12,0.03)' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.background = '' }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(22,163,74,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 14 19.79 19.79 0 0 1 1.61 5.5 2 2 0 0 1 3.59 3h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 10a16 16 0 0 0 6 6l.85-.85a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 17.32z"/>
-                    </svg>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--foreground)', marginBottom: 2 }}>Phone OTP (SMS)</p>
-                    <p style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>Receive a 6-digit code via SMS</p>
-                  </div>
-                  <input
-                    type="radio"
-                    name="verify-method"
-                    value="phone"
-                    style={{ width: 16, height: 16, accentColor: 'var(--primary)' }}
-                  />
-                </label>
-              </div>
-
-              {/* Email input */}
+              {/* Expiry countdown bar */}
               <div>
-                <label htmlFor="reset-email" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>
-                  Email Address
-                </label>
-                <input
-                  id="reset-email"
-                  className="input"
-                  type="email"
-                  placeholder="you@wingtrack.ph"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  style={{ width: '100%', padding: '12px 14px', fontSize: 14 }}
-                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                  <span style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>Code expires in</span>
+                  <span style={{ fontSize: 13, fontFamily: 'DM Mono', fontWeight: 700, color: barColor }}>
+                    {expired ? 'EXPIRED' : formatTime(expiry)}
+                  </span>
+                </div>
+                <div style={{ height: 5, background: 'var(--muted)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', borderRadius: 3, width: `${expired ? 0 : barPct}%`, background: barColor, transition: 'width 1s linear, background 0.5s' }} />
+                </div>
               </div>
 
-              {/* Phone input */}
-              <div>
-                <label htmlFor="reset-phone" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>
-                  Phone Number <span style={{ color: 'var(--muted-foreground)', fontWeight: 400 }}>(for SMS only)</span>
-                </label>
-                <input
-                  id="reset-phone"
-                  className="input"
-                  type="tel"
-                  placeholder="+639XXXXXXXXX"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  style={{ width: '100%', padding: '12px 14px', fontSize: 14 }}
-                />
-              </div>
+              {/* Expired banner */}
+              {expired && (
+                <div style={{ background: '#fce8e8', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c', textAlign: 'center' }}>
+                  Your code has expired. Please request a new one below.
+                </div>
+              )}
 
-              {otpError && (
-                <div style={{ background: '#fce8e8', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c' }}>
+              <OtpInput value={otp} onChange={(v) => { if (!expired) setOtp(v) }} />
+
+              {otpError && !expired && (
+                <div style={{ background: '#fce8e8', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c', textAlign: 'center' }}>
                   {otpError}
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: 10 }}>
+              {!expired && (
                 <button
-                  id="reset-send-email-otp"
-                  onClick={() => { setOtpError(null); sendEmailOtp() }}
+                  id="reset-verify-otp"
+                  onClick={verifyOtp}
                   className="btn-primary"
-                  disabled={otpLoading || !email.trim()}
-                  style={{ flex: 1, padding: '12px', fontSize: 14, fontWeight: 600, borderRadius: 10 }}
+                  disabled={otpLoading || !allOtpFilled}
+                  style={{ padding: '13px', fontSize: 15, fontWeight: 600, borderRadius: 10 }}
                 >
-                  {otpLoading ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span className="spinner" style={{ width: 16, height: 16 }} />Sending...</span> : 'Send via Email'}
+                  {otpLoading ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span className="spinner" style={{ width: 18, height: 18 }} />Verifying...</span> : 'Verify Code'}
                 </button>
-                <button
-                  id="reset-send-phone-otp"
-                  onClick={() => { setOtpError(null); sendPhoneOtp() }}
-                  disabled={otpLoading || !phone.trim()}
-                  style={{
-                    flex: 1, padding: '12px', fontSize: 14, fontWeight: 600, borderRadius: 10,
-                    border: '1.5px solid #16a34a', background: phone.trim() ? 'rgba(22,163,74,0.08)' : 'var(--muted)',
-                    color: phone.trim() ? '#16a34a' : 'var(--muted-foreground)', cursor: phone.trim() ? 'pointer' : 'not-allowed',
-                  }}
-                >
-                  Send via SMS
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 2: Verify OTP ── */}
-          {(step === 'verify-email' || step === 'verify-phone') && (() => {
-            const barPct = (expiry / OTP_EXPIRY) * 100
-            const barColor = expiry > 120 ? '#15803d' : expiry > 60 ? '#d97706' : '#b91c1c'
-            const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(234,88,12,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-                    {step === 'verify-email'
-                      ? <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                      : <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 14 19.79 19.79 0 0 1 1.61 5.5 2 2 0 0 1 3.59 3h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 10a16 16 0 0 0 6 6l.85-.85a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 17.32z"/></svg>
-                    }
-                  </div>
-                  <h2 style={{ fontFamily: 'Fraunces', fontSize: 19, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Enter Verification Code</h2>
-                  <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.55 }}>
-                    A 6-digit code was sent to<br />
-                    <strong style={{ color: 'var(--foreground)' }}>{step === 'verify-email' ? email : phone}</strong>
-                  </p>
-                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 4 }}>Open the message and type the code shown below.</p>
-                </div>
-
-                {/* Expiry countdown bar */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                    <span style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>Code expires in</span>
-                    <span style={{ fontSize: 13, fontFamily: 'DM Mono', fontWeight: 700, color: barColor }}>
-                      {expired ? 'EXPIRED' : formatTime(expiry)}
-                    </span>
-                  </div>
-                  <div style={{ height: 5, background: 'var(--muted)', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', borderRadius: 3, width: `${expired ? 0 : barPct}%`, background: barColor, transition: 'width 1s linear, background 0.5s' }} />
-                  </div>
-                </div>
-
-                {/* Expired banner */}
-                {expired && (
-                  <div style={{ background: '#fce8e8', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c', textAlign: 'center' }}>
-                    Your code has expired. Please request a new one below.
-                  </div>
-                )}
-
-                <OtpInput value={otp} onChange={(v) => { if (!expired) setOtp(v) }} />
-
-                {otpError && !expired && (
-                  <div style={{ background: '#fce8e8', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c', textAlign: 'center' }}>
-                    {otpError}
-                  </div>
-                )}
-
-                {!expired && (
-                  <button
-                    id="reset-verify-otp"
-                    onClick={verifyOtp}
-                    className="btn-primary"
-                    disabled={otpLoading || !allOtpFilled}
-                    style={{ padding: '13px', fontSize: 15, fontWeight: 600, borderRadius: 10 }}
-                  >
-                    {otpLoading ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span className="spinner" style={{ width: 18, height: 18 }} />Verifying...</span> : 'Verify Code'}
-                  </button>
-                )}
-
-                <div style={{ textAlign: 'center' }}>
-                  {expired ? (
-                    <button
-                      id="reset-resend-otp"
-                      onClick={resendOtp}
-                      className="btn-primary"
-                      disabled={otpLoading}
-                      style={{ padding: '11px 24px', fontSize: 14, fontWeight: 600, borderRadius: 9 }}
-                    >
-                      {otpLoading ? 'Sending...' : 'Send a New Code'}
-                    </button>
-                  ) : resendCooldown > 0 ? (
-                    <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
-                      Resend in <span style={{ fontFamily: 'DM Mono', fontWeight: 600 }}>{resendCooldown}s</span>
-                    </p>
-                  ) : (
-                    <button onClick={resendOtp} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
-                      Resend Code
-                    </button>
-                  )}
-                </div>
-
-              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, textAlign: 'center' }}>
-                <button type="button" onClick={() => { setStep('choose'); setOtp(['','','','','','']); setOtpError(null) }}
-                  style={{ background: 'none', border: 'none', color: 'var(--muted-foreground)', fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-                  Change verification method
-                </button>
-              </div>
-            </div>
-            )
-          })()}
-
-          {/* ── Step 3: New password ── */}
-          {step === 'new-password' && (
-            <form onSubmit={handlePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              <div>
-                <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Create New Password</h2>
-                <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.5 }}>
-                  Identity verified — Choose a strong password to secure your account.
-                </p>
-              </div>
-
-              {/* New Password */}
-              <div>
-                <label htmlFor="reset-pwd" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 7 }}>New Password</label>
-                <div style={{ position: 'relative' }}>
-                  <input id="reset-pwd" className="input" type={showPwd ? 'text' : 'password'} autoComplete="new-password" required placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: '13px 44px 13px 14px', fontSize: 14 }} />
-                  <button type="button" onClick={() => setShowPwd(p => !p)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center' }}>
-                    {showPwd ? <EyeOff /> : <Eye />}
-                  </button>
-                </div>
-                {password.length > 0 && (
-                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 5, padding: '10px 12px', background: 'var(--muted)', borderRadius: 8 }}>
-                    <Req met={reqs.length}    label={`At least ${MIN_PASSWORD_LENGTH} characters`} />
-                    <Req met={reqs.uppercase} label="One uppercase letter (A–Z)" />
-                    <Req met={reqs.number}    label="One number (0–9)" />
-                    <Req met={reqs.special}   label="One special character (!@#$…)" />
-                  </div>
-                )}
-              </div>
-
-              {/* Confirm Password */}
-              <div>
-                <label htmlFor="reset-confirm" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 7 }}>Confirm New Password</label>
-                <div style={{ position: 'relative' }}>
-                  <input id="reset-confirm" className="input" type={showConfirm ? 'text' : 'password'} autoComplete="new-password" required placeholder="••••••••" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
-                    style={{ width: '100%', padding: '13px 44px 13px 14px', fontSize: 14, borderColor: confirmPassword.length > 0 ? (passwordsMatch ? '#15803d' : '#b91c1c') : undefined }} />
-                  <button type="button" onClick={() => setShowConfirm(p => !p)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center' }}>
-                    {showConfirm ? <EyeOff /> : <Eye />}
-                  </button>
-                </div>
-                {confirmPassword.length > 0 && (
-                  <p style={{ fontSize: 12, marginTop: 5, color: passwordsMatch ? '#15803d' : '#b91c1c', fontWeight: 500 }}>
-                    {passwordsMatch ? '✓ Passwords match' : '✗ Passwords do not match'}
-                  </p>
-                )}
-              </div>
-
-              {pwdError && (
-                <div style={{ background: '#fce8e8', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c' }}>{pwdError}</div>
               )}
 
-              <button id="reset-submit" type="submit" className="btn-primary" disabled={pwdLoading || !allReqsMet || !passwordsMatch} style={{ padding: '14px', fontSize: 15, fontWeight: 600, borderRadius: 10 }}>
-                {pwdLoading ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}><span className="spinner" style={{ width: 18, height: 18 }} />Updating...</span> : 'Update Password'}
-              </button>
-            </form>
-          )}
-
-          {/* ── Done ── */}
-          {step === 'done' && (
-            <div style={{ textAlign: 'center', padding: '10px 0' }}>
-              <div style={{ width: 58, height: 58, borderRadius: '50%', background: '#e8f5e9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <div style={{ textAlign: 'center' }}>
+                {expired ? (
+                  <button
+                    id="reset-resend-otp"
+                    onClick={resendOtp}
+                    className="btn-primary"
+                    disabled={otpLoading}
+                    style={{ padding: '11px 24px', fontSize: 14, fontWeight: 600, borderRadius: 9 }}
+                  >
+                    {otpLoading ? 'Sending...' : 'Send a New Code'}
+                  </button>
+                ) : resendCooldown > 0 ? (
+                  <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
+                    Resend in <span style={{ fontFamily: 'DM Mono', fontWeight: 600 }}>{resendCooldown}s</span>
+                  </p>
+                ) : (
+                  <button onClick={resendOtp} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
+                    Resend Code
+                  </button>
+                )}
               </div>
-              <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 8 }}>Password Updated!</h2>
-              <p style={{ fontSize: 14, color: 'var(--muted-foreground)', lineHeight: 1.55, marginBottom: 20 }}>
-                Your password has been successfully reset. Redirecting you to sign in...
-              </p>
-              <div className="spinner" style={{ margin: '0 auto', width: 22, height: 22 }} />
-            </div>
-          )}
-        </div>
 
-        <div style={{ height: 24 }} />
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, textAlign: 'center' }}>
+              <button type="button" onClick={() => { setStep('choose'); setOtp(['','','','','','']); setOtpError(null) }}
+                style={{ background: 'none', border: 'none', color: 'var(--muted-foreground)', fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                Change verification method
+              </button>
+            </div>
+          </div>
+          )
+        })()}
+
+        {/* ── Step 3: New password ── */}
+        {step === 'new-password' && (
+          <form onSubmit={handlePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div>
+              <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Create New Password</h2>
+              <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.5 }}>
+                Identity verified — Choose a strong password to secure your account.
+              </p>
+            </div>
+
+            {/* New Password */}
+            <div>
+              <label htmlFor="reset-pwd" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 7 }}>New Password</label>
+              <div style={{ position: 'relative' }}>
+                <input id="reset-pwd" className="input" type={showPwd ? 'text' : 'password'} autoComplete="new-password" required placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: '13px 44px 13px 14px', fontSize: 14 }} />
+                <button type="button" onClick={() => setShowPwd(p => !p)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center' }}>
+                  {showPwd ? <EyeOff /> : <Eye />}
+                </button>
+              </div>
+              {password.length > 0 && (
+                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 5, padding: '10px 12px', background: 'var(--muted)', borderRadius: 8 }}>
+                  <Req met={reqs.length}    label={`At least ${MIN_PASSWORD_LENGTH} characters`} />
+                  <Req met={reqs.uppercase} label="One uppercase letter (A–Z)" />
+                  <Req met={reqs.number}    label="One number (0–9)" />
+                  <Req met={reqs.special}   label="One special character (!@#$…)" />
+                </div>
+              )}
+            </div>
+
+            {/* Confirm Password */}
+            <div>
+              <label htmlFor="reset-confirm" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 7 }}>Confirm New Password</label>
+              <div style={{ position: 'relative' }}>
+                <input id="reset-confirm" className="input" type={showConfirm ? 'text' : 'password'} autoComplete="new-password" required placeholder="••••••••" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                  style={{ width: '100%', padding: '13px 44px 13px 14px', fontSize: 14, borderColor: confirmPassword.length > 0 ? (passwordsMatch ? '#15803d' : '#b91c1c') : undefined }} />
+                <button type="button" onClick={() => setShowConfirm(p => !p)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center' }}>
+                  {showConfirm ? <EyeOff /> : <Eye />}
+                </button>
+              </div>
+              {confirmPassword.length > 0 && (
+                <p style={{ fontSize: 12, marginTop: 5, color: passwordsMatch ? '#15803d' : '#b91c1c', fontWeight: 500 }}>
+                  {passwordsMatch ? '✓ Passwords match' : '✗ Passwords do not match'}
+                </p>
+              )}
+            </div>
+
+            {pwdError && (
+              <div style={{ background: '#fce8e8', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c' }}>{pwdError}</div>
+            )}
+
+            <button id="reset-submit" type="submit" className="btn-primary" disabled={pwdLoading || !allReqsMet || !passwordsMatch} style={{ padding: '14px', fontSize: 15, fontWeight: 600, borderRadius: 10 }}>
+              {pwdLoading ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}><span className="spinner" style={{ width: 18, height: 18 }} />Updating...</span> : 'Update Password'}
+            </button>
+          </form>
+        )}
+
+        {/* ── Done ── */}
+        {step === 'done' && (
+          <div style={{ textAlign: 'center', padding: '10px 0' }}>
+            <div style={{ width: 58, height: 58, borderRadius: '50%', background: '#e8f5e9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 8 }}>Password Updated!</h2>
+            <p style={{ fontSize: 14, color: 'var(--muted-foreground)', lineHeight: 1.55, marginBottom: 20 }}>
+              Your password has been successfully reset. Redirecting you to sign in...
+            </p>
+            <div className="spinner" style={{ margin: '0 auto', width: 22, height: 22 }} />
+          </div>
+        )}
       </div>
-    </div>
+    </AuthShell>
   )
 }

@@ -309,44 +309,73 @@ export default function PointOfSale() {
       {/* Menu Panel */}
       <div className="pos-menu">
         <div style={{ marginBottom: 22 }}>
-          <h1 style={{ fontFamily: 'Fraunces', fontSize: 30, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Point of Sale</h1>
-          <p style={{ fontSize: 15, color: 'var(--muted-foreground)' }}>
+          <p className="overline" style={{ marginBottom: 6 }}>New Order</p>
+          <h1 className="page-title" style={{ fontSize: 30 }}>Point of Sale</h1>
+          <p className="page-subtitle" style={{ fontSize: 15 }}>
             {new Date().toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} · {profile?.full_name}
           </p>
         </div>
 
         {/* Search & Category filter */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 22, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input
-            id="pos-search"
-            className="input"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search products..."
-            style={{ width: 220, maxWidth: '100%', padding: '9px 14px', fontSize: 13 }}
-          />
+          <div style={{ position: 'relative', width: 230, maxWidth: '100%' }}>
+            <svg
+              width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+              style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-foreground)', pointerEvents: 'none' }}
+            >
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              id="pos-search"
+              className="input"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search products..."
+              aria-label="Search products"
+              style={{ width: '100%', padding: '9px 14px 9px 36px', fontSize: 13 }}
+            />
+          </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {categories.map(c => (
-              <button
-                key={c}
-                id={`pos-cat-${c.toLowerCase()}`}
-                onClick={() => setCat(c)}
-                style={{
-                  padding: '8px 18px', borderRadius: 24, fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                  border: '1px solid var(--border)', transition: 'all 0.15s',
-                  background: cat === c ? 'var(--primary)' : 'var(--card)',
-                  color: cat === c ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
-                }}
-              >
-                {c}
-              </button>
-            ))}
+            {categories.map(c => {
+              const active = cat === c
+              return (
+                <button
+                  key={c}
+                  id={`pos-cat-${c.toLowerCase()}`}
+                  aria-pressed={active}
+                  onClick={() => setCat(c)}
+                  style={{
+                    padding: '8px 18px', borderRadius: 24, fontSize: 13,
+                    fontWeight: active ? 600 : 500, cursor: 'pointer',
+                    border: '1px solid var(--border)',
+                    transition: 'all var(--t-fast) var(--ease)',
+                    background: active ? 'var(--primary)' : 'var(--card)',
+                    color: active ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                    boxShadow: active ? 'var(--shadow-brand)' : 'var(--shadow-xs)',
+                  }}
+                >
+                  {c}
+                </button>
+              )
+            })}
           </div>
         </div>
 
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}>
-            <div className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
+          /* Skeleton tiles match the product card footprint so the grid does
+             not reflow when the menu arrives. */
+          <div aria-busy="true" aria-label="Loading menu" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="card" style={{ overflow: 'hidden' }}>
+                <div className="skeleton" style={{ height: 132, borderRadius: 0 }} />
+                <div style={{ padding: '16px 20px 20px' }}>
+                  <div className="skeleton" style={{ width: '45%', height: 11, marginBottom: 12 }} />
+                  <div className="skeleton" style={{ width: '80%', height: 16, marginBottom: 16 }} />
+                  <div className="skeleton" style={{ width: '38%', height: 17 }} />
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
@@ -357,12 +386,12 @@ export default function PointOfSale() {
                 <button
                   key={item.id}
                   id={`pos-item-${item.id}`}
+                  className="pos-item"
                   onClick={() => addItem(item)}
                   style={{
                     background: inCart ? 'rgba(234,88,12,0.08)' : 'var(--card)',
                     border: `1px solid ${inCart ? 'var(--primary)' : 'var(--border)'}`,
                     borderRadius: 14, padding: 0, cursor: 'pointer', textAlign: 'left',
-                    transition: 'all 0.15s',
                     display: 'flex', flexDirection: 'column', overflow: 'hidden',
                   }}
                 >
@@ -519,6 +548,7 @@ export default function PointOfSale() {
 
           <button
             id="btn-checkout"
+            className="pos-checkout"
             disabled={cart.length === 0 || checkoutLoading}
             onClick={handleChargeClick}
             style={{
@@ -526,7 +556,7 @@ export default function PointOfSale() {
               cursor: cart.length && !checkoutLoading ? 'pointer' : 'not-allowed',
               background: cart.length ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.08)',
               color: cart.length ? '#1c0f06' : 'rgba(255,255,255,0.45)',
-              border: 'none', fontFamily: 'Fraunces', transition: 'all 0.15s',
+              border: 'none', fontFamily: 'Fraunces',
             }}
           >
             {checkoutLoading

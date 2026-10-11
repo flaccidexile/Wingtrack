@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { apiAdjustInventory, apiGetInventoryMovements, apiCreateInventoryItem } from '@/lib/api'
 import { useIsCompact } from '@/hooks/useMediaQuery'
+import EmptyState, { EMPTY_ICONS } from '@/components/ui/EmptyState'
 import type { InventoryItem, InventoryAdjustmentPayload, InventoryMovement } from '@/types'
 
 const CATS = ['All', 'Proteins', 'Sauces', 'Sides', 'Produce', 'Cooking', 'Spices', 'Staples', 'Packaging']
@@ -388,10 +389,10 @@ export default function Inventory() {
       {/* Header */}
       <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
+          <h1 className="page-title" style={{ fontSize: 26 }}>
             Inventory Management
           </h1>
-          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
+          <p className="page-subtitle">
             {items.length} raw ingredients & packaging items · Real-time stock tracking
           </p>
         </div>
@@ -733,7 +734,12 @@ export default function Inventory() {
                 )
               })}
               {filtered.length === 0 && (
-                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 14 }}>No items match your filter.</div>
+                <EmptyState
+                  compact
+                  icon={EMPTY_ICONS.search}
+                  title="No items match your filter"
+                  hint="Try clearing the search box or choosing a different category."
+                />
               )}
               </div>
             </div>

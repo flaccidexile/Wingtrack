@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { apiProvisionSelf } from '@/lib/api'
+import AuthShell from './AuthShell'
 
 interface OTPVerificationPageProps {
   email: string
@@ -160,195 +161,181 @@ export default function OTPVerificationPage({ email, onVerified, onBack }: OTPVe
 
   if (showSuccess) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FFC8A7', padding: '24px 16px' }}>
-        <div className="fade-in" style={{ width: '100%', maxWidth: 420, textAlign: 'center' }}>
-          <div style={{ background: '#fff', padding: '48px 36px', borderRadius: 20, boxShadow: '0 20px 60px rgba(124,45,18,0.2)' }}>
-            {/* Animated checkmark */}
-            <div style={{
-              width: 80, height: 80, borderRadius: '50%', background: 'linear-gradient(135deg, #15803d, #22c55e)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 24px', boxShadow: '0 8px 24px rgba(34,197,94,0.35)',
-              animation: 'pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-            }}>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-            </div>
-            <h2 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: '#1c1917', marginBottom: 10 }}>
-              Registration Successful!
-            </h2>
-            <p style={{ fontSize: 14, color: '#78716c', lineHeight: 1.6, marginBottom: 28 }}>
-              Your account has been verified and created successfully.<br />
-              You can now sign in to <strong style={{ color: '#c2410c' }}>WINGTRACK</strong>.
-            </p>
-            <button
-              id="success-go-to-login-btn"
-              onClick={handleGoToLogin}
-              disabled={finishing}
-              className="btn-primary"
-              style={{ width: '100%', padding: '14px', fontSize: 15, fontWeight: 600, borderRadius: 10 }}
-            >
-              {finishing ? (
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                  <span className="spinner" style={{ width: 18, height: 18 }} />
-                  Preparing your account...
-                </span>
-              ) : 'Go to Login'}
-            </button>
+      <AuthShell>
+        <div className="auth-card fade-in" style={{ textAlign: 'center' }}>
+          {/* Animated checkmark */}
+          <div style={{
+            width: 80, height: 80, borderRadius: '50%', background: 'linear-gradient(135deg, #15803d, #22c55e)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 24px', boxShadow: '0 8px 24px rgba(34,197,94,0.35)',
+            animation: 'pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+          }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
           </div>
+          <h2 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: '#1c1917', marginBottom: 10 }}>
+            Registration Successful!
+          </h2>
+          <p style={{ fontSize: 14, color: '#78716c', lineHeight: 1.6, marginBottom: 28 }}>
+            Your account has been verified and created successfully.<br />
+            You can now sign in to <strong style={{ color: '#c2410c' }}>WINGTRACK</strong>.
+          </p>
+          <button
+            id="success-go-to-login-btn"
+            onClick={handleGoToLogin}
+            disabled={finishing}
+            className="btn-primary"
+            style={{ width: '100%', padding: '14px', fontSize: 15, fontWeight: 600, borderRadius: 10 }}
+          >
+            {finishing ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                <span className="spinner" style={{ width: 18, height: 18 }} />
+                Preparing your account...
+              </span>
+            ) : 'Go to Login'}
+          </button>
         </div>
-      </div>
+      </AuthShell>
     )
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FFC8A7', padding: '24px 16px' }}>
-      <div className="fade-in" style={{ width: '100%', maxWidth: 460 }}>
-        {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{ width: 72, height: 72, borderRadius: '50%', overflow: 'hidden', margin: '0 auto 12px', boxShadow: '0 10px 28px rgba(154,52,18,0.3)', border: '3px solid rgba(255,255,255,0.8)', background: '#ea580c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <img src="/logo.png" alt="Wingtrack Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+    <AuthShell>
+      <div className="auth-card fade-in">
+        <p className="auth-card__eyebrow">Staff Portal</p>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <div style={{ width: 50, height: 50, borderRadius: '50%', background: 'rgba(234,88,12,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+              <polyline points="22,6 12,13 2,6"/>
+            </svg>
           </div>
-          <h1 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: '#1c1917', lineHeight: 1.15 }}>
-            <span style={{ color: '#c2410c' }}>WING</span>TRACK
-          </h1>
-          <p style={{ fontSize: 13, color: '#431407', marginTop: 5, fontWeight: 600 }}>Email Verification</p>
+          <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Check Your Email</h2>
+          <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+            A <strong>6-digit code</strong> was sent to<br />
+            <strong style={{ color: 'var(--foreground)' }}>{email}</strong>
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 6 }}>
+            Open the email and type the code shown below.
+          </p>
         </div>
 
-        <div className="card" style={{ background: '#fff', padding: '32px 28px', borderRadius: 16, boxShadow: '0 16px 40px rgba(124,45,18,0.15)' }}>
-          {/* Header */}
-          <div style={{ textAlign: 'center', marginBottom: 20 }}>
-            <div style={{ width: 50, height: 50, borderRadius: '50%', background: 'rgba(234,88,12,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                <polyline points="22,6 12,13 2,6"/>
-              </svg>
-            </div>
-            <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Check Your Email</h2>
-            <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-              A <strong>6-digit code</strong> was sent to<br />
-              <strong style={{ color: 'var(--foreground)' }}>{email}</strong>
-            </p>
-            <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 6 }}>
-              Open the email and type the code shown below.
-            </p>
+        {/* 5-minute expiry bar */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>Code expires in</span>
+            <span style={{ fontSize: 13, fontFamily: 'DM Mono', fontWeight: 700, color: barColor }}>
+              {expired ? 'EXPIRED' : formatTime(expiry)}
+            </span>
           </div>
+          <div style={{ height: 5, background: 'var(--muted)', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', borderRadius: 3,
+              width: `${expired ? 0 : barPct}%`,
+              background: barColor,
+              transition: 'width 1s linear, background 0.5s',
+            }} />
+          </div>
+        </div>
 
-          {/* 5-minute expiry bar */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>Code expires in</span>
-              <span style={{ fontSize: 13, fontFamily: 'DM Mono', fontWeight: 700, color: barColor }}>
-                {expired ? 'EXPIRED' : formatTime(expiry)}
+        {/* Expired banner */}
+        {expired && (
+          <div style={{ background: '#fce8e8', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c', textAlign: 'center', marginBottom: 16 }}>
+            Your code has expired. Please request a new one below.
+          </div>
+        )}
+
+        {/* OTP input boxes */}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', margin: '0 0 20px' }} onPaste={handlePaste}>
+          {otp.map((digit, i) => (
+            <input
+              key={i}
+              ref={el => { refs.current[i] = el }}
+              id={`otp-digit-${i}`}
+              type="text"
+              inputMode="numeric"
+              maxLength={1}
+              value={digit}
+              disabled={expired}
+              onChange={e => handleChange(i, e.target.value)}
+              onKeyDown={e => handleKeyDown(i, e)}
+              onFocus={e => e.target.select()}
+              style={{
+                width: 52, height: 60, borderRadius: 10,
+                border: `2px solid ${expired ? 'var(--muted)' : digit ? 'var(--primary)' : error ? '#b91c1c' : 'var(--border)'}`,
+                textAlign: 'center', fontSize: 24, fontWeight: 700, fontFamily: 'DM Mono',
+                color: expired ? 'var(--muted-foreground)' : 'var(--foreground)',
+                background: expired ? 'var(--muted)' : digit ? 'rgba(234,88,12,0.05)' : 'var(--card)',
+                outline: 'none', transition: 'all 0.15s',
+                boxShadow: digit && !expired ? '0 0 0 3px rgba(234,88,12,0.12)' : 'none',
+                cursor: expired ? 'not-allowed' : 'text',
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Error */}
+        {error && !expired && (
+          <div style={{ background: '#fce8e8', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c', textAlign: 'center', marginBottom: 14 }}>
+            {error}
+          </div>
+        )}
+
+        {/* Verify button */}
+        {!expired && (
+          <button
+            id="otp-verify-btn"
+            onClick={handleVerify}
+            className="btn-primary"
+            disabled={loading || !allFilled}
+            style={{ width: '100%', padding: '14px', fontSize: 15, fontWeight: 600, borderRadius: 10, marginBottom: 16 }}
+          >
+            {loading ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                <span className="spinner" style={{ width: 18, height: 18 }} /> Verifying...
               </span>
-            </div>
-            <div style={{ height: 5, background: 'var(--muted)', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{
-                height: '100%', borderRadius: 3,
-                width: `${expired ? 0 : barPct}%`,
-                background: barColor,
-                transition: 'width 1s linear, background 0.5s',
-              }} />
-            </div>
-          </div>
+            ) : 'Verify Email'}
+          </button>
+        )}
 
-          {/* Expired banner */}
-          {expired && (
-            <div style={{ background: '#fce8e8', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c', textAlign: 'center', marginBottom: 16 }}>
-              Your code has expired. Please request a new one below.
-            </div>
-          )}
-
-          {/* OTP input boxes */}
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', margin: '0 0 20px' }} onPaste={handlePaste}>
-            {otp.map((digit, i) => (
-              <input
-                key={i}
-                ref={el => { refs.current[i] = el }}
-                id={`otp-digit-${i}`}
-                type="text"
-                inputMode="numeric"
-                maxLength={1}
-                value={digit}
-                disabled={expired}
-                onChange={e => handleChange(i, e.target.value)}
-                onKeyDown={e => handleKeyDown(i, e)}
-                onFocus={e => e.target.select()}
-                style={{
-                  width: 52, height: 60, borderRadius: 10,
-                  border: `2px solid ${expired ? 'var(--muted)' : digit ? 'var(--primary)' : error ? '#b91c1c' : 'var(--border)'}`,
-                  textAlign: 'center', fontSize: 24, fontWeight: 700, fontFamily: 'DM Mono',
-                  color: expired ? 'var(--muted-foreground)' : 'var(--foreground)',
-                  background: expired ? 'var(--muted)' : digit ? 'rgba(234,88,12,0.05)' : 'var(--card)',
-                  outline: 'none', transition: 'all 0.15s',
-                  boxShadow: digit && !expired ? '0 0 0 3px rgba(234,88,12,0.12)' : 'none',
-                  cursor: expired ? 'not-allowed' : 'text',
-                }}
-              />
-            ))}
-          </div>
-
-          {/* Error */}
-          {error && !expired && (
-            <div style={{ background: '#fce8e8', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#b91c1c', textAlign: 'center', marginBottom: 14 }}>
-              {error}
-            </div>
-          )}
-
-          {/* Verify button */}
-          {!expired && (
-            <button
-              id="otp-verify-btn"
-              onClick={handleVerify}
-              className="btn-primary"
-              disabled={loading || !allFilled}
-              style={{ width: '100%', padding: '14px', fontSize: 15, fontWeight: 600, borderRadius: 10, marginBottom: 16 }}
-            >
-              {loading ? (
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                  <span className="spinner" style={{ width: 18, height: 18 }} /> Verifying...
-                </span>
-              ) : 'Verify Email'}
-            </button>
-          )}
-
-          {/* Resend section */}
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 8 }}>
-              {"Didn't receive it? Check spam or"}
+        {/* Resend section */}
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 8 }}>
+            {"Didn't receive it? Check spam or"}
+          </p>
+          {resendCooldown > 0 && !expired ? (
+            <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
+              Resend available in{' '}
+              <span style={{ fontFamily: 'DM Mono', fontWeight: 600, color: 'var(--foreground)' }}>{resendCooldown}s</span>
             </p>
-            {resendCooldown > 0 && !expired ? (
-              <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
-                Resend available in{' '}
-                <span style={{ fontFamily: 'DM Mono', fontWeight: 600, color: 'var(--foreground)' }}>{resendCooldown}s</span>
-              </p>
-            ) : (
-              <button
-                id="otp-resend-btn"
-                onClick={handleResend}
-                disabled={resending}
-                className="btn-primary"
-                style={{ padding: '10px 24px', fontSize: 13, fontWeight: 600, borderRadius: 8 }}
-              >
-                {resending ? 'Sending...' : 'Send a New Code'}
-              </button>
-            )}
-          </div>
-
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: 20, paddingTop: 16, textAlign: 'center' }}>
+          ) : (
             <button
-              type="button"
-              onClick={onBack}
-              style={{ background: 'none', border: 'none', color: 'var(--muted-foreground)', fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              id="otp-resend-btn"
+              onClick={handleResend}
+              disabled={resending}
+              className="btn-primary"
+              style={{ padding: '10px 24px', fontSize: 13, fontWeight: 600, borderRadius: 8 }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="15 18 9 12 15 6"/>
-              </svg>
-              Back to Sign In
+              {resending ? 'Sending...' : 'Send a New Code'}
             </button>
-          </div>
+          )}
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--border)', marginTop: 20, paddingTop: 16, textAlign: 'center' }}>
+          <button
+            type="button"
+            onClick={onBack}
+            style={{ background: 'none', border: 'none', color: 'var(--muted-foreground)', fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            Back to Sign In
+          </button>
         </div>
       </div>
-    </div>
+    </AuthShell>
   )
 }
