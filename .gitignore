@@ -43,3 +43,7 @@ pnpm-lock.yaml
 
 # Supabase CLI scratch
 supabase/.temp/
+
+# Archives
+*.zip
+git_folder.zip
