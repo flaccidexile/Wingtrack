@@ -911,18 +911,24 @@ aside a:focus-visible {
   box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.16);
 }
 
-/* ── Section headings ───────────────────────────────────── */
+/* ── Section headings & Eyebrows ────────────────────────── */
 /*
- * A small overline above a Fraunces heading. Used for page sub-sections so
- * long screens get visual anchors instead of one continuous scroll.
+ * Eyebrow / kicker label above a heading or in a card.
+ * Uses DM Sans with crisp uppercase styling.
+ * Explicitly clears text-decoration so Tailwind's built-in .overline
+ * utility does not draw a line above the text.
  */
-.overline {
-  font-family: 'DM Mono', monospace;
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.13em;
+.overline,
+.eyebrow {
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted-foreground);
+  text-decoration: none !important;
+  text-decoration-line: none !important;
+  line-height: 1.2;
 }
 
 /* ── Badges ─────────────────────────────────────────────── */

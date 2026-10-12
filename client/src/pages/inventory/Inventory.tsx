@@ -693,7 +693,7 @@ export default function Inventory() {
               <div className="scroll-x">
               <div style={{ display: 'grid', gridTemplateColumns: '2fr 80px 105px 105px 115px 150px 90px 110px', gap: 0, padding: '12px 22px', borderBottom: '1px solid var(--border)', minWidth: 920 }}>
                 {['Item Name', 'Unit', 'In Stock', 'Min Level', 'Unit Cost', 'Supplier', 'Status', 'Actions'].map(h => (
-                  <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
+                  <span key={h} style={{ fontSize: 11, fontFamily: 'DM Sans, sans-serif', fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
                 ))}
               </div>
               {filtered.map((item, i) => {
@@ -771,7 +771,7 @@ export default function Inventory() {
               <div className="scroll-x">
               <div style={{ display: 'grid', gridTemplateColumns: '150px 200px 110px 100px 140px 140px 1fr', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)', minWidth: 940 }}>
                 {['Timestamp', 'Item', 'Type', 'Change', 'Before → After', 'Staff', 'Notes'].map(h => (
-                  <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
+                  <span key={h} style={{ fontSize: 11, fontFamily: 'DM Sans, sans-serif', fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
                 ))}
               </div>
               {movements.map((m, i) => {

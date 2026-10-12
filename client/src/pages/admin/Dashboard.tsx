@@ -65,7 +65,7 @@ function KpiCard({ label, value, sub, color, trend, icon }: {
       <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: color, opacity: 0.9 }} />
 
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
-        <p className="overline">{label}</p>
+        <p className="eyebrow">{label}</p>
         <span style={{ width: 32, height: 32, borderRadius: 9, display: 'grid', placeItems: 'center', background: `${color}1a`, color, flexShrink: 0 }}>
           <KpiIcon path={icon} />
         </span>
@@ -142,12 +142,11 @@ export default function Dashboard() {
    */
   const buildAxis = useCallback((width: number) => {
     const usable = Math.max(0, width - 46)
-    // "Sat, 10/3" at 10px monospace is ~54px; "10/3" is ~26px.
-    const useShort = usable > 0 && usable < dailyStats.length * 58
-    const labelWidth = useShort ? 30 : 58
-    // Rotate whenever labels would otherwise be tight, so short labels get the
-    // extra room too instead of being squeezed side by side.
-    const angle = usable > 0 && usable < dailyStats.length * 92 ? -45 : 0
+    // If usable width is very tight, fall back to short "9/12", otherwise "Sep 12"
+    const useShort = usable > 0 && usable < 360
+    const labelWidth = useShort ? 32 : 48
+    // Ticks are well-spaced so rotation is only needed on mobile screens
+    const angle = usable > 0 && usable < 340 ? -40 : 0
 
     return {
       useShort,
@@ -155,7 +154,7 @@ export default function Dashboard() {
       angle,
       textAnchor: (angle ? 'end' : 'middle') as 'end' | 'middle',
       dy: angle ? 6 : 0,
-      axisHeight: angle ? 46 : 26,
+      axisHeight: angle ? 42 : 26,
       tickInterval: tickInterval(usable, dailyStats.length, labelWidth),
     }
   }, [dailyStats.length])
@@ -329,7 +328,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <p className="overline" style={{ marginBottom: 7 }}>Overview</p>
+          <p className="eyebrow" style={{ marginBottom: 7 }}>Overview</p>
           <h1 className="page-title">
             {greeting}, Manager
           </h1>
@@ -535,7 +534,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="revLabel"
-                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}
+                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Sans, sans-serif' }}
                     axisLine={false}
                     tickLine={false}
                     interval={revAxis.tickInterval}
@@ -544,7 +543,7 @@ export default function Dashboard() {
                     height={revAxis.axisHeight}
                     dy={revAxis.dy}
                   />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} width={38} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Sans, sans-serif' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} width={38} />
                   <Tooltip content={<CustomTooltip />} />
                   <Area type="monotone" dataKey="revenue" stroke="#ea580c" strokeWidth={2.2} fill="url(#rev)" />
                   <Area type="monotone" dataKey="orders" stroke="transparent" />
@@ -605,7 +604,7 @@ export default function Dashboard() {
                       room — a truncated peso amount is worse than a truncated label. */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.8fr) minmax(0, 0.85fr) minmax(0, 1.25fr) minmax(0, 0.85fr)', gap: 6, padding: '0 0 10px', borderBottom: '1px solid var(--border)', marginBottom: 10 }}>
                     {['Order #', 'Method', 'Total', 'Status'].map(h => (
-                      <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h}</span>
+                      <span key={h} style={{ fontSize: 11, fontFamily: 'DM Sans, sans-serif', fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h}</span>
                     ))}
                   </div>
                   {recentOrders.map(o => (
@@ -630,7 +629,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="ordLabel"
-                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}
+                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Sans, sans-serif' }}
                     axisLine={false}
                     tickLine={false}
                     interval={ordAxis.tickInterval}
@@ -639,7 +638,7 @@ export default function Dashboard() {
                     height={ordAxis.axisHeight}
                     dy={ordAxis.dy}
                   />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Sans, sans-serif' }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
                   <Tooltip contentStyle={{ background: 'var(--sidebar)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontFamily: 'DM Sans' }}
                     labelStyle={{ color: 'var(--sidebar-muted)', fontSize: 12, fontFamily: 'DM Mono' }}
                     itemStyle={{ color: 'var(--sidebar-foreground)', fontSize: 13 }} />

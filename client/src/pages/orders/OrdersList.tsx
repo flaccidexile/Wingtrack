@@ -352,7 +352,7 @@ export default function OrdersList() {
           <div className="scroll-x">
           <div style={{ display: 'grid', gridTemplateColumns: '62px 120px minmax(0, 1fr) 82px 98px 94px 126px', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)', minWidth: 720 }}>
             {['Order #', 'Date & Time', 'Items Summary', 'Payment', 'Total', 'Status', 'Actions'].map(h => (
-              <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              <span key={h} style={{ fontSize: 11, fontFamily: 'DM Sans, sans-serif', fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 {h}
               </span>
             ))}

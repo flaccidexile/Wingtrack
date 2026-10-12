@@ -23,9 +23,8 @@ export default function Analytics() {
 
   const trendAxis = useMemo(() => {
     const usable = Math.max(0, trendWidth - 46)
-    // "May 26" at 11px monospace is ~44px.
-    const labelWidth = 44
-    const angle = usable > 0 && usable < monthlyData.length * 74 ? -45 : 0
+    const labelWidth = 46
+    const angle = usable > 0 && usable < 340 ? -40 : 0
     return {
       angle,
       tickInterval: tickInterval(usable, monthlyData.length, labelWidth),
@@ -198,16 +197,16 @@ export default function Analytics() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="month"
-                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}
+                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Sans, sans-serif' }}
                     axisLine={false}
                     tickLine={false}
                     interval={trendTickInterval}
                     angle={trendAngle}
                     textAnchor={trendAngle ? 'end' : 'middle'}
-                    height={trendAngle ? 46 : 26}
+                    height={trendAngle ? 42 : 26}
                     dy={trendAngle ? 6 : 0}
                   />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} width={38} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Sans, sans-serif' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} width={38} />
                   <Tooltip contentStyle={{ background: 'var(--sidebar)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} labelStyle={{ color: 'var(--sidebar-muted)', fontSize: 12 }} formatter={(v) => [`₱${Number(v).toLocaleString()}`, 'Revenue']} itemStyle={{ color: 'var(--sidebar-foreground)', fontSize: 13 }} />
                   <Area type="monotone" dataKey="revenue" stroke="#c47a2e" strokeWidth={2.5} fill="url(#mrev)" />
                 </AreaChart>
@@ -244,7 +243,7 @@ export default function Analytics() {
           <div className="card" style={{ padding: '24px 26px' }}>
             <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, marginBottom: 18, color: 'var(--foreground)' }}>Top Products by Revenue</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 120px', gap: 10, padding: '0 0 10px', borderBottom: '1px solid var(--border)', marginBottom: 10 }}>
-              {['Product', 'Orders', 'Revenue'].map(h => <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>)}
+              {['Product', 'Orders', 'Revenue'].map(h => <span key={h} style={{ fontSize: 11, fontFamily: 'DM Sans, sans-serif', fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>)}
             </div>
             {topProducts.map((p, i) => (
               <div key={p.name} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 120px', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--muted)', alignItems: 'center' }}>

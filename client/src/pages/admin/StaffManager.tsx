@@ -592,7 +592,7 @@ export default function StaffManager() {
           <div className="scroll-x">
             <div style={{ display: 'grid', gridTemplateColumns: GRID, padding: '12px 22px', borderBottom: '1px solid var(--border)', minWidth: GRID_MIN_WIDTH }}>
               {['Name', 'Email', 'Role', 'Account', 'Activity', 'Actions'].map(h => (
-                <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
+                <span key={h} style={{ fontSize: 11, fontFamily: 'DM Sans, sans-serif', fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
               ))}
             </div>
 

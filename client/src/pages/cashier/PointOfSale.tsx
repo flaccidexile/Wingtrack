@@ -309,7 +309,7 @@ export default function PointOfSale() {
       {/* Menu Panel */}
       <div className="pos-menu">
         <div style={{ marginBottom: 22 }}>
-          <p className="overline" style={{ marginBottom: 6 }}>New Order</p>
+          <p className="eyebrow" style={{ marginBottom: 6 }}>New Order</p>
           <h1 className="page-title" style={{ fontSize: 30 }}>Point of Sale</h1>
           <p className="page-subtitle" style={{ fontSize: 15 }}>
             {new Date().toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} · {profile?.full_name}
