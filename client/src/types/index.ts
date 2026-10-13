@@ -95,6 +95,20 @@ export interface OrderItem {
   line_total: number
 }
 
+/**
+ * Running totals returned alongside a page of orders.
+ *
+ * Scoped to the caller — a cashier only ever totals their own orders — and
+ * deliberately unfiltered, so the figures describe their whole history rather
+ * than the current search or status tab.
+ */
+export interface OrderSummary {
+  /** Every transaction on record for this scope, voids included. */
+  transactions: number
+  /** Value of completed sales, voids excluded. */
+  sales: number
+}
+
 export interface CartItem extends Product {
   qty: number
 }

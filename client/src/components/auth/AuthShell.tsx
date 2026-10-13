@@ -33,7 +33,7 @@ interface AuthShellProps {
  * An earlier revision of this file replaced it with a hand-drawn wing SVG
  * (six iterations of it, in fact). The user asked for the real logo back, so do
  * not substitute artwork here: `/logo.png` is the brand, and the wordmark
- * beside it is Fraunces with "WING" in orange. Both are deliberate.
+ * beside it carries "WING" in orange. Both are deliberate.
  */
 
 const FEATURES: { label: string; icon: ReactNode }[] = [

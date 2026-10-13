@@ -75,7 +75,7 @@ function OtpInput({ value, onChange }: { value: string[]; onChange: (v: string[]
           style={{
             width: 50, height: 58, borderRadius: 10,
             border: `2px solid ${digit ? 'var(--primary)' : 'var(--border)'}`,
-            textAlign: 'center', fontSize: 22, fontWeight: 700, fontFamily: 'DM Mono',
+            textAlign: 'center', fontSize: 22, fontWeight: 700, fontFamily: 'IBM Plex Mono',
             color: 'var(--foreground)', background: digit ? 'rgba(234,88,12,0.05)' : 'var(--card)',
             outline: 'none', transition: 'all 0.15s',
             boxShadow: digit ? '0 0 0 3px rgba(234,88,12,0.12)' : 'none',
@@ -275,7 +275,7 @@ export default function ResetPasswordPage({ onDone }: ResetPasswordPageProps) {
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                   <div style={{
                     width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, fontWeight: 700, fontFamily: 'DM Mono',
+                    fontSize: 12, fontWeight: 700, fontFamily: 'IBM Plex Mono',
                     background: i < currentIdx ? 'var(--primary)' : i === currentIdx ? 'var(--primary)' : 'var(--muted)',
                     color: i <= currentIdx ? 'white' : 'var(--muted-foreground)',
                     boxShadow: i === currentIdx ? '0 0 0 3px rgba(234,88,12,0.25)' : 'none',
@@ -299,7 +299,7 @@ export default function ResetPasswordPage({ onDone }: ResetPasswordPageProps) {
         {step === 'choose' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div>
-              <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Verify Your Identity</h2>
+              <h2 style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Verify Your Identity</h2>
               <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.55 }}>
                 For your security, please verify your identity before changing your password. Choose how you'd like to receive your one-time code.
               </p>
@@ -428,7 +428,7 @@ export default function ResetPasswordPage({ onDone }: ResetPasswordPageProps) {
                     : <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 14 19.79 19.79 0 0 1 1.61 5.5 2 2 0 0 1 3.59 3h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 10a16 16 0 0 0 6 6l.85-.85a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 17.32z"/></svg>
                   }
                 </div>
-                <h2 style={{ fontFamily: 'Fraunces', fontSize: 19, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Enter Verification Code</h2>
+                <h2 style={{ fontFamily: 'Inter', fontSize: 19, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Enter Verification Code</h2>
                 <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.55 }}>
                   A 6-digit code was sent to<br />
                   <strong style={{ color: 'var(--foreground)' }}>{step === 'verify-email' ? email : phone}</strong>
@@ -439,8 +439,8 @@ export default function ResetPasswordPage({ onDone }: ResetPasswordPageProps) {
               {/* Expiry countdown bar */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                  <span style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>Code expires in</span>
-                  <span style={{ fontSize: 13, fontFamily: 'DM Mono', fontWeight: 700, color: barColor }}>
+                  <span style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>Code expires in</span>
+                  <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: barColor }}>
                     {expired ? 'EXPIRED' : formatTime(expiry)}
                   </span>
                 </div>
@@ -489,7 +489,7 @@ export default function ResetPasswordPage({ onDone }: ResetPasswordPageProps) {
                   </button>
                 ) : resendCooldown > 0 ? (
                   <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
-                    Resend in <span style={{ fontFamily: 'DM Mono', fontWeight: 600 }}>{resendCooldown}s</span>
+                    Resend in <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 600 }}>{resendCooldown}s</span>
                   </p>
                 ) : (
                   <button onClick={resendOtp} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
@@ -513,7 +513,7 @@ export default function ResetPasswordPage({ onDone }: ResetPasswordPageProps) {
         {step === 'new-password' && (
           <form onSubmit={handlePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div>
-              <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Create New Password</h2>
+              <h2 style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Create New Password</h2>
               <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.5 }}>
                 Identity verified — Choose a strong password to secure your account.
               </p>
@@ -571,7 +571,7 @@ export default function ResetPasswordPage({ onDone }: ResetPasswordPageProps) {
             <div style={{ width: 58, height: 58, borderRadius: '50%', background: '#e8f5e9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </div>
-            <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 8 }}>Password Updated!</h2>
+            <h2 style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 8 }}>Password Updated!</h2>
             <p style={{ fontSize: 14, color: 'var(--muted-foreground)', lineHeight: 1.55, marginBottom: 20 }}>
               Your password has been successfully reset. Redirecting you to sign in...
             </p>

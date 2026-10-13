@@ -119,10 +119,10 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
               </svg>
             </div>
             <div>
-              <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', margin: 0 }}>
+              <h2 style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', margin: 0 }}>
                 Cash Payment
               </h2>
-              <p style={{ fontSize: 12, color: 'var(--muted-foreground)', margin: '2px 0 0 0', fontFamily: 'DM Mono' }}>
+              <p style={{ fontSize: 12, color: 'var(--muted-foreground)', margin: '2px 0 0 0', fontFamily: 'IBM Plex Mono' }}>
                 Calculate change due
               </p>
             </div>
@@ -161,7 +161,7 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
             <span style={{ fontSize: 14, color: 'var(--sidebar-muted)', fontWeight: 500 }}>Total Bill</span>
             <span style={{
               fontSize: 28,
-              fontFamily: 'DM Mono',
+              fontFamily: 'IBM Plex Mono',
               fontWeight: 700,
               color: 'var(--sidebar-active)',
               letterSpacing: '-0.02em',
@@ -189,7 +189,7 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
               top: '50%',
               transform: 'translateY(-50%)',
               fontSize: 20,
-              fontFamily: 'DM Mono',
+              fontFamily: 'IBM Plex Mono',
               fontWeight: 700,
               color: cashInput ? 'var(--foreground)' : 'var(--muted-foreground)',
               pointerEvents: 'none',
@@ -208,7 +208,7 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
                 width: '100%',
                 padding: '16px 18px 16px 42px',
                 fontSize: 22,
-                fontFamily: 'DM Mono',
+                fontFamily: 'IBM Plex Mono',
                 fontWeight: 700,
                 color: 'var(--foreground)',
                 background: 'var(--card)',
@@ -242,7 +242,7 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
                     padding: '12px 4px',
                     borderRadius: 8,
                     fontSize: 14,
-                    fontFamily: 'DM Mono',
+                    fontFamily: 'IBM Plex Mono',
                     fontWeight: 700,
                     cursor: 'pointer',
                     border: `1.5px solid ${isSelected ? 'var(--accent)' : isRecommended ? 'rgba(234,88,12,0.35)' : 'var(--border)'}`,
@@ -265,7 +265,7 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
                       color: '#fff',
                       padding: '1px 5px',
                       borderRadius: 4,
-                      fontFamily: 'DM Sans',
+                      fontFamily: 'Inter',
                       fontWeight: 600,
                       letterSpacing: '0.02em',
                     }}>
@@ -292,7 +292,7 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
               background: cashInput === total.toFixed(2) ? 'rgba(234,88,12,0.12)' : 'var(--card)',
               color: cashInput === total.toFixed(2) ? 'var(--accent)' : 'var(--muted-foreground)',
               transition: 'all 0.15s',
-              fontFamily: 'DM Sans',
+              fontFamily: 'Inter',
             }}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(234,88,12,0.08)'; e.currentTarget.style.borderColor = 'var(--accent)' }}
             onMouseLeave={e => { if (cashInput !== total.toFixed(2)) { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.borderColor = 'var(--border)' }}}
@@ -345,7 +345,7 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
             </div>
             <span style={{
               fontSize: canConfirm || isInsufficient ? 30 : 22,
-              fontFamily: 'DM Mono',
+              fontFamily: 'IBM Plex Mono',
               fontWeight: 700,
               color: isInsufficient
                 ? 'var(--danger)'
@@ -377,7 +377,7 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
               border: '1px solid var(--border)',
               background: 'var(--card)',
               color: 'var(--muted-foreground)',
-              fontFamily: 'DM Sans',
+              fontFamily: 'Inter',
               transition: 'all 0.15s',
             }}
             onMouseEnter={e => { e.currentTarget.style.background = 'var(--muted)'; e.currentTarget.style.color = 'var(--foreground)' }}
@@ -401,7 +401,7 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
                 ? 'linear-gradient(135deg, #ea580c, #f97316)'
                 : 'var(--muted)',
               color: canConfirm ? '#fff' : 'var(--muted-foreground)',
-              fontFamily: 'Fraunces',
+              fontFamily: 'Inter',
               transition: 'all 0.2s',
               boxShadow: canConfirm ? '0 4px 14px rgba(234,88,12,0.3)' : 'none',
               opacity: canConfirm ? 1 : 0.6,

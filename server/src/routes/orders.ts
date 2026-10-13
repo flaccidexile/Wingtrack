@@ -9,6 +9,18 @@ const router = Router()
 const DEFAULT_PAGE_SIZE = 100
 const MAX_PAGE_SIZE = 500
 
+/**
+ * Chunk size for the running-totals scan.
+ *
+ * PostgREST caps a single response (Supabase's default is 1000 rows), so the
+ * scan walks the table in pages of that size rather than asking for everything
+ * at once and silently receiving a truncated answer.
+ */
+const SUMMARY_PAGE_SIZE = 1000
+
+/** Ceiling on the scan, so a pathological table cannot stall a list request. */
+const SUMMARY_MAX_PAGES = 20
+
 // GET /api/orders — List orders (cashier reads own, admin reads all)
 router.get(
   '/',
@@ -57,6 +69,27 @@ router.get(
         search?: string
       }
 
+      // Normalised once, up front, so the page query and the summary below
+      // cannot drift apart in how they interpret the same parameters.
+      const statusFilter = status === 'completed' || status === 'void' ? status : null
+
+      const rangeStart = from && !Number.isNaN(Date.parse(from))
+        ? new Date(from).toISOString()
+        : null
+
+      // `to` is treated as inclusive of the whole day.
+      let rangeEnd: string | null = null
+      if (to && !Number.isNaN(Date.parse(to))) {
+        const end = new Date(to)
+        end.setHours(23, 59, 59, 999)
+        rangeEnd = end.toISOString()
+      }
+
+      // Free-text search by order number when the term is numeric.
+      const orderNumberSearch = search && /^\d+$/.test(search.trim())
+        ? Number(search.trim())
+        : null
+
       let query = supabaseAdmin
         .from('orders')
         .select('*, order_items(*), cashier:cashier_id(full_name, email)', { count: 'exact' })
@@ -68,23 +101,19 @@ router.get(
         query = query.eq('cashier_id', staffProfile.id)
       }
 
-      if (status === 'completed' || status === 'void') {
-        query = query.eq('status', status)
+      if (statusFilter) {
+        query = query.eq('status', statusFilter)
       }
 
-      if (from && !Number.isNaN(Date.parse(from))) {
-        query = query.gte('created_at', new Date(from).toISOString())
+      if (rangeStart) {
+        query = query.gte('created_at', rangeStart)
       }
-      if (to && !Number.isNaN(Date.parse(to))) {
-        // `to` is treated as inclusive of the whole day.
-        const end = new Date(to)
-        end.setHours(23, 59, 59, 999)
-        query = query.lte('created_at', end.toISOString())
+      if (rangeEnd) {
+        query = query.lte('created_at', rangeEnd)
       }
 
-      // Free-text search by order number when the term is numeric.
-      if (search && /^\d+$/.test(search.trim())) {
-        query = query.eq('order_number', Number(search.trim()))
+      if (orderNumberSearch !== null) {
+        query = query.eq('order_number', orderNumberSearch)
       }
 
       const { data: orders, error, count } = await query
@@ -95,11 +124,73 @@ router.get(
         return
       }
 
+      /*
+       * Running totals for whoever is asking.
+       *
+       * Deliberately NOT narrowed by status or search: this is the standing
+       * tally a cashier wants to see on their own history ("I have rung up 84
+       * sales worth ₱41,220.50") rather than a restatement of the rows
+       * underneath, and it must not jump to zero when the list is filtered to
+       * voids. It IS scoped by role, so a cashier only ever totals their own.
+       *
+       * Why the totals are summed here instead of by the database:
+       *
+       *   - PostgREST aggregates are switched OFF on this project. Asking for
+       *     `total_amount.sum()` fails with "Use of aggregate functions is not
+       *     allowed" (Supabase ships `db-aggregates-enabled = false`). Verified
+       *     against the live database, not assumed.
+       *   - The alternative, a `RETURNS TABLE` SQL function called over RPC,
+       *     would need a migration — and this project's migrations are not
+       *     reliably applied, so a core read must not depend on one.
+       *
+       * So the rows are read in chunks that stay under the API's response cap
+       * and added up in Node. `order('id')` gives pagination a unique, stable
+       * key, so no row can be double-counted or skipped between pages.
+       *
+       * Best-effort by design: on any failure the `summary` key is omitted and
+       * the client hides the strip. A decorative total is never a reason for
+       * the transaction list itself to fail.
+       */
+      let summary: { transactions: number; sales: number } | null = null
+      try {
+        let transactions = 0
+        let sales = 0
+
+        for (let page = 0; page < SUMMARY_MAX_PAGES; page += 1) {
+          let pageQuery = supabaseAdmin
+            .from('orders')
+            .select('status, total_amount')
+            .order('id', { ascending: true })
+            .range(page * SUMMARY_PAGE_SIZE, page * SUMMARY_PAGE_SIZE + SUMMARY_PAGE_SIZE - 1)
+
+          if (staffProfile.role === 'cashier') {
+            pageQuery = pageQuery.eq('cashier_id', staffProfile.id)
+          }
+
+          const { data: pageRows, error: pageError } = await pageQuery
+          if (pageError) throw pageError
+
+          const rows = pageRows ?? []
+          for (const row of rows) {
+            transactions += 1
+            if (row.status !== 'void') sales += Number(row.total_amount) || 0
+          }
+
+          // A short page means the table has been fully walked.
+          if (rows.length < SUMMARY_PAGE_SIZE) break
+        }
+
+        summary = { transactions, sales }
+      } catch (summaryError) {
+        console.error('Fetch orders — summary failed:', summaryError)
+      }
+
       res.json({
         orders: orders ?? [],
         total: count ?? (orders?.length ?? 0),
         limit,
         offset,
+        summary,
       })
     } catch (err) {
       console.error('Fetch orders error:', err)

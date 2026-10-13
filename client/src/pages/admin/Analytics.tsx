@@ -173,8 +173,8 @@ export default function Analytics() {
               { label: 'Best Month',      val: bestMonth?.month ?? '-',                note: `\u20B1${bestMonth?.revenue.toLocaleString() ?? 0}`, color: '#4a7c4e' },
             ].map(k => (
               <div key={k.label} className="card" style={{ padding: '22px 24px' }}>
-                <p style={{ fontSize: 11, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontFamily: 'DM Mono' }}>{k.label}</p>
-                <p style={{ fontFamily: 'Fraunces', fontSize: 28, fontWeight: 700, color: k.color, lineHeight: 1 }}>{k.val}</p>
+                <p style={{ fontSize: 11, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontFamily: 'IBM Plex Mono' }}>{k.label}</p>
+                <p style={{ fontFamily: 'Inter', fontSize: 28, fontWeight: 700, color: k.color, lineHeight: 1 }}>{k.val}</p>
                 <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 8 }}>{k.note}</p>
               </div>
             ))}
@@ -184,7 +184,7 @@ export default function Analytics() {
               trend chart to ~70px on a phone, so collapse to one column there. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 18, marginBottom: 20 }}>
             <div className="card" style={{ padding: '24px 26px', minWidth: 0 }}>
-              <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, marginBottom: 4, color: 'var(--foreground)' }}>Monthly Revenue Trend</h3>
+              <h3 style={{ fontFamily: 'Inter', fontSize: 17, fontWeight: 600, marginBottom: 4, color: 'var(--foreground)' }}>Monthly Revenue Trend</h3>
               <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 18 }}>{period}</p>
               <div ref={trendRef} style={{ width: '100%', minWidth: 0 }}>
               <ResponsiveContainer width="100%" height={trendAngle ? 200 : 230}>
@@ -198,7 +198,7 @@ export default function Analytics() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="month"
-                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}
+                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}
                     axisLine={false}
                     tickLine={false}
                     interval={trendTickInterval}
@@ -207,7 +207,7 @@ export default function Analytics() {
                     height={trendAngle ? 46 : 26}
                     dy={trendAngle ? 6 : 0}
                   />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} width={38} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} width={38} />
                   <Tooltip contentStyle={{ background: 'var(--sidebar)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} labelStyle={{ color: 'var(--sidebar-muted)', fontSize: 12 }} formatter={(v) => [`₱${Number(v).toLocaleString()}`, 'Revenue']} itemStyle={{ color: 'var(--sidebar-foreground)', fontSize: 13 }} />
                   <Area type="monotone" dataKey="revenue" stroke="#c47a2e" strokeWidth={2.5} fill="url(#mrev)" />
                 </AreaChart>
@@ -216,7 +216,7 @@ export default function Analytics() {
             </div>
 
             <div className="card" style={{ padding: '24px 26px' }}>
-              <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, marginBottom: 4, color: 'var(--foreground)' }}>Sales by Category</h3>
+              <h3 style={{ fontFamily: 'Inter', fontSize: 17, fontWeight: 600, marginBottom: 4, color: 'var(--foreground)' }}>Sales by Category</h3>
               <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 12 }}>% of total orders</p>
               <ResponsiveContainer width="100%" height={150}>
                 <PieChart>
@@ -233,7 +233,7 @@ export default function Analytics() {
                       <span style={{ width: 9, height: 9, borderRadius: 2, background: PIE_COLORS[i % PIE_COLORS.length], display: 'inline-block' }} />
                       <span style={{ fontSize: 12, color: 'var(--foreground)' }}>{c.name}</span>
                     </div>
-                    <span style={{ fontSize: 12, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>{c.value}%</span>
+                    <span style={{ fontSize: 12, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>{c.value}%</span>
                   </div>
                 ))}
               </div>
@@ -242,18 +242,18 @@ export default function Analytics() {
 
           {/* Top Products */}
           <div className="card" style={{ padding: '24px 26px' }}>
-            <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, marginBottom: 18, color: 'var(--foreground)' }}>Top Products by Revenue</h3>
+            <h3 style={{ fontFamily: 'Inter', fontSize: 17, fontWeight: 600, marginBottom: 18, color: 'var(--foreground)' }}>Top Products by Revenue</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 120px', gap: 10, padding: '0 0 10px', borderBottom: '1px solid var(--border)', marginBottom: 10 }}>
-              {['Product', 'Orders', 'Revenue'].map(h => <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>)}
+              {['Product', 'Orders', 'Revenue'].map(h => <span key={h} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>)}
             </div>
             {topProducts.map((p, i) => (
               <div key={p.name} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 120px', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--muted)', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', minWidth: 16 }}>{i + 1}</span>
+                  <span style={{ fontSize: 12, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', minWidth: 16 }}>{i + 1}</span>
                   <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--foreground)' }}>{p.name}</span>
                 </div>
-                <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>{p.orders}</span>
-                <span style={{ fontSize: 14, fontFamily: 'DM Mono', fontWeight: 700, color: 'var(--primary)' }}>&#8369;{(p.revenue/1000).toFixed(0)}k</span>
+                <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>{p.orders}</span>
+                <span style={{ fontSize: 14, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: 'var(--primary)' }}>&#8369;{(p.revenue/1000).toFixed(0)}k</span>
               </div>
             ))}
             {topProducts.length === 0 && (

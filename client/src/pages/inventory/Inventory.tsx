@@ -34,10 +34,10 @@ interface AdjustModal {
 function Field({ label, value, mono, color }: { label: string; value: React.ReactNode; mono?: boolean; color?: string }) {
   return (
     <div style={{ minWidth: 0 }}>
-      <p style={{ fontSize: 10, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
+      <p style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
         {label}
       </p>
-      <p style={{ fontSize: 13, fontWeight: 600, fontFamily: mono ? 'DM Mono' : undefined, color: color ?? 'var(--foreground)', overflowWrap: 'anywhere' }}>
+      <p style={{ fontSize: 13, fontWeight: 600, fontFamily: mono ? 'IBM Plex Mono' : undefined, color: color ?? 'var(--foreground)', overflowWrap: 'anywhere' }}>
         {value}
       </p>
     </div>
@@ -118,7 +118,7 @@ function MovementCard({ m }: { m: InventoryMovement }) {
           <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--foreground)', overflowWrap: 'anywhere' }}>
             {m.inventory?.name ?? 'Unknown item'}
           </p>
-          <p style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'DM Mono', marginTop: 2 }}>
+          <p style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', marginTop: 2 }}>
             {dateStr}
           </p>
         </div>
@@ -693,7 +693,7 @@ export default function Inventory() {
               <div className="scroll-x">
               <div style={{ display: 'grid', gridTemplateColumns: '2fr 80px 105px 105px 115px 150px 90px 110px', gap: 0, padding: '12px 22px', borderBottom: '1px solid var(--border)', minWidth: 920 }}>
                 {['Item Name', 'Unit', 'In Stock', 'Min Level', 'Unit Cost', 'Supplier', 'Status', 'Actions'].map(h => (
-                  <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
+                  <span key={h} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
                 ))}
               </div>
               {filtered.map((item, i) => {
@@ -715,10 +715,10 @@ export default function Inventory() {
                       <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)' }}>{item.name}</p>
                       <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2 }}>{item.category}</p>
                     </div>
-                    <span style={{ fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}>{item.unit}</span>
-                    <span style={{ fontSize: 14, fontFamily: 'DM Mono', fontWeight: 700, color: qtyColor }}>{Number(item.stock_qty).toLocaleString()}</span>
-                    <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>{Number(item.min_stock_level).toLocaleString()}</span>
-                    <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--foreground)' }}>&#8369;{Number(item.unit_cost).toLocaleString()}</span>
+                    <span style={{ fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}>{item.unit}</span>
+                    <span style={{ fontSize: 14, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: qtyColor }}>{Number(item.stock_qty).toLocaleString()}</span>
+                    <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>{Number(item.min_stock_level).toLocaleString()}</span>
+                    <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)' }}>&#8369;{Number(item.unit_cost).toLocaleString()}</span>
                     <span style={{ fontSize: 12, color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.supplier ?? '-'}</span>
                     <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20, fontWeight: 700, background: s.bg, color: s.color, textAlign: 'center', display: 'inline-block' }}>{s.label}</span>
                     <div style={{ display: 'flex', gap: 6 }}>
@@ -771,7 +771,7 @@ export default function Inventory() {
               <div className="scroll-x">
               <div style={{ display: 'grid', gridTemplateColumns: '150px 200px 110px 100px 140px 140px 1fr', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)', minWidth: 940 }}>
                 {['Timestamp', 'Item', 'Type', 'Change', 'Before → After', 'Staff', 'Notes'].map(h => (
-                  <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
+                  <span key={h} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
                 ))}
               </div>
               {movements.map((m, i) => {
@@ -795,17 +795,17 @@ export default function Inventory() {
                       alignItems: 'center', fontSize: 13, minWidth: 940,
                     }}
                   >
-                    <span style={{ fontSize: 12, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>{dateStr}</span>
+                    <span style={{ fontSize: 12, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>{dateStr}</span>
                     <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{m.inventory?.name ?? 'Unknown item'}</span>
                     <div>
                       <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 12, background: typeBg, color: typeColor, textTransform: 'uppercase', fontWeight: 700 }}>
                         {m.movement_type}
                       </span>
                     </div>
-                    <span style={{ fontFamily: 'DM Mono', fontWeight: 700, color: isPositive ? '#15803d' : '#b91c1c' }}>
+                    <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 700, color: isPositive ? '#15803d' : '#b91c1c' }}>
                       {isPositive ? `+${m.qty_change}` : m.qty_change} {m.inventory?.unit ?? ''}
                     </span>
-                    <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--muted-foreground)' }}>
+                    <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 12, color: 'var(--muted-foreground)' }}>
                       {Number(m.qty_before).toFixed(1)} → {Number(m.qty_after).toFixed(1)}
                     </span>
                     <span style={{ fontSize: 12, color: 'var(--foreground)' }}>
@@ -849,7 +849,7 @@ export default function Inventory() {
           onClick={e => { if (e.target === e.currentTarget) setAdjustModal(null) }}
         >
           <div className="card fade-in" style={{ width: '100%', maxWidth: 440, padding: '30px 26px', boxShadow: '0 25px 60px rgba(0,0,0,0.35)' }}>
-            <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
+            <h2 style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
               {adjustModal.type === 'restock' ? 'Restock' : adjustModal.type === 'waste' ? 'Record Waste' : 'Adjust Stock'}
             </h2>
             <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 20 }}>
@@ -920,7 +920,7 @@ export default function Inventory() {
           onClick={e => { if (e.target === e.currentTarget) setShowAddModal(false) }}
         >
           <div className="card fade-in" style={{ width: '100%', maxWidth: 460, padding: '28px 26px', boxShadow: '0 25px 60px rgba(0,0,0,0.35)' }}>
-            <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
+            <h2 style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
               Add New Inventory Item
             </h2>
             <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 18 }}>

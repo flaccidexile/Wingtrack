@@ -1,10 +1,32 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { apiGetOrders, apiVoidOrder } from '@/lib/api'
-import type { Order } from '@/types'
+import type { Order, OrderSummary } from '@/types'
 import { useAuth } from '@/hooks/useAuth'
 import { useIsCompact } from '@/hooks/useMediaQuery'
 import ReceiptModal from '@/components/receipt/ReceiptModal'
+
+/** One figure in the running-totals strip. */
+function StatTile({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div style={{ flex: '1 1 210px', minWidth: 0 }}>
+      <p style={{
+        fontSize: 11, fontFamily: 'IBM Plex Mono', letterSpacing: '0.08em',
+        textTransform: 'uppercase', color: 'var(--muted-foreground)', marginBottom: 7,
+      }}>
+        {label}
+      </p>
+      <p style={{
+        fontSize: 24, fontWeight: 700, lineHeight: 1.1,
+        color: 'var(--foreground)', fontVariantNumeric: 'tabular-nums',
+        overflowWrap: 'anywhere',
+      }}>
+        {value}
+      </p>
+      <p style={{ fontSize: 11.5, color: 'var(--muted-foreground)', marginTop: 5 }}>{hint}</p>
+    </div>
+  )
+}
 
 /**
  * Compact presentation of a single order for phone-width viewports.
@@ -35,7 +57,7 @@ function OrderCard({
     <div className="card" style={{ padding: '14px 16px', background: isVoid ? 'rgba(254, 242, 242, 0.5)' : undefined }}>
       {/* Row 1: order number + status */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
-        <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 15, color: 'var(--foreground)' }}>
+        <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 700, fontSize: 15, color: 'var(--foreground)' }}>
           #{order.order_number}
         </span>
         <span
@@ -55,7 +77,7 @@ function OrderCard({
       </div>
 
       {/* Row 2: when */}
-      <p style={{ fontSize: 12, color: 'var(--muted-foreground)', fontFamily: 'DM Mono', marginBottom: 10 }}>
+      <p style={{ fontSize: 12, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', marginBottom: 10 }}>
         {dateStr}
       </p>
 
@@ -65,10 +87,10 @@ function OrderCard({
           {items.map(item => (
             <li key={item.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13 }}>
               <span style={{ color: 'var(--foreground)', minWidth: 0, overflowWrap: 'anywhere' }}>
-                <span style={{ color: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}>{item.quantity}&times;</span>{' '}
+                <span style={{ color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}>{item.quantity}&times;</span>{' '}
                 {item.product_name}
               </span>
-              <span style={{ fontFamily: 'DM Mono', color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>
+              <span style={{ fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>
                 &#8369;{Number(item.line_total).toFixed(2)}
               </span>
             </li>
@@ -95,13 +117,13 @@ function OrderCard({
           borderTop: '1px solid var(--muted)',
         }}
       >
-        <span style={{ fontSize: 11, textTransform: 'uppercase', fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>
+        <span style={{ fontSize: 11, textTransform: 'uppercase', fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>
           {order.payment_method}
         </span>
         <span
           style={{
             fontSize: 16,
-            fontFamily: 'DM Mono',
+            fontFamily: 'IBM Plex Mono',
             fontWeight: 700,
             color: isVoid ? '#9ca3af' : 'var(--foreground)',
             textDecoration: isVoid ? 'line-through' : 'none',
@@ -167,6 +189,13 @@ export default function OrdersList() {
   const [total, setTotal] = useState(0)
   const [limit, setLimit] = useState(100)
   const [offset, setOffset] = useState(0)
+  /**
+   * All-time running totals for the caller. Null until the server reports
+   * them (or when it cannot), in which case the strip is simply not rendered.
+   */
+  const [summary, setSummary] = useState<OrderSummary | null>(null)
+
+  const isCashier = role === 'cashier'
 
   // Modals state
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<Order | null>(null)
@@ -202,6 +231,7 @@ export default function OrdersList() {
       setOrders(page.orders)
       setTotal(page.total)
       setLimit(page.limit)
+      setSummary(page.summary ?? null)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to fetch orders')
     } finally {
@@ -255,10 +285,12 @@ export default function OrdersList() {
       <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 className="page-title" style={{ fontSize: 26 }}>
-            Transactions
+            {isCashier ? 'My Transactions' : 'Transactions'}
           </h1>
           <p className="page-subtitle">
-            {role === 'admin' ? 'All store customer orders and transaction audits' : 'Your recorded sales and customer orders'}
+            {isCashier
+              ? 'Your previous sales and customer orders — every order you have rung up'
+              : 'All store customer orders and transaction audits'}
           </p>
         </div>
         <button
@@ -273,6 +305,30 @@ export default function OrdersList() {
           Refresh
         </button>
       </div>
+
+      {/* Running totals. Deliberately unfiltered — see the API's summary
+          handling — so the figures describe the whole history rather than
+          whatever the list happens to be filtered to right now. */}
+      {summary && (
+        <div
+          className="card"
+          style={{
+            display: 'flex', flexWrap: 'wrap', gap: '18px 32px',
+            padding: '18px 22px', marginBottom: 18,
+          }}
+        >
+          <StatTile
+            label={isCashier ? 'Your transactions' : 'Transactions on record'}
+            value={summary.transactions.toLocaleString('en-PH')}
+            hint="All time, voided orders included"
+          />
+          <StatTile
+            label={isCashier ? 'Your total sales' : 'Total sales'}
+            value={`₱${summary.sales.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            hint="Completed orders, voids excluded"
+          />
+        </div>
+      )}
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -352,7 +408,7 @@ export default function OrdersList() {
           <div className="scroll-x">
           <div style={{ display: 'grid', gridTemplateColumns: '62px 120px minmax(0, 1fr) 82px 98px 94px 126px', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)', minWidth: 720 }}>
             {['Order #', 'Date & Time', 'Items Summary', 'Payment', 'Total', 'Status', 'Actions'].map(h => (
-              <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              <span key={h} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 {h}
               </span>
             ))}
@@ -385,11 +441,11 @@ export default function OrdersList() {
                   minWidth: 720,
                 }}
               >
-                <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 13, color: 'var(--foreground)' }}>
+                <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 700, fontSize: 13, color: 'var(--foreground)' }}>
                   #{order.order_number}
                 </span>
 
-                <span style={{ fontSize: 12, color: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}>
+                <span style={{ fontSize: 12, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}>
                   {dateStr}
                 </span>
 
@@ -404,11 +460,11 @@ export default function OrdersList() {
                   )}
                 </div>
 
-                <span style={{ fontSize: 12, textTransform: 'uppercase', fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>
+                <span style={{ fontSize: 12, textTransform: 'uppercase', fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>
                   {order.payment_method}
                 </span>
 
-                <span style={{ fontSize: 14, fontFamily: 'DM Mono', fontWeight: 700, color: isVoid ? '#9ca3af' : 'var(--foreground)', textDecoration: isVoid ? 'line-through' : 'none' }}>
+                <span style={{ fontSize: 14, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: isVoid ? '#9ca3af' : 'var(--foreground)', textDecoration: isVoid ? 'line-through' : 'none' }}>
                   ₱{Number(order.total_amount).toFixed(2)}
                 </span>
 
@@ -539,7 +595,7 @@ export default function OrdersList() {
           onClick={e => { if (e.target === e.currentTarget) setVoidModalOrder(null) }}
         >
           <div className="card fade-in" style={{ width: '100%', maxWidth: 420, padding: '26px', boxShadow: '0 25px 60px rgba(0,0,0,0.35)' }}>
-            <h3 style={{ fontFamily: 'Fraunces', fontSize: 18, color: '#b91c1c', marginBottom: 10 }}>
+            <h3 style={{ fontFamily: 'Inter', fontSize: 18, color: '#b91c1c', marginBottom: 10 }}>
               Void Order #{voidModalOrder.order_number}?
             </h3>
             <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 16 }}>

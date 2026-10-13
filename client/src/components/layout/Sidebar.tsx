@@ -23,6 +23,14 @@ type Page =
 interface NavItem {
   id: Page
   label: string
+  /**
+   * Label shown instead of `label` for a cashier.
+   *
+   * Transactions is a shared screen with two different meanings: an admin is
+   * auditing the whole store, a cashier is looking back over their own shift
+   * history. Same page, honest heading.
+   */
+  cashierLabel?: string
   roles: StaffRole[]
   icon: React.FC<{ active: boolean }>
 }
@@ -103,7 +111,10 @@ function SettingsIcon({ active }: { active: boolean }) {
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard',     roles: ['admin'],                       icon: DashIcon     },
   { id: 'pos',       label: 'Point of Sale',  roles: ['admin', 'cashier'],            icon: PosIcon      },
-  { id: 'orders',    label: 'Transactions',   roles: ['admin'],                       icon: OrdersIcon   },
+  // Shared page. A cashier sees only their own orders (the server scopes the
+  // query by cashier_id), so the label says so rather than implying store-wide
+  // access they do not have.
+  { id: 'orders',    label: 'Transactions',   cashierLabel: 'My Transactions', roles: ['admin', 'cashier'], icon: OrdersIcon },
   { id: 'menu',      label: 'Menu Items',     roles: ['admin'],                       icon: MenuIcon     },
   { id: 'inventory', label: 'Inventory',      roles: ['admin', 'inventory_personnel'], icon: InvIcon      },
   { id: 'analytics', label: 'Analytics',      roles: ['admin'],                       icon: AnaIcon      },
@@ -178,8 +189,9 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
   const showSettings = !!role && SETTINGS_ITEM.roles.includes(role)
 
   /** One nav row. Shared so the pinned Settings button matches the main group. */
-  function renderNavButton({ id, label, icon: Icon }: NavItem) {
+  function renderNavButton({ id, label, cashierLabel, icon: Icon }: NavItem) {
     const active = page === id
+    const text = role === 'cashier' && cashierLabel ? cashierLabel : label
     return (
       <button
         key={id}
@@ -193,7 +205,7 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
           borderRadius: 9,
           border: 'none',
           cursor: 'pointer',
-          fontFamily: 'DM Sans',
+          fontFamily: 'Inter',
           fontSize: 14,
           fontWeight: active ? 600 : 500,
           textAlign: 'left',
@@ -217,7 +229,7 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
         }}
       >
         <Icon active={active} />
-        {label}
+        {text}
       </button>
     )
   }
@@ -323,11 +335,11 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontFamily: 'Fraunces', fontSize: 21, fontWeight: 700, color: 'var(--sidebar-foreground)', letterSpacing: '-0.01em' }}>
+                <span style={{ fontFamily: 'Inter', fontSize: 21, fontWeight: 800, color: 'var(--sidebar-foreground)', letterSpacing: '-0.03em' }}>
                   WINGTRACK
                 </span>
               </div>
-              <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--sidebar-active)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
+              <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--sidebar-active)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
                 POS &amp; INVENTORY
               </span>
             </div>
@@ -398,7 +410,7 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
               width: '100%', marginTop: 8, padding: '10px', background: 'transparent',
               border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8,
               fontSize: 13, color: 'var(--sidebar-muted)', cursor: 'pointer',
-              fontFamily: 'DM Sans', fontWeight: 500, transition: 'all 0.15s',
+              fontFamily: 'Inter', fontWeight: 500, transition: 'all 0.15s',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
             }}
             onMouseEnter={e => {
@@ -458,7 +470,7 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
           onClick={e => { if (e.target === e.currentTarget) setShowPwdModal(false) }}
         >
           <div className="card fade-in" style={{ width: '100%', maxWidth: 380, maxHeight: '90dvh', overflowY: 'auto', padding: '26px' }}>
-            <h3 style={{ fontFamily: 'Fraunces', fontSize: 18, color: 'var(--foreground)', marginBottom: 8 }}>
+            <h3 style={{ fontFamily: 'Inter', fontSize: 18, color: 'var(--foreground)', marginBottom: 8 }}>
               Change Your Password
             </h3>
             <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 16 }}>

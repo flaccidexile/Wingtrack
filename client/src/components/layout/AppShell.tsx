@@ -23,7 +23,10 @@ const DEFAULT_PAGE: Record<StaffRole, Page> = {
 /** Which pages each role is allowed to access */
 const PAGE_ACCESS: Record<StaffRole, Page[]> = {
   admin: ['dashboard', 'pos', 'orders', 'menu', 'inventory', 'analytics', 'staff', 'settings'],
-  cashier: ['pos', 'settings'],
+  // Cashiers get Transactions too: it is their own sales history, and the API
+  // already scopes the query to their cashier_id, so they can look back over
+  // previous orders without ever seeing another cashier's takings.
+  cashier: ['pos', 'orders', 'settings'],
   inventory_personnel: ['inventory', 'settings'],
 }
 
@@ -133,14 +136,18 @@ export default function AppShell() {
             </button>
             <span
               style={{
-                fontFamily: 'Fraunces',
+                fontFamily: 'Inter',
                 fontSize: 17,
                 fontWeight: 700,
                 color: 'var(--sidebar-foreground)',
                 letterSpacing: '-0.01em',
               }}
             >
-              {PAGE_TITLES[safePage]}
+              {/* The mobile bar mirrors the sidebar's wording, so a cashier
+                  reads "My Transactions" in both places. */}
+              {safePage === 'orders' && role === 'cashier'
+                ? 'My Transactions'
+                : PAGE_TITLES[safePage]}
             </span>
           </header>
         )}

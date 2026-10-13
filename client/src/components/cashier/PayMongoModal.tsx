@@ -190,8 +190,8 @@ export default function PayMongoModal({
               </svg>
             </div>
             <div>
-              <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--foreground)', fontFamily: 'Fraunces' }}>Online Payment</p>
-              <p style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}>SANDBOX TEST MODE</p>
+              <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--foreground)', fontFamily: 'Inter' }}>Online Payment</p>
+              <p style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}>SANDBOX TEST MODE</p>
             </div>
           </div>
           {step !== 'processing' && step !== 'directing' && (
@@ -202,7 +202,7 @@ export default function PayMongoModal({
         {/* Amount */}
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 4 }}>Total to Pay</p>
-          <p style={{ fontFamily: 'Fraunces', fontSize: 32, fontWeight: 700, color: 'var(--foreground)' }}>
+          <p style={{ fontFamily: 'Inter', fontSize: 32, fontWeight: 700, color: 'var(--foreground)' }}>
             &#8369;{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
           </p>
           <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 3 }}>{orderDescription}</p>
@@ -222,7 +222,7 @@ export default function PayMongoModal({
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = ew === 'gcash' ? '#16a34a' : '#0ea5e9'; (e.currentTarget as HTMLElement).style.background = ew === 'gcash' ? 'rgba(22,163,74,0.06)' : 'rgba(14,165,233,0.06)' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.background = 'var(--card)' }}
               >
-                <div style={{ width: 36, height: 36, borderRadius: 8, background: ew === 'gcash' ? 'rgba(22,163,74,0.15)' : 'rgba(14,165,233,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'DM Mono', fontSize: 13, fontWeight: 700, color: ew === 'gcash' ? '#22c55e' : '#38bdf8' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: ew === 'gcash' ? 'rgba(22,163,74,0.15)' : 'rgba(14,165,233,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'IBM Plex Mono', fontSize: 13, fontWeight: 700, color: ew === 'gcash' ? '#22c55e' : '#38bdf8' }}>
                   {ew === 'gcash' ? 'GC' : 'MY'}
                 </div>
                 <div style={{ flex: 1 }}>
@@ -263,11 +263,11 @@ export default function PayMongoModal({
         {/* ── Step: E-wallet confirm (GCash / Maya) ── */}
         {step === 'ewallet' && (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ width: 64, height: 64, borderRadius: 16, background: eWalletType === 'gcash' ? 'rgba(22,163,74,0.15)' : 'rgba(14,165,233,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontFamily: 'DM Mono', fontSize: 22, fontWeight: 700, color: providerColor }}>
+            <div style={{ width: 64, height: 64, borderRadius: 16, background: eWalletType === 'gcash' ? 'rgba(22,163,74,0.15)' : 'rgba(14,165,233,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontFamily: 'IBM Plex Mono', fontSize: 22, fontWeight: 700, color: providerColor }}>
               {eWalletType === 'gcash' ? 'GCash' : 'Maya'}
             </div>
 
-            <h3 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, marginBottom: 8, color: 'var(--foreground)' }}>
+            <h3 style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, marginBottom: 8, color: 'var(--foreground)' }}>
               Scan QR Code with {providerName}
             </h3>
 
@@ -312,7 +312,7 @@ export default function PayMongoModal({
         {step === 'directing' && (
           <div style={{ textAlign: 'center', padding: '16px 0' }}>
             <div className="spinner" style={{ width: 44, height: 44, borderWidth: 4, margin: '0 auto 20px', borderColor: `${providerColor} transparent transparent transparent` }} />
-            <h3 style={{ fontFamily: 'Fraunces', fontSize: 19, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
+            <h3 style={{ fontFamily: 'Inter', fontSize: 19, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>
               Directing to {providerName}...
             </h3>
             <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.5, marginBottom: 20 }}>
@@ -349,7 +349,7 @@ export default function PayMongoModal({
               {TEST_CARDS.map(tc => (
                 <button key={tc.number} onClick={() => { setCardNumber(formatCardNumber(tc.number)); setExpMonth('12'); setExpYear('28'); setCvc('123'); setCardName('Test Customer') }}
                   style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', fontSize: 12, color: 'var(--muted-foreground)', cursor: 'pointer', padding: '3px 0' }}>
-                  <span style={{ fontFamily: 'DM Mono' }}>{tc.number.replace(/(.{4})/g, '$1 ')}</span> — {tc.label}
+                  <span style={{ fontFamily: 'IBM Plex Mono' }}>{tc.number.replace(/(.{4})/g, '$1 ')}</span> — {tc.label}
                 </button>
               ))}
             </div>
@@ -362,20 +362,20 @@ export default function PayMongoModal({
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 5 }}>Card Number</label>
               <input className="input" placeholder="1234 5678 9012 3456" value={cardNumber}
                 onChange={e => setCardNumber(formatCardNumber(e.target.value))}
-                style={{ padding: '11px 13px', fontSize: 14, fontFamily: 'DM Mono', letterSpacing: '0.05em' }} />
+                style={{ padding: '11px 13px', fontSize: 14, fontFamily: 'IBM Plex Mono', letterSpacing: '0.05em' }} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 5 }}>Month (MM)</label>
-                <input className="input" placeholder="12" maxLength={2} value={expMonth} onChange={e => setExpMonth(e.target.value.replace(/\D/g, ''))} style={{ padding: '11px 13px', fontSize: 14, fontFamily: 'DM Mono' }} />
+                <input className="input" placeholder="12" maxLength={2} value={expMonth} onChange={e => setExpMonth(e.target.value.replace(/\D/g, ''))} style={{ padding: '11px 13px', fontSize: 14, fontFamily: 'IBM Plex Mono' }} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 5 }}>Year (YY)</label>
-                <input className="input" placeholder="28" maxLength={2} value={expYear} onChange={e => setExpYear(e.target.value.replace(/\D/g, ''))} style={{ padding: '11px 13px', fontSize: 14, fontFamily: 'DM Mono' }} />
+                <input className="input" placeholder="28" maxLength={2} value={expYear} onChange={e => setExpYear(e.target.value.replace(/\D/g, ''))} style={{ padding: '11px 13px', fontSize: 14, fontFamily: 'IBM Plex Mono' }} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 5 }}>CVC</label>
-                <input className="input" placeholder="123" maxLength={4} value={cvc} onChange={e => setCvc(e.target.value.replace(/\D/g, ''))} style={{ padding: '11px 13px', fontSize: 14, fontFamily: 'DM Mono' }} />
+                <input className="input" placeholder="123" maxLength={4} value={cvc} onChange={e => setCvc(e.target.value.replace(/\D/g, ''))} style={{ padding: '11px 13px', fontSize: 14, fontFamily: 'IBM Plex Mono' }} />
               </div>
             </div>
 
@@ -406,9 +406,9 @@ export default function PayMongoModal({
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
             </div>
-            <h3 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: '#22c55e', marginBottom: 8 }}>Payment Successful</h3>
+            <h3 style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, color: '#22c55e', marginBottom: 8 }}>Payment Successful</h3>
             <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 6 }}>
-              Intent ID: <span style={{ fontFamily: 'DM Mono', fontSize: 11 }}>{(intentId || 'pi_sandbox_confirmed').slice(0, 24)}...</span>
+              Intent ID: <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 11 }}>{(intentId || 'pi_sandbox_confirmed').slice(0, 24)}...</span>
             </p>
             <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 22 }}>The payment has been authorized and the order will now be completed.</p>
             <button id="pm-success-continue" onClick={() => onSuccess(intentId || 'pi_sandbox_confirmed')} className="btn-primary"
@@ -426,7 +426,7 @@ export default function PayMongoModal({
                 <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
               </svg>
             </div>
-            <h3 style={{ fontFamily: 'Fraunces', fontSize: 18, fontWeight: 700, color: '#ef4444', marginBottom: 8 }}>Payment Error</h3>
+            <h3 style={{ fontFamily: 'Inter', fontSize: 18, fontWeight: 700, color: '#ef4444', marginBottom: 8 }}>Payment Error</h3>
             <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 20, lineHeight: 1.55 }}>{error}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button id="pm-error-sandbox-complete" onClick={handleInstantSandboxComplete} className="btn-primary" style={{ padding: '11px', borderRadius: 8, fontSize: 13 }}>

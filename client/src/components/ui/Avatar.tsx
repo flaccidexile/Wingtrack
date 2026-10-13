@@ -63,7 +63,7 @@ export default function Avatar({ name, src, size = 36, ring = null, title }: Ava
         color: '#fdfaf6',
         fontSize: Math.max(11, Math.round(size * 0.38)),
         fontWeight: 700,
-        fontFamily: 'DM Sans',
+        fontFamily: 'Inter',
         letterSpacing: '0.01em',
         userSelect: 'none',
       }}

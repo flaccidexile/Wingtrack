@@ -184,10 +184,10 @@ export default function EditStaffModal({ staff, self, onClose, onSaved }: EditSt
       onClick={e => { if (e.target === e.currentTarget && !busy) onClose() }}
     >
       <div className="card fade-in dialog-card" style={{ width: '100%', maxWidth: 460, padding: '28px 26px', boxShadow: '0 25px 60px rgba(0,0,0,0.35)' }}>
-        <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)' }}>
+        <h2 style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, color: 'var(--foreground)' }}>
           Edit Staff Member
         </h2>
-        <p style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', marginTop: 4, marginBottom: 20, overflowWrap: 'anywhere' }}>
+        <p style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', marginTop: 4, marginBottom: 20, overflowWrap: 'anywhere' }}>
           ID: {staff.id.slice(0, 8)}…
         </p>
 
@@ -205,7 +205,7 @@ export default function EditStaffModal({ staff, self, onClose, onSaved }: EditSt
               <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--foreground)', overflowWrap: 'anywhere' }}>
                 {fullName || staff.full_name}
               </p>
-              <p style={{ fontSize: 11.5, color: 'var(--muted-foreground)', fontFamily: 'DM Mono', marginTop: 2, overflowWrap: 'anywhere' }}>
+              <p style={{ fontSize: 11.5, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', marginTop: 2, overflowWrap: 'anywhere' }}>
                 {staff.email}
               </p>
 

@@ -484,7 +484,7 @@ export default function LoginPage({ onSwitchToSignUp, onForgotPassword }: LoginP
                       style={{
                         width: 48, height: 56, borderRadius: 10,
                         border: `2px solid ${digit ? 'var(--primary)' : otpError ? '#b91c1c' : 'var(--border)'}`,
-                        textAlign: 'center', fontSize: 22, fontWeight: 700, fontFamily: 'DM Mono',
+                        textAlign: 'center', fontSize: 22, fontWeight: 700, fontFamily: 'IBM Plex Mono',
                         color: 'var(--foreground)',
                         background: digit ? 'rgba(234,88,12,0.05)' : 'var(--card)',
                         outline: 'none', transition: 'all 0.15s',

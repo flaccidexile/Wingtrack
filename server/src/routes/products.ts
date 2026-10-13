@@ -1,4 +1,4 @@
-import { Router, type Response } from 'express'
+import express, { Router, type Response } from 'express'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
@@ -9,6 +9,41 @@ const router = Router()
 const MAX_PRICE = 1_000_000
 /** Upper bound for a recipe quantity per unit sold. */
 const MAX_QTY_PER_UNIT = 1_000_000
+
+/** Dish photos are capped at 5 MB, matching the avatar upload in staff.ts. */
+const MAX_MENU_IMAGE_BYTES = 5 * 1024 * 1024
+
+/** Image types the product-images bucket accepts. */
+const MENU_IMAGE_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+}
+
+/**
+ * Bucket holding dish photos.
+ *
+ * This is the bucket the seeded menu already uses, so uploads and the existing
+ * catalogue share one naming scheme — and replacing a seeded photo actually
+ * cleans the old object up rather than orphaning it in a second bucket.
+ *
+ * Deliberately separate from `avatars`: the two are policed differently (these
+ * are public marketing images, those are people), and keeping them apart means
+ * clearing one can never touch the other.
+ */
+const PRODUCT_IMAGE_BUCKET = 'product-images'
+
+/** Rejects a malformed `:id` before it reaches Postgres. */
+function requireUuidParam(req: AuthenticatedRequest, res: Response): string | null {
+  const id = String(req.params.id ?? '')
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    // Without this guard Postgres raises `invalid input syntax for type uuid`,
+    // which surfaces to the client as a 500 echoing the raw database error.
+    res.status(400).json({ message: 'Invalid product id.' })
+    return null
+  }
+  return id
+}
 
 /**
  * Validate a price coming from the client.
@@ -60,6 +95,117 @@ function parseRecipes(
       qty_per_unit: r.qty,
     }))
 }
+
+// ── Dish photos ──────────────────────────────────────────────
+/*
+ * Uploads mirror the staff-avatar path in `staff.ts`, and for the same reason:
+ * the bytes are written with the service-role key, so photos work on a project
+ * where the Storage RLS policies have not been created yet. The client never
+ * talks to Storage directly.
+ *
+ * The image is uploaded to its own endpoint AFTER the product row exists,
+ * rather than being part of the create payload. That keeps one write path for
+ * photos (so "add" and "change" cannot drift apart) and means the object path
+ * can be keyed on a real product id.
+ */
+
+/**
+ * Creates the `product-images` bucket if it is missing.
+ *
+ * A fresh project will not have it, and a missing bucket surfaces to the user
+ * as an opaque upload failure. Creating it on demand keeps the feature
+ * self-contained.
+ */
+async function ensureProductImagesBucket() {
+  try {
+    const { data } = await supabaseAdmin.storage.getBucket(PRODUCT_IMAGE_BUCKET)
+    if (data) return
+  } catch {
+    // getBucket throws when the bucket is absent — fall through and create it.
+  }
+
+  const { error } = await supabaseAdmin.storage.createBucket(PRODUCT_IMAGE_BUCKET, {
+    public: true,
+    fileSizeLimit: MAX_MENU_IMAGE_BYTES,
+    allowedMimeTypes: Object.keys(MENU_IMAGE_MIME),
+  })
+
+  // A concurrent request may have created it first; that is not a failure.
+  if (error && !/already exists/i.test(error.message)) {
+    console.warn('[Products] Could not create the product-images bucket:', error.message)
+  }
+}
+
+/**
+ * Validates the raw image body of a dish-photo upload.
+ *
+ * Returns the decoded buffer plus the extension to store it under, or null
+ * after having already sent the failure response — so callers can simply
+ * `if (!image) return`.
+ */
+function readMenuImageUpload(
+  req: AuthenticatedRequest,
+  res: Response,
+): { body: Buffer; contentType: string; ext: string } | null {
+  const contentType = String(req.headers['content-type'] ?? '').split(';')[0].trim()
+  const ext = MENU_IMAGE_MIME[contentType]
+
+  if (!ext) {
+    res.status(415).json({ message: 'Only JPG, PNG or WebP images are supported.' })
+    return null
+  }
+
+  const body = req.body as Buffer
+  if (!Buffer.isBuffer(body) || body.length === 0) {
+    res.status(400).json({ message: 'The uploaded file is empty.' })
+    return null
+  }
+  if (body.length > MAX_MENU_IMAGE_BYTES) {
+    res.status(413).json({ message: 'Image must be 5 MB or smaller.' })
+    return null
+  }
+
+  return { body, contentType, ext }
+}
+
+/**
+ * Writes image bytes to the product-images bucket and returns the public URL.
+ *
+ * The filename carries a timestamp so a replaced photo is served from a new
+ * URL. This is load-bearing, not tidiness: the bucket is public and served
+ * through a CDN that honours `cacheControl`, so a deleted object can keep
+ * answering 200 from an edge node for up to an hour. Overwriting a fixed
+ * filename would therefore leave browsers showing the old dish photo long
+ * after the new one was uploaded.
+ */
+async function storeMenuImageObject(
+  productId: string,
+  body: Buffer,
+  contentType: string,
+  ext: string,
+): Promise<{ url: string } | { error: string }> {
+  await ensureProductImagesBucket()
+
+  const path = `${productId}/dish-${Date.now()}.${ext}`
+  const { error } = await supabaseAdmin.storage
+    .from(PRODUCT_IMAGE_BUCKET)
+    .upload(path, body, { contentType, upsert: true, cacheControl: '3600' })
+
+  if (error) return { error: error.message }
+
+  const { data } = supabaseAdmin.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path)
+  return { url: data.publicUrl }
+}
+
+/** Deletes the stored object behind a dish-photo URL. Best effort by design. */
+async function deleteMenuImageObject(url: string | null | undefined) {
+  const path = url?.split(`/${PRODUCT_IMAGE_BUCKET}/`)[1]
+  if (!path) return
+  await supabaseAdmin.storage.from(PRODUCT_IMAGE_BUCKET).remove([path]).catch(() => undefined)
+}
+
+/** Express middleware chain for a raw image body. */
+const rawImage = express.raw({ type: Object.keys(MENU_IMAGE_MIME), limit: MAX_MENU_IMAGE_BYTES })
 
 /**
  * GET /api/products
@@ -331,13 +477,125 @@ router.patch('/:id/toggle', requireAuth, requireRole('admin'), async (req: Authe
 })
 
 /**
+ * POST /api/products/:id/image
+ * Upload or replace a menu item's photo (Admin only).
+ *
+ * The request body is the raw image bytes (`Content-Type: image/png` etc.)
+ * rather than multipart form data — a single file field does not justify a
+ * multipart parser. `express.json()` ignores non-JSON content types, so the
+ * buffer arrives intact.
+ */
+router.post('/:id/image', requireAuth, requireRole('admin'), rawImage, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const id = requireUuidParam(req, res)
+  if (!id) return
+
+  const image = readMenuImageUpload(req, res)
+  if (!image) return
+
+  try {
+    const { data: product, error: lookupErr } = await supabaseAdmin
+      .from('products')
+      .select('id, image_url')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (lookupErr) throw lookupErr
+    if (!product) {
+      res.status(404).json({ message: 'Menu item not found.' })
+      return
+    }
+
+    const stored = await storeMenuImageObject(id, image.body, image.contentType, image.ext)
+    if ('error' in stored) {
+      res.status(500).json({ message: `Upload failed: ${stored.error}` })
+      return
+    }
+
+    const { data: updated, error: saveErr } = await supabaseAdmin
+      .from('products')
+      .update({ image_url: stored.url, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('*, category:product_categories(id, name, sort_order)')
+      .maybeSingle()
+
+    if (saveErr) throw saveErr
+    if (!updated) {
+      res.status(404).json({ message: 'Menu item not found.' })
+      return
+    }
+
+    // Only bin the previous file once the new URL is durably stored, and never
+    // delete the object we have just written.
+    if (product.image_url && product.image_url !== stored.url) {
+      await deleteMenuImageObject(product.image_url)
+    }
+
+    res.json(updated)
+  } catch (err: unknown) {
+    console.error('[Products] Failed to upload menu image:', err)
+    res.status(500).json({ message: 'Failed to upload the photo. Please try again.' })
+  }
+})
+
+/**
+ * DELETE /api/products/:id/image
+ * Remove a menu item's photo and return it to the placeholder (Admin only).
+ */
+router.delete('/:id/image', requireAuth, requireRole('admin'), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const id = requireUuidParam(req, res)
+  if (!id) return
+
+  try {
+    const { data: product, error: lookupErr } = await supabaseAdmin
+      .from('products')
+      .select('id, image_url')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (lookupErr) throw lookupErr
+    if (!product) {
+      res.status(404).json({ message: 'Menu item not found.' })
+      return
+    }
+
+    const { data: updated, error: saveErr } = await supabaseAdmin
+      .from('products')
+      .update({ image_url: null, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('*, category:product_categories(id, name, sort_order)')
+      .maybeSingle()
+
+    if (saveErr) throw saveErr
+    if (!updated) {
+      res.status(404).json({ message: 'Menu item not found.' })
+      return
+    }
+
+    await deleteMenuImageObject(product.image_url)
+
+    res.json(updated)
+  } catch (err: unknown) {
+    console.error('[Products] Failed to remove menu image:', err)
+    res.status(500).json({ message: 'Failed to remove the photo. Please try again.' })
+  }
+})
+
+/**
  * DELETE /api/products/:id
  * Delete a product (Admin only).
  */
 router.delete('/:id', requireAuth, requireRole('admin'), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { id } = req.params
+  const id = String(req.params.id ?? '')
 
   try {
+    // Read the photo first: once the row is gone there is nothing left to tell
+    // us which object in the bucket belonged to it.
+    const { data: doomed } = await supabaseAdmin
+      .from('products')
+      .select('image_url')
+      .eq('id', id)
+      .maybeSingle()
+
     // First remove recipe mappings
     await supabaseAdmin.from('product_recipes').delete().eq('product_id', id)
 
@@ -355,6 +613,9 @@ router.delete('/:id', requireAuth, requireRole('admin'), async (req: Authenticat
       }
       throw error
     }
+
+    // Best effort: a leftover object is untidy, not a reason to report failure.
+    await deleteMenuImageObject(doomed?.image_url)
 
     res.json({ message: 'Product deleted successfully.' })
   } catch (err: unknown) {

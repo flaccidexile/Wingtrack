@@ -21,14 +21,14 @@ function Detail({ label, value, mono = false }: { label: string; value: string; 
   return (
     <div style={{ minWidth: 0 }}>
       <p style={{
-        fontSize: 10.5, fontFamily: 'DM Mono', letterSpacing: '0.08em',
+        fontSize: 10.5, fontFamily: 'IBM Plex Mono', letterSpacing: '0.08em',
         textTransform: 'uppercase', color: 'var(--muted-foreground)', marginBottom: 5,
       }}>
         {label}
       </p>
       <p style={{
         fontSize: 13, color: 'var(--foreground)', lineHeight: 1.45,
-        fontFamily: mono ? 'DM Mono' : 'DM Sans',
+        fontFamily: mono ? 'IBM Plex Mono' : 'Inter',
         overflowWrap: 'anywhere',
       }}>
         {value}
@@ -104,10 +104,10 @@ export default function StaffDetailModal({
           </div>
 
           <div style={{ minWidth: 0, flex: 1 }}>
-            <h2 style={{ fontFamily: 'Fraunces', fontSize: 21, fontWeight: 700, color: 'var(--foreground)', overflowWrap: 'anywhere' }}>
+            <h2 style={{ fontFamily: 'Inter', fontSize: 21, fontWeight: 700, color: 'var(--foreground)', overflowWrap: 'anywhere' }}>
               {staff.full_name}
             </h2>
-            <p style={{ fontSize: 12.5, color: 'var(--muted-foreground)', fontFamily: 'DM Mono', marginTop: 3, overflowWrap: 'anywhere' }}>
+            <p style={{ fontSize: 12.5, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', marginTop: 3, overflowWrap: 'anywhere' }}>
               {staff.email}
             </p>
 

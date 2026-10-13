@@ -1,8 +1,36 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import 'tailwindcss';
 
 /* ── Design Tokens (Wingtrack Logo Palette) ──────────────── */
 :root {
+  /* ── Typography ─────────────────────────────────────────
+   * Two families, and only two.
+   *
+   *   --font-display / --font-sans → Inter
+   *   --font-mono                  → IBM Plex Mono
+   *
+   * The app previously ran a three-family mix (a display serif for headings,
+   * a geometric sans for UI, a third mono for figures). Each was pleasant on
+   * its own, but together they made the same screen speak in three voices —
+   * and the serif's high stroke contrast got noisy at the small sizes this
+   * UI actually uses (table headers, 11px labels, badge text).
+   *
+   * Inter is the workhorse here: a low-contrast neutral grotesque with a tall
+   * x-height, unambiguous 1/l/I and 0/O, and a true tabular-figure set. It
+   * holds up from a 10px table header to a 43px hero, so headings and body
+   * finally belong to the same typeface.
+   *
+   * Mono is kept for exactly one job: strings that are read character by
+   * character or must align in a column — order numbers, UUIDs, money.
+   * Everywhere else uses Inter.
+   *
+   * The stacks keep a system fallback so the first paint before the webfont
+   * lands still looks intentional rather than like Times New Roman.
+   */
+  --font-display: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-sans:    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono:    'IBM Plex Mono', ui-monospace, SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace;
+
   --background:          #fbf9f6;
   --foreground:          #191512;
   --card:                #ffffff;
@@ -81,17 +109,43 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 1rem;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /*
+   * Inter is drawn on a 2.5px grid, which leaves a hairline of extra air
+   * inside each glyph. `calt` swaps in the corrected forms for digit and
+   * letter pairs that would otherwise sit a fraction off-baseline together —
+   * worth having in a UI that is mostly numbers.
+   */
+  font-feature-settings: 'calt' 1;
 }
 
-h1, h2, h3, h4, h5, h6 { font-family: 'Fraunces', serif; letter-spacing: -0.01em; }
+/*
+ * Headings. Same family as the body — the hierarchy comes from weight, size
+ * and tracking rather than from a second typeface, which is what makes the
+ * result read as one system instead of two.
+ *
+ * Slightly negative tracking at the top end: Inter's default spacing is
+ * tuned for text, and display sizes need the letters pulled a little closer.
+ */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  letter-spacing: -0.021em;
+  font-weight: 700;
+  text-wrap: balance;
+}
 
-code, .mono { font-family: 'DM Mono', monospace; }
+/*
+ * Mono is a tool, not a costume — it is reserved for strings that are read
+ * character by character (order numbers, UUIDs) or that must line up in a
+ * column (money). `tabular-nums` guarantees the second property even where a
+ * component falls back to the sans family.
+ */
+code, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 /* Brand-tinted selection so highlighting text still feels like the app. */
 ::selection { background: rgba(234, 88, 12, 0.18); color: var(--foreground); }
@@ -305,12 +359,16 @@ aside a:focus-visible {
 
 /*
  * Lockup order is deliberate and is the app's original: the eyebrow sits ABOVE
- * the wordmark, and the wordmark is Fraunces with "WING" in orange. A logotype
- * set in a serif against sans UI text is the intended pairing here, not an
- * inconsistency to be tidied away.
+ * the wordmark, and the wordmark carries "WING" in orange.
+ *
+ * The wordmark used to be set in a display serif. It is now the same Inter as
+ * the rest of the UI, held apart by weight (800) and tight tracking instead of
+ * by a change of typeface — a wordmark that differs from its UI only in scale
+ * and weight is the more professional of the two treatments, and it stops the
+ * sign-in screen from looking like a different product from the app behind it.
  */
 .auth-brand__eyebrow {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   font-weight: 500;
   letter-spacing: 0.18em;
@@ -320,18 +378,18 @@ aside a:focus-visible {
 }
 
 .auth-brand__wordmark {
-  font-family: 'Fraunces', serif;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 800;
   font-size: 27px;
   line-height: 1.1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   color: #fffdfa;
 }
 
 .auth-brand__wordmark span { color: #fb923c; }
 
 .auth-brand__kicker {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.26em;
@@ -341,7 +399,7 @@ aside a:focus-visible {
 }
 
 .auth-brand__headline {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   font-weight: 700;
   font-size: 43px;
   line-height: 1.13;
@@ -395,7 +453,7 @@ aside a:focus-visible {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.22em;
@@ -541,7 +599,7 @@ aside a:focus-visible {
 .auth-card__head { margin-bottom: 1px; }
 
 .auth-card__eyebrow {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.2em;
@@ -551,7 +609,7 @@ aside a:focus-visible {
 }
 
 .auth-card__title {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 30px;
   font-weight: 700;
   letter-spacing: -0.025em;
@@ -606,7 +664,7 @@ aside a:focus-visible {
 .auth-input {
   width: 100%;
   padding: 13px 16px 13px 45px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 15px;
   color: var(--foreground);
   background: #fff;
@@ -643,7 +701,7 @@ aside a:focus-visible {
   padding: 15px 18px;
   border: none;
   border-radius: 10px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 15.5px;
   font-weight: 700;
   color: #fff;
@@ -673,7 +731,7 @@ aside a:focus-visible {
   border-radius: 10px;
   border: 1px solid var(--border);
   background: #fff;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 14.5px;
   font-weight: 600;
   color: var(--foreground);
@@ -704,7 +762,7 @@ aside a:focus-visible {
      not shift the labels by a pixel. */
   border: 1.5px solid transparent;
   background: transparent;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 14.5px;
   font-weight: 600;
   color: var(--muted-foreground);
@@ -747,10 +805,10 @@ aside a:focus-visible {
   }
 
   .auth-pane__mobilebrand p {
-    font-family: 'Fraunces', serif;
+    font-family: var(--font-display);
     font-size: 24px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    font-weight: 800;
+    letter-spacing: -0.03em;
     color: var(--foreground);
   }
 
@@ -831,7 +889,7 @@ aside a:focus-visible {
   border: none;
   border-radius: var(--radius);
   padding: 13px 26px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
@@ -856,7 +914,7 @@ aside a:focus-visible {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 20px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 0.9375rem;
   font-weight: 500;
   cursor: pointer;
@@ -880,7 +938,7 @@ aside a:focus-visible {
   border: none;
   border-radius: var(--radius);
   padding: 10px 20px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 0.9375rem;
   font-weight: 600;
   cursor: pointer;
@@ -897,7 +955,7 @@ aside a:focus-visible {
   background: var(--card);
   color: var(--foreground);
   font-size: 1rem;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-sans);
   outline: none;
   box-shadow: var(--shadow-xs);
   transition: border-color var(--t-fast) var(--ease),
@@ -913,11 +971,12 @@ aside a:focus-visible {
 
 /* ── Section headings ───────────────────────────────────── */
 /*
- * A small overline above a Fraunces heading. Used for page sub-sections so
- * long screens get visual anchors instead of one continuous scroll.
+ * A small overline above a heading. Used for page sub-sections so long screens
+ * get visual anchors instead of one continuous scroll. Mono, because these are
+ * short all-caps labels where even letter spacing reads as deliberate.
  */
 .overline {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 500;
   letter-spacing: 0.13em;
@@ -969,7 +1028,7 @@ aside a:focus-visible {
   margin-bottom: 12px;
 }
 .empty-state-title {
-  font-family: 'Fraunces', serif;
+  font-family: var(--font-display);
   font-size: 15px;
   font-weight: 600;
   color: var(--foreground);
@@ -1101,7 +1160,7 @@ aside a:focus-visible {
 /* Page title block: overline + heading + supporting line. */
 .page-header { margin-bottom: 24px; }
 .page-title {
-  font-family: 'Fraunces', serif;
+  font-family: var(--font-display);
   font-size: 28px;
   font-weight: 700;
   color: var(--foreground);

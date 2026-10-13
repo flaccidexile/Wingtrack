@@ -39,7 +39,7 @@ function Section({
     <section className="card" style={{ padding: '24px 26px', marginBottom: 18 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
         <div style={{ minWidth: 0 }}>
-          <h2 style={{ fontFamily: 'Fraunces', fontSize: 19, fontWeight: 700, color: 'var(--foreground)' }}>{title}</h2>
+          <h2 style={{ fontFamily: 'Inter', fontSize: 19, fontWeight: 700, color: 'var(--foreground)' }}>{title}</h2>
           <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginTop: 4 }}>{description}</p>
         </div>
         {aside}
@@ -417,7 +417,7 @@ export default function Settings() {
                     <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)', overflowWrap: 'anywhere' }}>
                       {a.full_name}
                     </p>
-                    <p style={{ fontSize: 12, color: 'var(--muted-foreground)', fontFamily: 'DM Mono', overflowWrap: 'anywhere' }}>
+                    <p style={{ fontSize: 12, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', overflowWrap: 'anywhere' }}>
                       {a.email}
                     </p>
                   </div>

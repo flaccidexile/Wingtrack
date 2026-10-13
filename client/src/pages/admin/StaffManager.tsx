@@ -181,10 +181,10 @@ function StaffCard({
           >
             {staff.full_name}
           </button>
-          <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2, fontFamily: 'DM Mono' }}>
+          <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2, fontFamily: 'IBM Plex Mono' }}>
             ID: {staff.id.slice(0, 8)}
           </p>
-          <p style={{ fontSize: 12, color: 'var(--muted-foreground)', fontFamily: 'DM Mono', marginTop: 6, overflowWrap: 'anywhere' }}>
+          <p style={{ fontSize: 12, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', marginTop: 6, overflowWrap: 'anywhere' }}>
             {staff.email}
           </p>
         </div>
@@ -524,7 +524,7 @@ export default function StaffManager() {
             : 'Connecting to the live update stream…'}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 7,
-            fontSize: 10.5, fontFamily: 'DM Mono', letterSpacing: '0.1em',
+            fontSize: 10.5, fontFamily: 'IBM Plex Mono', letterSpacing: '0.1em',
             color: live ? '#15803d' : 'var(--muted-foreground)', fontWeight: 600,
           }}
         >
@@ -592,7 +592,7 @@ export default function StaffManager() {
           <div className="scroll-x">
             <div style={{ display: 'grid', gridTemplateColumns: GRID, padding: '12px 22px', borderBottom: '1px solid var(--border)', minWidth: GRID_MIN_WIDTH }}>
               {['Name', 'Email', 'Role', 'Account', 'Activity', 'Actions'].map(h => (
-                <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
+                <span key={h} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
               ))}
             </div>
 
@@ -632,13 +632,13 @@ export default function StaffManager() {
                       >
                         {s.full_name}
                       </button>
-                      <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2, fontFamily: 'DM Mono' }}>
+                      <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2, fontFamily: 'IBM Plex Mono' }}>
                         ID: {s.id.slice(0, 8)}…
                       </p>
                     </div>
                   </div>
 
-                  <span style={{ fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'DM Mono', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>
+                  <span style={{ fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>
                     {s.email}
                   </span>
 
@@ -701,7 +701,7 @@ export default function StaffManager() {
           onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}
         >
           <div className="card fade-in dialog-card" style={{ width: '100%', maxWidth: 460, padding: '32px 28px', boxShadow: '0 25px 60px rgba(0,0,0,0.35)' }}>
-            <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 22 }}>
+            <h2 style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 22 }}>
               Add Staff Member
             </h2>
             <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

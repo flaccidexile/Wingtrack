@@ -3,6 +3,8 @@ import type {
   CheckoutPayload,
   InventoryAdjustmentPayload,
   Order,
+  OrderSummary,
+  Product,
   StaffProfile,
   StaffUpdatePayload,
 } from '@/types'
@@ -302,6 +304,9 @@ async function toApiError(res: Response, fallback: string): Promise<Error> {
  *
  * Returns a page of orders plus the total row count, so the UI can show
  * "showing X of Y" and offer pagination instead of silently truncating.
+ *
+ * A cashier's request is scoped to their own orders server-side; `summary`
+ * carries the matching running totals (see OrderSummary).
  */
 export async function apiGetOrders(params?: {
   limit?: number
@@ -310,7 +315,14 @@ export async function apiGetOrders(params?: {
   from?: string
   to?: string
   search?: string
-}): Promise<{ orders: Order[]; total: number; limit: number; offset: number }> {
+}): Promise<{
+  orders: Order[]
+  total: number
+  limit: number
+  offset: number
+  /** Absent when the server could not compute it — the UI hides the strip. */
+  summary?: OrderSummary | null
+}> {
   const headers = await getAuthHeader()
   const qs = new URLSearchParams()
   if (params?.limit != null) qs.set('limit', String(params.limit))
@@ -332,13 +344,14 @@ export async function apiGetOrders(params?: {
   const json = await res.json()
   // Tolerate the legacy bare-array shape so an older server does not break the UI.
   if (Array.isArray(json)) {
-    return { orders: json as Order[], total: json.length, limit: json.length, offset: 0 }
+    return { orders: json as Order[], total: json.length, limit: json.length, offset: 0, summary: null }
   }
   return {
     orders: (json.orders ?? []) as Order[],
     total: json.total ?? 0,
     limit: json.limit ?? 100,
     offset: json.offset ?? 0,
+    summary: (json.summary ?? null) as OrderSummary | null,
   }
 }
 
@@ -509,6 +522,40 @@ export async function apiToggleProductAvailability(id: string, is_available: boo
     throw new Error(err.message ?? 'Failed to toggle product availability')
   }
   return res.json()
+}
+
+/**
+ * POST /api/products/:id/image (Admin only)
+ *
+ * Uploads a dish photo and returns the updated product. The raw image bytes
+ * are the body rather than multipart form data — a single file field does not
+ * justify a multipart parser. The server stores the file with the service-role
+ * key, so no Storage RLS policy is involved.
+ */
+export async function apiUploadProductImage(productId: string, file: File): Promise<Product> {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/products/${productId}/image`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': file.type },
+    body: file,
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Failed to upload the photo')
+  }
+  return res.json() as Promise<Product>
+}
+
+/** DELETE /api/products/:id/image (Admin only) — clears a dish photo. */
+export async function apiRemoveProductImage(productId: string): Promise<Product> {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/products/${productId}/image`, {
+    method: 'DELETE',
+    headers,
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Failed to remove the photo')
+  }
+  return res.json() as Promise<Product>
 }
 
 /**

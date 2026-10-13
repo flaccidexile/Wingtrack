@@ -69,7 +69,7 @@ function AppContent() {
               <line x1="12" y1="20" x2="12.01" y2="20"/>
             </svg>
           </div>
-          <h2 style={{ fontFamily: 'Fraunces', fontSize: 22, fontWeight: 700, marginBottom: 10, color: 'var(--foreground)' }}>Access Denied</h2>
+          <h2 style={{ fontFamily: 'Inter', fontSize: 22, fontWeight: 700, marginBottom: 10, color: 'var(--foreground)' }}>Access Denied</h2>
           <p style={{ fontSize: 14, color: '#ef4444', fontWeight: 600, marginBottom: 8 }}>Internet is not connected</p>
           <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 24, lineHeight: 1.5 }}>
             You cannot access WINGTRACK while offline. Please check your network connection.
@@ -132,7 +132,7 @@ function AppContent() {
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--background)' }}>
         <div style={{ textAlign: 'center' }}>
           <div className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
-          <p style={{ marginTop: 14, fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}>Loading WINGTRACK...</p>
+          <p style={{ marginTop: 14, fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}>Loading WINGTRACK...</p>
         </div>
       </div>
     )
@@ -171,7 +171,7 @@ function AppContent() {
               <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
           </div>
-          <h2 style={{ fontFamily: 'Fraunces', fontSize: 22, fontWeight: 700, marginBottom: 10, color: 'var(--foreground)' }}>
+          <h2 style={{ fontFamily: 'Inter', fontSize: 22, fontWeight: 700, marginBottom: 10, color: 'var(--foreground)' }}>
             Access Not Provisioned
           </h2>
           <p style={{ fontSize: 14, color: '#ef4444', fontWeight: 600, marginBottom: 8 }}>
@@ -199,7 +199,7 @@ function AppContent() {
               <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
           </div>
-          <h2 style={{ fontFamily: 'Fraunces', fontSize: 22, fontWeight: 700, marginBottom: 10, color: 'var(--foreground)' }}>
+          <h2 style={{ fontFamily: 'Inter', fontSize: 22, fontWeight: 700, marginBottom: 10, color: 'var(--foreground)' }}>
             Account Deactivated
           </h2>
           <p style={{ fontSize: 14, color: '#ef4444', fontWeight: 600, marginBottom: 8 }}>

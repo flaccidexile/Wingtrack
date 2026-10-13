@@ -85,7 +85,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
 
           <h2
             style={{
-              fontFamily: 'Fraunces',
+              fontFamily: 'Inter',
               fontSize: 20,
               fontWeight: 700,
               color: 'var(--foreground)',

@@ -71,11 +71,11 @@ function KpiCard({ label, value, sub, color, trend, icon }: {
         </span>
       </div>
 
-      <p style={{ fontFamily: 'Fraunces', fontSize: 29, fontWeight: 700, color: 'var(--foreground)', lineHeight: 1.05, letterSpacing: '-0.02em' }}>
+      <p style={{ fontFamily: 'Inter', fontSize: 29, fontWeight: 700, color: 'var(--foreground)', lineHeight: 1.05, letterSpacing: '-0.02em', textAlign: 'center' }}>
         {value}
       </p>
 
-      <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 10, display: 'flex', alignItems: 'center', gap: 7 }}>
+      <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
         <span className="badge" style={{ background: trendMeta.bg, color: trendMeta.color, padding: '2px 7px' }}>
           {trendMeta.arrow}
         </span>
@@ -89,8 +89,8 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
   if (active && payload && payload.length) {
     return (
       <div style={{ background: 'var(--sidebar)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 14px' }}>
-        <p style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 4 }}>{label}</p>
-        <p style={{ fontFamily: 'Fraunces', fontSize: 16, fontWeight: 700, color: 'var(--sidebar-active)' }}>
+        <p style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 4 }}>{label}</p>
+        <p style={{ fontFamily: 'Inter', fontSize: 16, fontWeight: 700, color: 'var(--sidebar-active)' }}>
           &#8369;{payload[0].value.toLocaleString()}
         </p>
         {payload[1] && <p style={{ fontSize: 11, color: 'var(--sidebar-foreground)' }}>{payload[1].value} orders</p>}
@@ -360,7 +360,7 @@ export default function Dashboard() {
                   onClick={() => { setPeriod(p); setShowCustom(false) }}
                   style={{
                     padding: '7px 15px', borderRadius: 7, fontSize: 13, cursor: 'pointer',
-                    fontFamily: 'DM Sans', fontWeight: active ? 600 : 500,
+                    fontFamily: 'Inter', fontWeight: active ? 600 : 500,
                     border: 'none',
                     background: active ? 'var(--card)' : 'transparent',
                     color: active ? 'var(--primary)' : 'var(--muted-foreground)',
@@ -381,7 +381,7 @@ export default function Dashboard() {
             onClick={() => { setPeriod('custom'); setShowCustom(s => !s) }}
             style={{
               padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer',
-              fontFamily: 'DM Sans',
+              fontFamily: 'Inter',
               border: '1px solid var(--border)',
               background: period === 'custom' ? 'var(--primary)' : 'var(--card)',
               color: period === 'custom' ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
@@ -448,8 +448,10 @@ export default function Dashboard() {
                   <div className="skeleton" style={{ width: 88, height: 11 }} />
                   <div className="skeleton" style={{ width: 32, height: 32, borderRadius: 9 }} />
                 </div>
-                <div className="skeleton" style={{ width: 132, height: 28, marginBottom: 13 }} />
-                <div className="skeleton" style={{ width: 150, height: 12 }} />
+                {/* Mirrors the live tile: the figure and its caption are
+                    centred, so the skeleton sits where the real value lands. */}
+                <div className="skeleton" style={{ width: 132, height: 28, margin: '0 auto 13px' }} />
+                <div className="skeleton" style={{ width: 150, height: 12, margin: '0 auto' }} />
               </div>
             ))}
           </div>
@@ -516,10 +518,10 @@ export default function Dashboard() {
             <div className="card" style={{ padding: '24px 26px', gridColumn: 'span 2', minWidth: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
                 <div>
-                  <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, color: 'var(--foreground)' }}>Revenue Trend</h3>
+                  <h3 style={{ fontFamily: 'Inter', fontSize: 17, fontWeight: 600, color: 'var(--foreground)' }}>Revenue Trend</h3>
                   <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 3 }}>{periodLabel}</p>
                 </div>
-                <span style={{ fontFamily: 'Fraunces', fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>
+                <span style={{ fontFamily: 'Inter', fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>
                   &#8369;{totalRevenue.toLocaleString()}
                 </span>
               </div>
@@ -535,7 +537,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="revLabel"
-                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}
+                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}
                     axisLine={false}
                     tickLine={false}
                     interval={revAxis.tickInterval}
@@ -544,7 +546,7 @@ export default function Dashboard() {
                     height={revAxis.axisHeight}
                     dy={revAxis.dy}
                   />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} width={38} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} width={38} />
                   <Tooltip content={<CustomTooltip />} />
                   <Area type="monotone" dataKey="revenue" stroke="#ea580c" strokeWidth={2.2} fill="url(#rev)" />
                   <Area type="monotone" dataKey="orders" stroke="transparent" />
@@ -554,7 +556,7 @@ export default function Dashboard() {
             </div>
 
             <div className="card" style={{ padding: '24px 26px' }}>
-              <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, color: 'var(--foreground)', marginBottom: 18 }}>Top Sellers</h3>
+              <h3 style={{ fontFamily: 'Inter', fontSize: 17, fontWeight: 600, color: 'var(--foreground)', marginBottom: 18 }}>Top Sellers</h3>
               {topItems.length === 0 ? (
                 <EmptyState
                   compact
@@ -568,10 +570,10 @@ export default function Dashboard() {
                     <div key={item.name}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--muted-foreground)', minWidth: 18 }}>{i + 1}</span>
+                          <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 12, color: 'var(--muted-foreground)', minWidth: 18 }}>{i + 1}</span>
                           <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--foreground)' }}>{item.name}</span>
                         </div>
-                        <span style={{ fontSize: 12, fontFamily: 'DM Mono', color: 'var(--primary)', fontWeight: 500 }}>{item.qty} sold</span>
+                        <span style={{ fontSize: 12, fontFamily: 'IBM Plex Mono', color: 'var(--primary)', fontWeight: 500 }}>{item.qty} sold</span>
                       </div>
                       <div style={{ height: 6, background: 'var(--muted)', borderRadius: 3 }}>
                         <div style={{ height: '100%', borderRadius: 3, background: i === 0 ? 'var(--accent)' : 'var(--primary)', width: `${(item.qty / (topItems[0]?.qty || 1)) * 100}%`, transition: 'width 0.6s ease' }} />
@@ -588,7 +590,7 @@ export default function Dashboard() {
             {/* Recent transactions */}
             <div className="card" style={{ padding: '24px 26px', minWidth: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 10, flexWrap: 'wrap' }}>
-                <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, color: 'var(--foreground)' }}>Recent Transactions</h3>
+                <h3 style={{ fontFamily: 'Inter', fontSize: 17, fontWeight: 600, color: 'var(--foreground)' }}>Recent Transactions</h3>
                 <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{periodLabel}</span>
               </div>
               {recentOrders.length === 0 ? (
@@ -605,14 +607,14 @@ export default function Dashboard() {
                       room — a truncated peso amount is worse than a truncated label. */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.8fr) minmax(0, 0.85fr) minmax(0, 1.25fr) minmax(0, 0.85fr)', gap: 6, padding: '0 0 10px', borderBottom: '1px solid var(--border)', marginBottom: 10 }}>
                     {['Order #', 'Method', 'Total', 'Status'].map(h => (
-                      <span key={h} style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h}</span>
+                      <span key={h} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h}</span>
                     ))}
                   </div>
                   {recentOrders.map(o => (
                     <div key={o.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.8fr) minmax(0, 0.85fr) minmax(0, 1.25fr) minmax(0, 0.85fr)', gap: 6, padding: '10px 0', borderBottom: '1px solid var(--muted)', alignItems: 'center' }}>
-                      <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--foreground)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{o.order_number}</span>
+                      <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{o.order_number}</span>
                       <span style={{ fontSize: 12, color: 'var(--muted-foreground)', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.payment_method}</span>
-                      <span style={{ fontSize: 13, fontFamily: 'DM Mono', color: 'var(--foreground)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>&#8369;{Number(o.total_amount).toLocaleString()}</span>
+                      <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>&#8369;{Number(o.total_amount).toLocaleString()}</span>
                       <span style={{ fontSize: 11, padding: '3px 7px', borderRadius: 20, background: o.status === 'void' ? '#fce8e8' : '#e8f5e9', color: o.status === 'void' ? '#c0392b' : '#2e7d32', fontWeight: 600, textAlign: 'center', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.status === 'void' ? 'Void' : 'Paid'}</span>
                     </div>
                   ))}
@@ -622,7 +624,7 @@ export default function Dashboard() {
 
             {/* Orders per day bar */}
             <div className="card" style={{ padding: '24px 26px' }}>
-              <h3 style={{ fontFamily: 'Fraunces', fontSize: 17, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Orders by Day</h3>
+              <h3 style={{ fontFamily: 'Inter', fontSize: 17, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Orders by Day</h3>
               <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 18 }}>{totalOrders} total · &#8369;{totalRevenue.toLocaleString()}</p>
               <div ref={ordRef} style={{ width: '100%', minWidth: 0 }}>
               <ResponsiveContainer width="100%" height={ordHeight}>
@@ -630,7 +632,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="ordLabel"
-                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }}
+                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}
                     axisLine={false}
                     tickLine={false}
                     interval={ordAxis.tickInterval}
@@ -639,9 +641,9 @@ export default function Dashboard() {
                     height={ordAxis.axisHeight}
                     dy={ordAxis.dy}
                   />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'DM Mono' }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
-                  <Tooltip contentStyle={{ background: 'var(--sidebar)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontFamily: 'DM Sans' }}
-                    labelStyle={{ color: 'var(--sidebar-muted)', fontSize: 12, fontFamily: 'DM Mono' }}
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
+                  <Tooltip contentStyle={{ background: 'var(--sidebar)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontFamily: 'Inter' }}
+                    labelStyle={{ color: 'var(--sidebar-muted)', fontSize: 12, fontFamily: 'IBM Plex Mono' }}
                     itemStyle={{ color: 'var(--sidebar-foreground)', fontSize: 13 }} />
                   <Bar dataKey="orders" fill="var(--primary)" radius={[5, 5, 0, 0]} />
                 </BarChart>

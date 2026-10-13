@@ -174,7 +174,7 @@ export default function OTPVerificationPage({ email, onVerified, onBack }: OTPVe
               <polyline points="20 6 9 17 4 12"/>
             </svg>
           </div>
-          <h2 style={{ fontFamily: 'Fraunces', fontSize: 26, fontWeight: 700, color: '#1c1917', marginBottom: 10 }}>
+          <h2 style={{ fontFamily: 'Inter', fontSize: 26, fontWeight: 700, color: '#1c1917', marginBottom: 10 }}>
             Registration Successful!
           </h2>
           <p style={{ fontSize: 14, color: '#78716c', lineHeight: 1.6, marginBottom: 28 }}>
@@ -212,7 +212,7 @@ export default function OTPVerificationPage({ email, onVerified, onBack }: OTPVe
               <polyline points="22,6 12,13 2,6"/>
             </svg>
           </div>
-          <h2 style={{ fontFamily: 'Fraunces', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Check Your Email</h2>
+          <h2 style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginBottom: 6 }}>Check Your Email</h2>
           <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
             A <strong>6-digit code</strong> was sent to<br />
             <strong style={{ color: 'var(--foreground)' }}>{email}</strong>
@@ -225,8 +225,8 @@ export default function OTPVerificationPage({ email, onVerified, onBack }: OTPVe
         {/* 5-minute expiry bar */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontSize: 11, fontFamily: 'DM Mono', color: 'var(--muted-foreground)' }}>Code expires in</span>
-            <span style={{ fontSize: 13, fontFamily: 'DM Mono', fontWeight: 700, color: barColor }}>
+            <span style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>Code expires in</span>
+            <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: barColor }}>
               {expired ? 'EXPIRED' : formatTime(expiry)}
             </span>
           </div>
@@ -265,7 +265,7 @@ export default function OTPVerificationPage({ email, onVerified, onBack }: OTPVe
               style={{
                 width: 52, height: 60, borderRadius: 10,
                 border: `2px solid ${expired ? 'var(--muted)' : digit ? 'var(--primary)' : error ? '#b91c1c' : 'var(--border)'}`,
-                textAlign: 'center', fontSize: 24, fontWeight: 700, fontFamily: 'DM Mono',
+                textAlign: 'center', fontSize: 24, fontWeight: 700, fontFamily: 'IBM Plex Mono',
                 color: expired ? 'var(--muted-foreground)' : 'var(--foreground)',
                 background: expired ? 'var(--muted)' : digit ? 'rgba(234,88,12,0.05)' : 'var(--card)',
                 outline: 'none', transition: 'all 0.15s',
@@ -308,7 +308,7 @@ export default function OTPVerificationPage({ email, onVerified, onBack }: OTPVe
           {resendCooldown > 0 && !expired ? (
             <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
               Resend available in{' '}
-              <span style={{ fontFamily: 'DM Mono', fontWeight: 600, color: 'var(--foreground)' }}>{resendCooldown}s</span>
+              <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 600, color: 'var(--foreground)' }}>{resendCooldown}s</span>
             </p>
           ) : (
             <button

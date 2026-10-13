@@ -82,7 +82,7 @@ export default function ConfirmDialog({
       >
         <h3
           style={{
-            fontFamily: 'Fraunces',
+            fontFamily: 'Inter',
             fontSize: 18,
             color: tone === 'danger' ? '#b91c1c' : 'var(--foreground)',
             marginBottom: 10,
@@ -120,7 +120,7 @@ export default function ConfirmDialog({
               fontWeight: 600,
               cursor: busy ? 'not-allowed' : 'pointer',
               opacity: busy ? 0.6 : 1,
-              fontFamily: 'DM Sans',
+              fontFamily: 'Inter',
               transition: 'all 0.15s',
             }}
             onMouseEnter={e => {
