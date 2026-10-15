@@ -557,7 +557,7 @@ export default function Dashboard() {
             </div>
 
             <div className="card" style={{ padding: '24px 26px' }}>
-              <h3 style={{ fontFamily: 'Inter', fontSize: 17, fontWeight: 600, color: 'var(--foreground)', marginBottom: 18 }}>Top Sellers</h3>
+              <h3 style={{ fontFamily: 'Inter', fontSize: 17, fontWeight: 600, color: 'var(--foreground)', marginBottom: 18 }}>Top Products</h3>
               {topItems.length === 0 ? (
                 <EmptyState
                   compact
