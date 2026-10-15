@@ -468,6 +468,7 @@ export async function apiCreateProduct(payload: {
   price: number
   is_available?: boolean
   image_url?: string
+  product_type?: string
   recipes?: Array<{ inventory_id: string; qty_per_unit: number }>
 }) {
   const headers = await getAuthHeader()
@@ -492,6 +493,7 @@ export async function apiUpdateProduct(id: string, payload: {
   price?: number
   is_available?: boolean
   image_url?: string
+  product_type?: string
   recipes?: Array<{ inventory_id: string; qty_per_unit: number }>
 }) {
   const headers = await getAuthHeader()

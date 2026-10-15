@@ -18,13 +18,35 @@ import FoodImage from '@/components/ui/FoodImage'
 import type { Product, ProductCategory, InventoryItem, ProductRecipe } from '@/types'
 
 /** Badge styling per product type, shared by the table row and the mobile card. */
-const TYPE_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
-  Bestseller: { label: 'Bestseller', bg: '#fff7e6', color: '#b45309' },
-  New:        { label: 'New',        bg: '#e8f5e9', color: '#15803d' },
-  Seasonal:   { label: 'Seasonal',   bg: '#fce8e8', color: '#b91c1c' },
-  Special:    { label: 'Special',    bg: '#f0f4ff', color: '#4338ca' },
-  Regular:    { label: 'Regular',    bg: 'transparent', color: 'var(--muted-foreground)' },
+export const TYPE_CONFIG: Record<string, { label: string; bg: string; color: string; border: string }> = {
+  Regular:    { label: 'Regular',    bg: 'rgba(100,116,139,0.12)', color: '#475569', border: '1px solid rgba(100,116,139,0.25)' },
+  Bestseller: { label: 'Bestseller', bg: '#fff7e6', color: '#b45309', border: '1px solid #fde68a' },
+  New:        { label: 'New',        bg: '#e8f5e9', color: '#15803d', border: '1px solid #bbf7d0' },
+  Seasonal:   { label: 'Seasonal',   bg: '#fce8e8', color: '#b91c1c', border: '1px solid #fecaca' },
+  Special:    { label: 'Special',    bg: '#f0f4ff', color: '#4338ca', border: '1px solid #c7d2fe' },
 }
+
+/** Pre-defined category list for dropdown selection when creating a category. */
+export const PRESET_CATEGORIES = [
+  'Wings',
+  'Boneless Wings',
+  'Flavored Wings',
+  'Chicken Tenders',
+  'Combos',
+  'Platters & Bundles',
+  'Rice Bowls',
+  'Sides & Fries',
+  'Dips, Sauces & Glazes',
+  'Drinks & Beverages',
+  'Milkshakes & Floats',
+  'Desserts',
+  'Appetizers',
+  'Burgers & Sandwiches',
+  'Salads',
+  'Seasonal Specials',
+  'Party Packs',
+  'Add-ons & Extras',
+]
 
 /** How many ingredients a collapsed recipe shows before offering to expand. */
 const RECIPE_PREVIEW_LIMIT = 3
@@ -135,7 +157,7 @@ function MenuCard({
 }) {
   const catName = (prod.category as ProductCategory | undefined)?.name ?? '—'
   const recipes = prod.recipes ?? []
-  const prodType = (prod as Product & { product_type?: string }).product_type ?? 'Regular'
+  const prodType = prod.product_type ?? 'Regular'
   const tc = TYPE_CONFIG[prodType] ?? TYPE_CONFIG.Regular
 
   return (
@@ -150,11 +172,9 @@ function MenuCard({
             <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--foreground)', minWidth: 0, overflowWrap: 'anywhere' }}>
               {prod.name}
             </span>
-            {prodType !== 'Regular' && (
-              <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: tc.bg, color: tc.color, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                {tc.label}
-              </span>
-            )}
+            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: tc.bg, color: tc.color, border: tc.border, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {tc.label}
+            </span>
           </div>
         </div>
       </div>
@@ -285,6 +305,7 @@ export default function MenuManager() {
 
   // Category form state
   const [newCatName, setNewCatName] = useState('')
+  const [selectedPresetCategory, setSelectedPresetCategory] = useState('')
   const [catLoading, setCatLoading] = useState(false)
   const [catError, setCatError] = useState<string | null>(null)
 
@@ -357,13 +378,15 @@ export default function MenuManager() {
     setFormRecipes([])
     setFormError(null)
     resetImageState(null)
+    setSelectedPresetCategory('')
+    setNewCatName('')
     setShowItemModal(true)
   }
 
   function openEditModal(prod: Product) {
     setEditingProduct(prod)
     setFormName(prod.name)
-    setFormType((prod as Product & { product_type?: string }).product_type ?? 'Regular')
+    setFormType(prod.product_type ?? 'Regular')
     setFormCatId(prod.category_id)
     setFormPrice(String(prod.price))
     setFormAvailable(prod.is_available)
@@ -503,6 +526,7 @@ export default function MenuManager() {
           category_id: formCatId,
           price: priceNum,
           is_available: formAvailable,
+          product_type: formType,
           recipes: recipesPayload,
         })
         savedProductId = updated?.id ?? editingProduct.id
@@ -512,6 +536,7 @@ export default function MenuManager() {
           category_id: formCatId,
           price: priceNum,
           is_available: formAvailable,
+          product_type: formType,
           recipes: recipesPayload,
         })
         savedProductId = created?.id ?? null
@@ -597,17 +622,30 @@ export default function MenuManager() {
   async function handleCreateCategory(e: React.FormEvent) {
     e.preventDefault()
     setCatError(null)
-    if (!newCatName.trim()) {
-      setCatError('Category name is required.')
+
+    // Determine the final category name: a preset or a custom entry
+    const isCustom = selectedPresetCategory === '__custom__'
+    const finalName = isCustom ? newCatName.trim() : selectedPresetCategory
+
+    if (!finalName) {
+      setCatError(isCustom ? 'Please enter a custom category name.' : 'Please select a category from the list.')
+      return
+    }
+
+    // Check if this category already exists in the loaded list (client-side fast path)
+    const alreadyExists = categories.some(c => c.name.toLowerCase() === finalName.toLowerCase())
+    if (alreadyExists) {
+      setCatError(`The category "${finalName}" already exists. Pick it from the Category dropdown in the form instead.`)
       return
     }
 
     setCatLoading(true)
     try {
-      const created = await apiCreateCategory(newCatName.trim())
+      const created = await apiCreateCategory(finalName)
       setCategories(prev => [...prev, created])
       setFormCatId(created.id)
       setNewCatName('')
+      setSelectedPresetCategory('')
       setShowCategoryModal(false)
       showBanner('success', `Category "${created.name}" created!`)
     } catch (err: unknown) {
@@ -670,6 +708,7 @@ export default function MenuManager() {
             onClick={() => {
               setCatError(null)
               setNewCatName('')
+              setSelectedPresetCategory('')
               setShowCategoryModal(true)
             }}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px' }}
@@ -906,7 +945,7 @@ export default function MenuManager() {
                 {filteredProducts.map(prod => {
                   const catName = (prod.category as ProductCategory | undefined)?.name ?? '—'
                   const recipeCount = prod.recipes?.length ?? 0
-                  const prodType = (prod as Product & { product_type?: string }).product_type ?? 'Regular'
+                  const prodType = prod.product_type ?? 'Regular'
                   const tc = TYPE_CONFIG[prodType] ?? TYPE_CONFIG.Regular
 
                   return (
@@ -930,11 +969,10 @@ export default function MenuManager() {
                             <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--foreground)' }}>
                               {prod.name}
                             </span>
-                            {prodType !== 'Regular' && (
-                              <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: tc.bg, color: tc.color, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                                {tc.label}
-                              </span>
-                            )}
+                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: tc.bg, color: tc.color, border: tc.border, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                              {tc.label}
+                            </span>
+
                           </div>
                         </div>
                       </td>
@@ -1475,17 +1513,41 @@ export default function MenuManager() {
             <form onSubmit={handleCreateCategory} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>
-                  CATEGORY NAME *
+                  SELECT CATEGORY *
                 </label>
-                <input
+                <select
                   className="input"
                   autoFocus
-                  required
-                  placeholder="e.g. Desserts"
-                  value={newCatName}
-                  onChange={e => setNewCatName(e.target.value)}
-                  style={{ width: '100%', padding: '9px 12px', fontSize: 14 }}
-                />
+                  value={selectedPresetCategory}
+                  onChange={e => {
+                    setSelectedPresetCategory(e.target.value)
+                    if (e.target.value !== '__custom__') setNewCatName('')
+                  }}
+                  style={{ width: '100%', padding: '10px 12px', fontSize: 14 }}
+                >
+                  <option value="">— Choose a category —</option>
+                  {PRESET_CATEGORIES.filter(pc =>
+                    !categories.some(c => c.name.toLowerCase() === pc.toLowerCase())
+                  ).map(pc => (
+                    <option key={pc} value={pc}>{pc}</option>
+                  ))}
+                  <option value="__custom__">Custom (type your own)…</option>
+                </select>
+                {selectedPresetCategory === '__custom__' && (
+                  <div style={{ marginTop: 10 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>
+                      CUSTOM CATEGORY NAME *
+                    </label>
+                    <input
+                      className="input"
+                      required
+                      placeholder="e.g. Loaded Fries"
+                      value={newCatName}
+                      onChange={e => setNewCatName(e.target.value)}
+                      style={{ width: '100%', padding: '9px 12px', fontSize: 14 }}
+                    />
+                  </div>
+                )}
               </div>
 
               {catError && (

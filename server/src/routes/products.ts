@@ -2,6 +2,7 @@ import express, { Router, type Response } from 'express'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
+import { getProductType, setProductType, getAllProductTypes } from '../lib/productMetadata'
 
 const router = Router()
 
@@ -220,7 +221,12 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response): P
       .order('name')
 
     if (error) throw error
-    res.json(data)
+    const typesMap = getAllProductTypes()
+    const enriched = (data || []).map((p: any) => ({
+      ...p,
+      product_type: p.product_type || typesMap[p.id] || 'Regular',
+    }))
+    res.json(enriched)
   } catch (err: unknown) {
     console.error('[Products] Failed to list products:', err)
     res.status(500).json({ message: 'Failed to fetch products.' })
@@ -257,7 +263,21 @@ router.post('/categories', requireAuth, requireRole('admin'), async (req: Authen
     return
   }
 
+  const trimmedName = name.trim()
+
   try {
+    // Check if category name already exists (case-insensitive)
+    const { data: existing } = await supabaseAdmin
+      .from('product_categories')
+      .select('id, name')
+      .ilike('name', trimmedName)
+      .maybeSingle()
+
+    if (existing) {
+      res.status(409).json({ message: `A category named "${existing.name}" already exists.` })
+      return
+    }
+
     const { data: countData } = await supabaseAdmin
       .from('product_categories')
       .select('sort_order', { count: 'exact' })
@@ -266,11 +286,17 @@ router.post('/categories', requireAuth, requireRole('admin'), async (req: Authen
 
     const { data, error } = await supabaseAdmin
       .from('product_categories')
-      .insert({ name: name.trim(), sort_order: nextOrder })
+      .insert({ name: trimmedName, sort_order: nextOrder })
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      if (error.code === '23505') {
+        res.status(409).json({ message: `A category named "${trimmedName}" already exists.` })
+        return
+      }
+      throw error
+    }
     res.status(201).json(data)
   } catch (err: unknown) {
     console.error('[Products] Failed to create category:', err)
@@ -284,13 +310,14 @@ router.post('/categories', requireAuth, requireRole('admin'), async (req: Authen
  * Supports adding recipe ingredient mappings at the same time.
  */
 router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { name, category_id, price, is_available = true, image_url, recipes } = req.body as {
+  const { name, category_id, price, is_available = true, image_url, recipes, product_type } = req.body as {
     name?: string
     category_id?: string
     price?: number
     is_available?: boolean
     image_url?: string
     recipes?: Array<{ inventory_id: string; qty_per_unit: number }>
+    product_type?: string
   }
 
   if (typeof name !== 'string' || !name.trim()) {
@@ -314,19 +341,43 @@ router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedReq
     return
   }
 
+  const typeToSet = ['Regular', 'Bestseller', 'New', 'Seasonal', 'Special'].includes(String(product_type))
+    ? String(product_type)
+    : 'Regular'
+
   try {
-    // 1. Insert product
-    const { data: newProduct, error: prodErr } = await supabaseAdmin
+    // 1. Insert product (try with product_type, graceful fallback if column not yet migrated)
+    const basePayload: Record<string, unknown> = {
+      name: name.trim().slice(0, 120),
+      category_id,
+      price: parsedPrice.value,
+      is_available: Boolean(is_available),
+      image_url: typeof image_url === 'string' ? image_url.trim().slice(0, 500) || null : null,
+      product_type: typeToSet,
+    }
+
+    let newProduct: any = null
+    let prodErr: any = null
+
+    const firstTry = await supabaseAdmin
       .from('products')
-      .insert({
-        name: name.trim().slice(0, 120),
-        category_id,
-        price: parsedPrice.value,
-        is_available: Boolean(is_available),
-        image_url: typeof image_url === 'string' ? image_url.trim().slice(0, 500) || null : null,
-      })
+      .insert(basePayload)
       .select('*, category:product_categories(id, name, sort_order)')
       .single()
+
+    if (firstTry.error && firstTry.error.code === 'PGRST204') {
+      delete basePayload.product_type
+      const secondTry = await supabaseAdmin
+        .from('products')
+        .insert(basePayload)
+        .select('*, category:product_categories(id, name, sort_order)')
+        .single()
+      newProduct = secondTry.data
+      prodErr = secondTry.error
+    } else {
+      newProduct = firstTry.data
+      prodErr = firstTry.error
+    }
 
     if (prodErr) {
       if (prodErr.code === '23503') {
@@ -335,6 +386,13 @@ router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedReq
       }
       throw prodErr
     }
+
+    if (!newProduct) {
+      throw new Error('Failed to create product row.')
+    }
+
+    // Persist product_type metadata cache
+    setProductType(newProduct.id, typeToSet)
 
     // 2. Insert recipes if provided
     const validRecipes = parseRecipes(recipes, newProduct.id)
@@ -355,7 +413,7 @@ router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedReq
       }
     }
 
-    res.status(201).json(newProduct)
+    res.status(201).json({ ...newProduct, product_type: typeToSet })
   } catch (err: unknown) {
     // Log the real error server-side; never hand raw database text to the client.
     console.error('[Products] Failed to create product:', err)
@@ -369,13 +427,14 @@ router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedReq
  */
 router.patch('/:id', requireAuth, requireRole('admin'), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string }
-  const { name, category_id, price, is_available, image_url, recipes } = req.body as {
+  const { name, category_id, price, is_available, image_url, recipes, product_type } = req.body as {
     name?: string
     category_id?: string
     price?: number
     is_available?: boolean
     image_url?: string
     recipes?: Array<{ inventory_id: string; qty_per_unit: number }>
+    product_type?: string
   }
 
   const updates: Record<string, unknown> = {
@@ -408,13 +467,40 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req: Authenticate
     updates.image_url = typeof image_url === 'string' ? image_url.trim().slice(0, 500) || null : null
   }
 
+  let typeToSet: string | undefined = undefined
+  if (product_type !== undefined) {
+    typeToSet = ['Regular', 'Bestseller', 'New', 'Seasonal', 'Special'].includes(String(product_type))
+      ? String(product_type)
+      : 'Regular'
+    updates.product_type = typeToSet
+    setProductType(id, typeToSet)
+  }
+
   try {
-    const { data: updatedProduct, error: updateErr } = await supabaseAdmin
+    let updatedProduct: any = null
+    let updateErr: any = null
+
+    const firstTry = await supabaseAdmin
       .from('products')
       .update(updates)
       .eq('id', id)
       .select('*, category:product_categories(id, name, sort_order)')
       .maybeSingle()
+
+    if (firstTry.error && firstTry.error.code === 'PGRST204') {
+      delete updates.product_type
+      const secondTry = await supabaseAdmin
+        .from('products')
+        .update(updates)
+        .eq('id', id)
+        .select('*, category:product_categories(id, name, sort_order)')
+        .maybeSingle()
+      updatedProduct = secondTry.data
+      updateErr = secondTry.error
+    } else {
+      updatedProduct = firstTry.data
+      updateErr = firstTry.error
+    }
 
     if (updateErr) {
       if (updateErr.code === '23503') {
@@ -445,7 +531,8 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req: Authenticate
       }
     }
 
-    res.json(updatedProduct)
+    const finalType = typeToSet || updatedProduct.product_type || getProductType(id) || 'Regular'
+    res.json({ ...updatedProduct, product_type: finalType })
   } catch (err: unknown) {
     console.error('[Products] Failed to update product:', err)
     res.status(500).json({ message: 'Failed to update product. Please try again.' })
