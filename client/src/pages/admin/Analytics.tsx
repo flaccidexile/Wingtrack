@@ -172,9 +172,9 @@ export default function Analytics() {
               { label: 'Avg Order Value', val: `\u20B1${avgOrder.toFixed(0)}`,         note: 'Per transaction',   color: '#7a4520' },
               { label: 'Best Month',      val: bestMonth?.month ?? '-',                note: `\u20B1${bestMonth?.revenue.toLocaleString() ?? 0}`, color: '#4a7c4e' },
             ].map(k => (
-              <div key={k.label} className="card" style={{ padding: '22px 24px' }}>
+              <div key={k.label} className="card" style={{ padding: '22px 24px', textAlign: 'center' }}>
                 <p style={{ fontSize: 11, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontFamily: 'IBM Plex Mono' }}>{k.label}</p>
-                <p style={{ fontFamily: 'Inter', fontSize: 28, fontWeight: 700, color: k.color, lineHeight: 1 }}>{k.val}</p>
+                <p style={{ fontFamily: 'Inter', fontSize: 28, fontWeight: 700, color: k.color, lineHeight: 1, textAlign: 'center' }}>{k.val}</p>
                 <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 8 }}>{k.note}</p>
               </div>
             ))}

@@ -746,46 +746,29 @@ export default function MenuManager() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+          gridTemplateColumns: 'repeat(4, 1fr)',
           gap: 16,
           marginBottom: 28,
         }}
       >
-        <div className="card" style={{ padding: '20px 22px' }}>
-          <p style={{ fontSize: 12, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-            Total Menu Items
-          </p>
-          <p style={{ fontFamily: 'Inter', fontSize: 30, fontWeight: 700, color: 'var(--foreground)' }}>
-            {totalItems}
-          </p>
-        </div>
-
-        <div className="card" style={{ padding: '20px 22px' }}>
-          <p style={{ fontSize: 12, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-            Active in POS
-          </p>
-          <p style={{ fontFamily: 'Inter', fontSize: 30, fontWeight: 700, color: '#15803d' }}>
-            {activeItems}
-          </p>
-        </div>
-
-        <div className="card" style={{ padding: '20px 22px' }}>
-          <p style={{ fontSize: 12, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-            Out of Stock
-          </p>
-          <p style={{ fontFamily: 'Inter', fontSize: 30, fontWeight: 700, color: outOfStockItems > 0 ? '#b91c1c' : 'var(--muted-foreground)' }}>
-            {outOfStockItems}
-          </p>
-        </div>
-
-        <div className="card" style={{ padding: '20px 22px' }}>
-          <p style={{ fontSize: 12, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-            Categories
-          </p>
-          <p style={{ fontFamily: 'Inter', fontSize: 30, fontWeight: 700, color: 'var(--primary)' }}>
-            {categories.length}
-          </p>
-        </div>
+        {[
+          { label: 'Total Menu Items', val: totalItems, color: '#9b5e28', note: 'All catalog items' },
+          { label: 'Active in POS', val: activeItems, color: '#4a7c4e', note: 'Available to order' },
+          { label: 'Out of Stock', val: outOfStockItems, color: outOfStockItems > 0 ? '#b91c1c' : 'var(--muted-foreground)', note: outOfStockItems > 0 ? 'Needs restock' : 'Fully stocked' },
+          { label: 'Categories', val: categories.length, color: '#c47a2e', note: 'Active food groups' },
+        ].map(k => (
+          <div key={k.label} className="card" style={{ padding: '22px 24px', textAlign: 'center' }}>
+            <p style={{ fontSize: 11, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontFamily: 'IBM Plex Mono' }}>
+              {k.label}
+            </p>
+            <p style={{ fontFamily: 'Inter', fontSize: 28, fontWeight: 700, color: k.color, lineHeight: 1, textAlign: 'center' }}>
+              {k.val}
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 8 }}>
+              {k.note}
+            </p>
+          </div>
+        ))}
       </div>
 
       {/* Filters and search */}

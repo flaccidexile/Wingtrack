@@ -65,7 +65,7 @@ function KpiCard({ label, value, sub, color, trend, icon }: {
       <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: color, opacity: 0.9 }} />
 
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
-        <p className="overline">{label}</p>
+        <p className="overline" style={{ textDecoration: 'none' }}>{label}</p>
         <span style={{ width: 32, height: 32, borderRadius: 9, display: 'grid', placeItems: 'center', background: `${color}1a`, color, flexShrink: 0 }}>
           <KpiIcon path={icon} />
         </span>
@@ -329,7 +329,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <p className="overline" style={{ marginBottom: 7 }}>Overview</p>
+          <p className="overline" style={{ marginBottom: 7, textDecoration: 'none' }}>Overview</p>
           <h1 className="page-title">
             {greeting}, Manager
           </h1>

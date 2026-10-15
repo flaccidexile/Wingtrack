@@ -1,8 +1,11 @@
+import path from 'node:path'
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
 
+// Load from server/.env if present, then fall back to repo root .env
 dotenv.config()
+dotenv.config({ path: path.resolve(__dirname, '../../.env') })
 
 import checkoutRouter  from './routes/checkout'
 import inventoryRouter from './routes/inventory'
