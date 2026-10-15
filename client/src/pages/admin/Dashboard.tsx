@@ -6,6 +6,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useChartWidth, tickInterval } from '@/hooks/useChartWidth'
 import EmptyState, { EMPTY_ICONS } from '@/components/ui/EmptyState'
+import NotificationCenter from '@/components/ui/NotificationCenter'
 import type { Order } from '@/types'
 
 interface DailyStat {
@@ -338,9 +339,9 @@ export default function Dashboard() {
           </p>
         </div>
 
-        {/* Period controls — a segmented control rather than four loose buttons,
-            so it reads as one choice with three states. */}
+        {/* Notification bell + Period controls */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <NotificationCenter />
           <div
             role="group"
             aria-label="Reporting period"
