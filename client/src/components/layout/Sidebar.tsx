@@ -187,6 +187,14 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
 
   const visibleNav = NAV_ITEMS.filter(item => role && item.roles.includes(role))
   const showSettings = !!role && SETTINGS_ITEM.roles.includes(role)
+  const hasDashboardAccess = !!role && (NAV_ITEMS.find(item => item.id === 'dashboard')?.roles.includes(role) ?? false)
+
+  function handleLogoClick() {
+    if (hasDashboardAccess) {
+      setPage('dashboard')
+      onCloseMobile?.()
+    }
+  }
 
   /** One nav row. Shared so the pinned Settings button matches the main group. */
   function renderNavButton({ id, label, cashierLabel, icon: Icon }: NavItem) {
@@ -313,35 +321,71 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
         <div style={{ padding: '26px 24px 22px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div
+              id="sidebar-brand-btn"
+              onClick={hasDashboardAccess ? handleLogoClick : undefined}
+              role={hasDashboardAccess ? 'button' : undefined}
+              tabIndex={hasDashboardAccess ? 0 : undefined}
+              onKeyDown={hasDashboardAccess ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  handleLogoClick()
+                }
+              } : undefined}
+              aria-label={hasDashboardAccess ? 'Go to Dashboard' : undefined}
+              title={hasDashboardAccess ? 'Go to Dashboard' : undefined}
               style={{
-                width: 44,
-                height: 44,
-                borderRadius: '50%',
-                overflow: 'hidden',
-                flexShrink: 0,
-                boxShadow: '0 4px 14px rgba(234,88,12,0.3)',
-                border: '2px solid rgba(249,115,22,0.4)',
-                background: '#ea580c',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
+                gap: 12,
+                flex: 1,
+                minWidth: 0,
+                cursor: hasDashboardAccess ? 'pointer' : 'default',
+                userSelect: 'none',
+                transition: 'opacity 0.15s ease',
+              }}
+              onMouseEnter={e => {
+                if (hasDashboardAccess) {
+                  (e.currentTarget as HTMLElement).style.opacity = '0.82'
+                }
+              }}
+              onMouseLeave={e => {
+                if (hasDashboardAccess) {
+                  (e.currentTarget as HTMLElement).style.opacity = '1'
+                }
               }}
             >
-              <img
-                src="/logo.png"
-                alt="Wingtrack Logo"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontFamily: 'Inter', fontSize: 21, fontWeight: 800, color: 'var(--sidebar-foreground)', letterSpacing: '-0.03em' }}>
-                  WINGTRACK
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                  boxShadow: '0 4px 14px rgba(234,88,12,0.3)',
+                  border: '2px solid rgba(249,115,22,0.4)',
+                  background: '#ea580c',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'transform 0.15s ease',
+                }}
+              >
+                <img
+                  src="/logo.png"
+                  alt="Wingtrack Logo"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontFamily: 'Inter', fontSize: 21, fontWeight: 800, color: 'var(--sidebar-foreground)', letterSpacing: '-0.03em' }}>
+                    WINGTRACK
+                  </span>
+                </div>
+                <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--sidebar-active)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
+                  POS &amp; INVENTORY
                 </span>
               </div>
-              <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--sidebar-active)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
-                POS &amp; INVENTORY
-              </span>
             </div>
             {isNarrow && (
               <button

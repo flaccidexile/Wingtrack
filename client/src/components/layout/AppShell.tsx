@@ -134,6 +134,41 @@ export default function AppShell() {
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </button>
+            <div
+              id="mobile-header-logo-btn"
+              onClick={role === 'admin' ? () => handleNavigate('dashboard') : undefined}
+              role={role === 'admin' ? 'button' : undefined}
+              tabIndex={role === 'admin' ? 0 : undefined}
+              onKeyDown={role === 'admin' ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  handleNavigate('dashboard')
+                }
+              } : undefined}
+              aria-label={role === 'admin' ? 'Go to Dashboard' : undefined}
+              title={role === 'admin' ? 'Go to Dashboard' : undefined}
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: '50%',
+                overflow: 'hidden',
+                flexShrink: 0,
+                boxShadow: '0 2px 8px rgba(234,88,12,0.3)',
+                border: '1.5px solid rgba(249,115,22,0.4)',
+                background: '#ea580c',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: role === 'admin' ? 'pointer' : 'default',
+                userSelect: 'none',
+              }}
+            >
+              <img
+                src="/logo.png"
+                alt="Wingtrack Logo"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            </div>
             <span
               style={{
                 fontFamily: 'Inter',
