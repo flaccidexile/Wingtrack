@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { apiGetOrders, apiVoidOrder } from '@/lib/api'
+import { dispatchNotification } from '@/lib/notifications'
 import type { Order, OrderSummary } from '@/types'
 import { useAuth } from '@/hooks/useAuth'
 import { useIsCompact } from '@/hooks/useMediaQuery'
@@ -29,6 +30,29 @@ function StatTile({ label, value, hint }: { label: string; value: string; hint: 
 }
 
 /**
+ * Calculates revenue, total cost, net profit, and profit margin for an order.
+ */
+export function getOrderProfit(order: Order) {
+  const isVoid = order.status === 'void'
+  const items = order.order_items ?? []
+  const subtotal = Number(order.subtotal ?? order.total_amount) || 0
+  const totalCost = items.reduce((sum, item) => {
+    const cost = Number(item.unit_cost ?? 0)
+    const qty = Number(item.quantity ?? 1)
+    return sum + (cost * qty)
+  }, 0)
+  const netProfit = isVoid ? 0 : subtotal - totalCost
+  const marginPct = isVoid || subtotal <= 0 ? 0 : (netProfit / subtotal) * 100
+  return {
+    subtotal,
+    totalCost,
+    netProfit,
+    marginPct,
+    isVoid,
+  }
+}
+
+/**
  * Compact presentation of a single order for phone-width viewports.
  *
  * Every field that the desktop grid shows is present here, laid out vertically
@@ -44,6 +68,7 @@ function OrderCard({
   onVoid: (o: Order) => void
 }) {
   const isVoid = order.status === 'void'
+  const profit = getOrderProfit(order)
   const dateStr = new Date(order.created_at).toLocaleString('en-PH', {
     month: 'short',
     day: 'numeric',
@@ -106,7 +131,7 @@ function OrderCard({
         </p>
       )}
 
-      {/* Row 4: payment + total */}
+      {/* Row 4: payment + total + net profit */}
       <div
         style={{
           display: 'flex',
@@ -120,17 +145,31 @@ function OrderCard({
         <span style={{ fontSize: 11, textTransform: 'uppercase', fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>
           {order.payment_method}
         </span>
-        <span
-          style={{
-            fontSize: 16,
-            fontFamily: 'IBM Plex Mono',
-            fontWeight: 700,
-            color: isVoid ? '#9ca3af' : 'var(--foreground)',
-            textDecoration: isVoid ? 'line-through' : 'none',
-          }}
-        >
-          &#8369;{Number(order.total_amount).toFixed(2)}
-        </span>
+        <div style={{ textAlign: 'right' }}>
+          <div
+            style={{
+              fontSize: 16,
+              fontFamily: 'IBM Plex Mono',
+              fontWeight: 700,
+              color: isVoid ? '#9ca3af' : 'var(--foreground)',
+              textDecoration: isVoid ? 'line-through' : 'none',
+            }}
+          >
+            &#8369;{Number(order.total_amount).toFixed(2)}
+          </div>
+          {!isVoid && (
+            <div
+              style={{
+                fontSize: 11.5,
+                fontFamily: 'IBM Plex Mono',
+                fontWeight: 600,
+                color: profit.netProfit >= 0 ? '#15803d' : '#b91c1c',
+              }}
+            >
+              Net Profit: {profit.netProfit >= 0 ? '+' : ''}&#8369;{profit.netProfit.toFixed(2)} ({profit.marginPct.toFixed(0)}%)
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Row 5: actions, full-width tap targets */}
@@ -194,6 +233,8 @@ export default function OrdersList() {
    * them (or when it cannot), in which case the strip is simply not rendered.
    */
   const [summary, setSummary] = useState<OrderSummary | null>(null)
+  /** Success toast shown briefly after a void completes. */
+  const [voidSuccessMsg, setVoidSuccessMsg] = useState<string | null>(null)
 
   const isCashier = role === 'cashier'
 
@@ -265,6 +306,7 @@ export default function OrdersList() {
   async function handleConfirmVoid(e: React.FormEvent) {
     e.preventDefault()
     if (!voidModalOrder) return
+    const orderNumber = voidModalOrder.order_number
     setVoidLoading(true)
     setVoidError(null)
     try {
@@ -272,6 +314,15 @@ export default function OrdersList() {
       setVoidModalOrder(null)
       setVoidReason('')
       await fetchOrders()
+      // Dispatch notification across all windows (Dashboard receives this live)
+      dispatchNotification({
+        category: 'order',
+        title: 'Order Voided',
+        body: `Order #${orderNumber} was voided (${voidReason || 'Voided by staff'}). Inventory restored.`,
+      })
+      // Show success toast and auto-dismiss after 4 s
+      setVoidSuccessMsg(`Order #${orderNumber} has been voided successfully. Inventory has been restored.`)
+      setTimeout(() => setVoidSuccessMsg(null), 4000)
     } catch (err: unknown) {
       setVoidError(err instanceof Error ? err.message : 'Failed to void order')
     } finally {
@@ -281,6 +332,55 @@ export default function OrdersList() {
 
   return (
     <div className="page">
+      {/* Void success toast */}
+      {voidSuccessMsg && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            bottom: 28,
+            right: 24,
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '14px 18px',
+            background: '#f0fdf4',
+            border: '1px solid #86efac',
+            borderRadius: 12,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.14)',
+            fontSize: 13,
+            fontWeight: 600,
+            color: '#15803d',
+            maxWidth: 420,
+            animation: 'toast-in 0.3s cubic-bezier(0.16,1,0.3,1)',
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="9 12 11 14 15 10"/>
+          </svg>
+          {voidSuccessMsg}
+          <button
+            type="button"
+            onClick={() => setVoidSuccessMsg(null)}
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#15803d', padding: 2, flexShrink: 0 }}
+            aria-label="Dismiss"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      )}
+      <style>{`
+        @keyframes toast-in {
+          from { opacity: 0; transform: translateY(16px) scale(0.96); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+      `}</style>
+
       {/* Header */}
       <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
@@ -406,8 +506,8 @@ export default function OrdersList() {
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
           <div className="scroll-x">
-          <div style={{ display: 'grid', gridTemplateColumns: '62px 120px minmax(0, 1fr) 82px 98px 94px 126px', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)', minWidth: 720 }}>
-            {['Order #', 'Date & Time', 'Items Summary', 'Payment', 'Total', 'Status', 'Actions'].map(h => (
+          <div style={{ display: 'grid', gridTemplateColumns: '62px 115px minmax(0, 1fr) 76px 90px 105px 84px 118px', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)', minWidth: 840 }}>
+            {['Order #', 'Date & Time', 'Items Summary', 'Payment', 'Total', 'Net Profit', 'Status', 'Actions'].map(h => (
               <span key={h} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 {h}
               </span>
@@ -416,6 +516,7 @@ export default function OrdersList() {
 
           {filteredOrders.map((order, i) => {
             const isVoid = order.status === 'void'
+            const profit = getOrderProfit(order)
             const dateStr = new Date(order.created_at).toLocaleString('en-PH', {
               month: 'short',
               day: 'numeric',
@@ -432,13 +533,13 @@ export default function OrdersList() {
                 key={order.id}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '62px 120px minmax(0, 1fr) 82px 98px 94px 126px',
+                  gridTemplateColumns: '62px 115px minmax(0, 1fr) 76px 90px 105px 84px 118px',
                   gap: 0,
                   padding: '14px 20px',
                   borderBottom: i < filteredOrders.length - 1 ? '1px solid var(--muted)' : 'none',
                   alignItems: 'center',
                   background: isVoid ? 'rgba(254, 242, 242, 0.4)' : 'transparent',
-                  minWidth: 720,
+                  minWidth: 840,
                 }}
               >
                 <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 700, fontSize: 13, color: 'var(--foreground)' }}>
@@ -467,6 +568,23 @@ export default function OrdersList() {
                 <span style={{ fontSize: 14, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: isVoid ? '#9ca3af' : 'var(--foreground)', textDecoration: isVoid ? 'line-through' : 'none' }}>
                   ₱{Number(order.total_amount).toFixed(2)}
                 </span>
+
+                <div>
+                  {isVoid ? (
+                    <span style={{ fontSize: 12, fontFamily: 'IBM Plex Mono', color: '#9ca3af', textDecoration: 'line-through' }}>
+                      ₱0.00
+                    </span>
+                  ) : (
+                    <div>
+                      <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: profit.netProfit >= 0 ? '#15803d' : '#b91c1c' }}>
+                        {profit.netProfit >= 0 ? '+' : ''}₱{profit.netProfit.toFixed(2)}
+                      </span>
+                      <div style={{ fontSize: 10.5, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>
+                        {profit.marginPct.toFixed(0)}% margin
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <div>
                   <span

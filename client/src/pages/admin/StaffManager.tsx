@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { apiCreateStaff, apiDeactivateStaff, apiGetStaff, apiReactivateStaff } from '@/lib/api'
+import { dispatchNotification } from '@/lib/notifications'
 import { useAuth } from '@/hooks/useAuth'
 import { useIsCompact } from '@/hooks/useMediaQuery'
 import { activityColor, describeActivity, isOnline } from '@/lib/presence'
@@ -427,9 +428,18 @@ export default function StaffManager() {
     setFormLoading(true)
     try {
       await apiCreateStaff(form)
+      const newStaffName = form.full_name
+      const newStaffRole = form.role
       setShowModal(false)
       setForm({ full_name: '', email: '', password: '', role: 'cashier' })
       await fetchStaff()
+
+      // Broadcast staff addition across windows
+      dispatchNotification({
+        category: 'staff',
+        title: 'New Staff Added',
+        body: `${newStaffName} was added as ${roleLabel(newStaffRole)}.`,
+      })
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : 'Failed to create staff')
     } finally {
@@ -440,6 +450,9 @@ export default function StaffManager() {
   /** Runs the confirmed activate / deactivate request. */
   async function runPendingAction() {
     if (!pendingAction) return
+    const actionKind = pendingAction.kind
+    const staffObj = staff.find(s => s.id === pendingAction.id)
+    const staffName = staffObj?.full_name || 'Staff member'
     setActionBusy(true)
     setActionError(null)
     try {
@@ -456,6 +469,12 @@ export default function StaffManager() {
         await fetchStaff()
       }
       setPendingAction(null)
+
+      dispatchNotification({
+        category: 'staff',
+        title: actionKind === 'deactivate' ? 'Staff Deactivated' : 'Staff Reactivated',
+        body: `${staffName} has been ${actionKind === 'deactivate' ? 'deactivated' : 'reactivated'}.`,
+      })
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'That action could not be completed.')
       setPendingAction(null)

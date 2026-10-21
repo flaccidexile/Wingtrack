@@ -20,6 +20,17 @@ export default function ReceiptModal({ order, onClose }: ReceiptModalProps) {
     hour12: true,
   })
 
+  const items = order.order_items ?? []
+  const subtotal = Number(order.subtotal ?? order.total_amount) || 0
+  const totalCost = items.reduce((sum, item) => {
+    const cost = Number(item.unit_cost ?? 0)
+    const qty = Number(item.quantity ?? 1)
+    return sum + (cost * qty)
+  }, 0)
+  const isVoid = order.status === 'void'
+  const netProfit = isVoid ? 0 : subtotal - totalCost
+  const marginPct = isVoid || subtotal <= 0 ? 0 : (netProfit / subtotal) * 100
+
   return createPortal(
     <div
       style={{
@@ -39,14 +50,37 @@ export default function ReceiptModal({ order, onClose }: ReceiptModalProps) {
       }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #printable-receipt, #printable-receipt * {
+            visibility: visible !important;
+          }
+          #printable-receipt {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
       <div
         className="card fade-in"
         style={{
           width: '100%',
-          maxWidth: 420,
+          maxWidth: 480,
+          maxHeight: '92vh',
+          overflowY: 'auto',
           background: '#ffffff',
           color: '#1a1a1a',
-          padding: '28px 24px',
+          padding: '24px 22px',
           boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
           borderRadius: 12,
         }}
@@ -65,7 +99,7 @@ export default function ReceiptModal({ order, onClose }: ReceiptModalProps) {
             <p style={{ fontSize: 11, color: '#666', margin: '4px 0 0 0' }}>Integrated POS & Inventory System</p>
             <p style={{ fontSize: 11, color: '#666', margin: '2px 0 0 0' }}>Order #{order.order_number}</p>
             <p style={{ fontSize: 11, color: '#666', margin: '2px 0 0 0' }}>{dateStr}</p>
-            {order.status === 'void' && (
+            {isVoid && (
               <div style={{ marginTop: 8, padding: '4px 8px', background: '#fee2e2', color: '#991b1b', fontWeight: 'bold', fontSize: 13, borderRadius: 4, display: 'inline-block' }}>
                 *** VOIDED TRANSACTION ***
               </div>
@@ -79,7 +113,7 @@ export default function ReceiptModal({ order, onClose }: ReceiptModalProps) {
               <span>TOTAL</span>
             </div>
 
-            {(order.order_items ?? []).map((item, idx) => (
+            {items.map((item, idx) => (
               <div key={item.id ?? idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                 <span style={{ flex: 1, paddingRight: 8 }}>{item.product_name}</span>
                 <span style={{ color: '#555', marginRight: 12 }}>{item.quantity} × ₱{Number(item.unit_price).toFixed(2)}</span>
@@ -118,8 +152,104 @@ export default function ReceiptModal({ order, onClose }: ReceiptModalProps) {
           </div>
         </div>
 
+        {/* Cost Breakdown & Profit Margin Analysis Panel (Management Details View) */}
+        <div
+          className="no-print"
+          style={{
+            marginTop: 18,
+            padding: '14px 16px',
+            borderRadius: 10,
+            background: isVoid ? '#fef2f2' : 'rgba(234, 88, 12, 0.05)',
+            border: isVoid ? '1px solid #fecaca' : '1px solid rgba(234, 88, 12, 0.2)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#111827', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Cost & Profit Margin Breakdown
+            </span>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: 12,
+                background: isVoid ? '#fee2e2' : (netProfit >= 0 ? '#e8f5e9' : '#fee2e2'),
+                color: isVoid ? '#991b1b' : (netProfit >= 0 ? '#15803d' : '#991b1b'),
+              }}
+            >
+              {isVoid ? 'VOIDED' : `${marginPct.toFixed(1)}% MARGIN`}
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12, textAlign: 'center' }}>
+            <div style={{ padding: '8px', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+              <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase' }}>Revenue</div>
+              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Courier New, monospace', color: '#111827' }}>
+                ₱{subtotal.toFixed(2)}
+              </div>
+            </div>
+            <div style={{ padding: '8px', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+              <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase' }}>Total Cost</div>
+              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Courier New, monospace', color: '#6b7280' }}>
+                ₱{totalCost.toFixed(2)}
+              </div>
+            </div>
+            <div style={{ padding: '8px', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+              <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase' }}>Net Profit</div>
+              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Courier New, monospace', color: isVoid ? '#9ca3af' : (netProfit >= 0 ? '#15803d' : '#b91c1c') }}>
+                {isVoid ? '₱0.00' : `${netProfit >= 0 ? '+' : ''}₱${netProfit.toFixed(2)}`}
+              </div>
+            </div>
+          </div>
+
+          {/* Itemized Cost Breakdown Table */}
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 55px 65px 65px', gap: 6, fontSize: 10.5, fontWeight: 700, color: '#6b7280', marginBottom: 6 }}>
+              <span>ITEM</span>
+              <span style={{ textAlign: 'right' }}>COST/U</span>
+              <span style={{ textAlign: 'right' }}>TOT COST</span>
+              <span style={{ textAlign: 'right' }}>PROFIT</span>
+            </div>
+            {items.map((item, idx) => {
+              const uCost = Number(item.unit_cost ?? 0)
+              const uPrice = Number(item.unit_price ?? 0)
+              const lineCost = uCost * Number(item.quantity ?? 1)
+              const lineRev = Number(item.line_total ?? uPrice * Number(item.quantity ?? 1))
+              const itemProfit = lineRev - lineCost
+
+              return (
+                <div
+                  key={item.id ?? idx}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) 55px 65px 65px',
+                    gap: 6,
+                    fontSize: 11,
+                    fontFamily: 'Courier New, monospace',
+                    padding: '3px 0',
+                    borderBottom: idx < items.length - 1 ? '1px dashed #f3f4f6' : 'none',
+                  }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#1f2937' }}>
+                    {item.quantity}× {item.product_name}
+                  </span>
+                  <span style={{ textAlign: 'right', color: '#4b5563' }}>
+                    ₱{uCost.toFixed(2)}
+                  </span>
+                  <span style={{ textAlign: 'right', color: '#4b5563' }}>
+                    ₱{lineCost.toFixed(2)}
+                  </span>
+                  <span style={{ textAlign: 'right', fontWeight: 700, color: itemProfit >= 0 ? '#15803d' : '#b91c1c' }}>
+                    {itemProfit >= 0 ? '+' : ''}₱{itemProfit.toFixed(2)}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
         {/* Modal Buttons */}
-        <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
+        <div className="no-print" style={{ display: 'flex', gap: 10, marginTop: 18 }}>
           <button
             onClick={handlePrint}
             style={{

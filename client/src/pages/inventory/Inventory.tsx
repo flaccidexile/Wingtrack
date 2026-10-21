@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { apiAdjustInventory, apiGetInventoryMovements, apiCreateInventoryItem } from '@/lib/api'
+import { dispatchNotification } from '@/lib/notifications'
 import { useIsCompact } from '@/hooks/useMediaQuery'
 import EmptyState, { EMPTY_ICONS } from '@/components/ui/EmptyState'
 import type { InventoryItem, InventoryAdjustmentPayload, InventoryMovement } from '@/types'
@@ -279,11 +280,21 @@ export default function Inventory() {
 
     try {
       await apiAdjustInventory(payload)
+      const adjustedItemName = adjustModal.item.name
+      const adjustedType = adjustModal.type
+      const adjustedUnit = adjustModal.item.unit
       setAdjustModal(null)
       setAdjustQty('')
       setAdjustNotes('')
       await fetchInventory()
       if (activeTab === 'movements') await fetchMovements()
+
+      // Broadcast inventory notification to Dashboard & all windows
+      dispatchNotification({
+        category: 'inventory',
+        title: adjustedType === 'restock' ? 'Inventory Restocked' : adjustedType === 'waste' ? 'Waste Recorded' : 'Inventory Adjusted',
+        body: `${adjustedItemName}: ${adjustedType === 'restock' ? '+' : ''}${qtyChange} ${adjustedUnit} (${adjustNotes || 'Manual update'})`,
+      })
     } catch (err: unknown) {
       setAdjustError(err instanceof Error ? err.message : 'Adjustment failed')
     } finally {
@@ -295,10 +306,12 @@ export default function Inventory() {
     e.preventDefault()
     setAddError(null)
     setAddLoading(true)
+    const createdName = newItemName.trim()
+    const createdCat = newItemCat
     try {
       await apiCreateInventoryItem({
-        name: newItemName.trim(),
-        category: newItemCat,
+        name: createdName,
+        category: createdCat,
         unit: newItemUnit.trim(),
         stock_qty: newItemStock ? parseFloat(newItemStock) : 0,
         min_stock_level: newItemMin ? parseFloat(newItemMin) : 0,
@@ -312,6 +325,13 @@ export default function Inventory() {
       setNewItemCost('')
       setNewItemSupplier('')
       await fetchInventory()
+
+      // Broadcast new item notification
+      dispatchNotification({
+        category: 'inventory',
+        title: 'New Inventory Item',
+        body: `${createdName} (${createdCat}) was added to inventory.`,
+      })
     } catch (err: unknown) {
       setAddError(err instanceof Error ? err.message : 'Failed to add item')
     } finally {

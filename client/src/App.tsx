@@ -22,6 +22,7 @@ function AppContent() {
   const { session, loading, signOut, accountState, sessionOrigin } = useAuth()
   const [authMode, setAuthMode] = useState<AuthMode>(detectInitialMode)
   const [pendingEmail, setPendingEmail] = useState<string>('')
+  const [pendingDevOtp, setPendingDevOtp] = useState<string | undefined>(undefined)
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true
   )
@@ -143,6 +144,7 @@ function AppContent() {
     return (
       <OTPVerificationPage
         email={pendingEmail}
+        devOtp={pendingDevOtp}
         onVerified={() => setAuthMode('login')}
         onBack={() => setAuthMode('login')}
       />
@@ -226,7 +228,11 @@ function AppContent() {
     return (
       <SignUpPage
         onSwitchToLogin={() => setAuthMode('login')}
-        onRegistered={(email) => { setPendingEmail(email); setAuthMode('otp') }}
+        onRegistered={(email, devOtp) => {
+          setPendingEmail(email)
+          setPendingDevOtp(devOtp)
+          setAuthMode('otp')
+        }}
       />
     )
   }

@@ -2,8 +2,34 @@ import { Router, type Response } from 'express'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
+import { getAllOrderItemCosts, getAllProductCosts } from '../lib/productMetadata'
 
 const router = Router()
+
+/**
+ * Enriches order items with their unit_cost from the database or metadata fallback.
+ */
+function enrichOrderItems(
+  order: any,
+  itemCostsMap: Record<string, number>,
+  productCostsMap: Record<string, number>
+) {
+  if (!order || !Array.isArray(order.order_items)) return order
+  const enrichedItems = order.order_items.map((item: any) => {
+    let cost = item.unit_cost != null ? Number(item.unit_cost) : null
+    if (cost === null || Number.isNaN(cost)) {
+      cost = itemCostsMap[item.id] ?? productCostsMap[item.product_id] ?? 0
+    }
+    return {
+      ...item,
+      unit_cost: cost,
+    }
+  })
+  return {
+    ...order,
+    order_items: enrichedItems,
+  }
+}
 
 /** Default and maximum number of orders returned in one page. */
 const DEFAULT_PAGE_SIZE = 100
@@ -185,8 +211,12 @@ router.get(
         console.error('Fetch orders — summary failed:', summaryError)
       }
 
+      const itemCostsMap = getAllOrderItemCosts()
+      const productCostsMap = getAllProductCosts()
+      const enrichedOrders = (orders ?? []).map((o: any) => enrichOrderItems(o, itemCostsMap, productCostsMap))
+
       res.json({
-        orders: orders ?? [],
+        orders: enrichedOrders,
         total: count ?? (orders?.length ?? 0),
         limit,
         offset,
@@ -219,7 +249,9 @@ router.get(
         return
       }
 
-      res.json(order)
+      const itemCostsMap = getAllOrderItemCosts()
+      const productCostsMap = getAllProductCosts()
+      res.json(enrichOrderItems(order, itemCostsMap, productCostsMap))
     } catch (err) {
       res.status(500).json({ message: 'Internal server error.' })
     }

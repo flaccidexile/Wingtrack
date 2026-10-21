@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import { apiRegisterWithOtp } from '@/lib/api'
 import { checkPasswordStrength, MIN_PASSWORD_LENGTH } from '@/lib/validation'
 import type { StaffRole } from '@/types'
 import AuthShell from './AuthShell'
 
 interface SignUpPageProps {
   onSwitchToLogin: () => void
-  onRegistered?: (email: string) => void
+  onRegistered?: (email: string, devOtp?: string) => void
 }
 
 // Password requirement checker — shares the policy with the rest of the app.
@@ -65,14 +66,33 @@ export default function SignUpPage({ onSwitchToLogin, onRegistered }: SignUpPage
     setError(null)
     setLoading(true)
     try {
-      const res = await signUp(email, password, fullName, role)
-      if (res.requiresConfirmation) {
+      try {
+        const otpRes = await apiRegisterWithOtp({
+          email,
+          password,
+          full_name: fullName,
+          role,
+        })
         if (onRegistered) {
-          onRegistered(email)
-        } else {
-          setSuccessMsg('Account created! A confirmation email has been sent to ' + email + '. Please verify your email before signing in.')
+          onRegistered(email, otpRes.devOtp)
+          return
+        }
+      } catch (apiErr: unknown) {
+        // If server responded with a specific validation error (e.g. account exists), throw it
+        const msg = apiErr instanceof Error ? apiErr.message : ''
+        if (msg.includes('already registered') || msg.includes('Password') || msg.includes('wait')) {
+          throw apiErr
+        }
+        // Otherwise fall back to client-side Supabase signUp
+        const res = await signUp(email, password, fullName, role)
+        if (res.requiresConfirmation) {
+          if (onRegistered) {
+            onRegistered(email)
+            return
+          }
         }
       }
+      setSuccessMsg('Account created! A confirmation code has been sent to ' + email + '. Please verify your email before signing in.')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Sign up failed. Please try again.'
       if (msg.toLowerCase().includes('rate limit')) {

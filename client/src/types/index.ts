@@ -54,6 +54,7 @@ export interface Product {
   category_id: string
   category?: ProductCategory
   price: number
+  unit_cost?: number
   is_available: boolean
   image_url?: string
   product_type?: ProductType
@@ -94,6 +95,7 @@ export interface OrderItem {
   product_id: string
   product_name: string
   unit_price: number
+  unit_cost?: number
   quantity: number
   line_total: number
 }

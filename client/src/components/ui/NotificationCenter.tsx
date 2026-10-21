@@ -1,18 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type NotifCategory = 'order' | 'inventory' | 'staff' | 'system'
-
-interface Notification {
-  id: string
-  category: NotifCategory
-  title: string
-  body: string
-  ts: Date
-  read: boolean
-}
+import {
+  type AppNotification,
+  type NotifCategory,
+  getStoredNotifications,
+  saveNotifications,
+  subscribeNotifications,
+} from '@/lib/notifications'
 
 // ─── Icon helpers ─────────────────────────────────────────────────────────────
 
@@ -74,9 +68,10 @@ const CAT_COLOR: Record<NotifCategory, { bg: string; fg: string; dot: string }> 
 
 // ─── Relative time formatter ──────────────────────────────────────────────────
 
-function relativeTime(ts: Date): string {
+function relativeTime(iso: string): string {
+  const ts = new Date(iso)
   const diff = Math.floor((Date.now() - ts.getTime()) / 1000)
-  if (diff < 5)    return 'just now'
+  if (isNaN(diff) || diff < 5) return 'just now'
   if (diff < 60)   return `${diff}s ago`
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
@@ -86,11 +81,16 @@ function relativeTime(ts: Date): string {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function NotificationCenter() {
-  const [notifs, setNotifs] = useState<Notification[]>([])
+  const [notifs, setNotifs] = useState<AppNotification[]>(() => getStoredNotifications())
   const [open, setOpen] = useState(false)
   const [, forceRender] = useState(0)
   const panelRef = useRef<HTMLDivElement>(null)
   const btnRef   = useRef<HTMLButtonElement>(null)
+
+  // Sync to localStorage whenever notifs changes
+  useEffect(() => {
+    saveNotifications(notifs)
+  }, [notifs])
 
   // Re-render timestamps every 30 s so "just now" -> "30s ago" updates live
   useEffect(() => {
@@ -98,24 +98,43 @@ export default function NotificationCenter() {
     return () => clearInterval(id)
   }, [])
 
-  const push = useCallback((n: Omit<Notification, 'id' | 'ts' | 'read'>) => {
-    setNotifs(prev => [
-      { ...n, id: crypto.randomUUID(), ts: new Date(), read: false },
-      ...prev.slice(0, 49),   // cap at 50
-    ])
+  const push = useCallback((n: Omit<AppNotification, 'id' | 'ts' | 'read'> & { id?: string; ts?: string; read?: boolean }) => {
+    setNotifs(prev => {
+      // Deduplicate if already present by id or identical content within 3 seconds
+      if (n.id && prev.some(p => p.id === n.id)) return prev
+      const item: AppNotification = {
+        id: n.id ?? crypto.randomUUID(),
+        category: n.category,
+        title: n.title,
+        body: n.body,
+        ts: n.ts ?? new Date().toISOString(),
+        read: n.read ?? false,
+      }
+      const updated = [item, ...prev.filter(p => p.id !== item.id)].slice(0, 50)
+      saveNotifications(updated)
+      return updated
+    })
   }, [])
 
-  // ── Supabase Realtime subscriptions ─────────────────────────────────────────
+  // 1. Cross-window broadcast subscription
   useEffect(() => {
-    // Orders channel
+    const unsub = subscribeNotifications((incoming) => {
+      push(incoming)
+    })
+    return unsub
+  }, [push])
+
+  // 2. Supabase Realtime postgres_changes subscriptions
+  useEffect(() => {
     const orders = supabase
-      .channel('notif-orders')
+      .channel('notif-db-orders')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'orders' },
         (payload) => {
           const rec = payload.new as Record<string, unknown>
           push({
+            id: `order-insert-${rec.id || crypto.randomUUID()}`,
             category: 'order',
             title: 'New Order',
             body: `Order #${rec.order_number ?? '—'} placed via ${rec.payment_method ?? 'unknown'}.`,
@@ -127,118 +146,66 @@ export default function NotificationCenter() {
         { event: 'UPDATE', schema: 'public', table: 'orders' },
         (payload) => {
           const rec = payload.new as Record<string, unknown>
-          const old = payload.old as Record<string, unknown>
-          if (rec.status !== old.status) {
-            const verb =
-              rec.status === 'completed' ? 'Completed' :
-              rec.status === 'void'      ? 'Voided'    : 'Updated'
+          const newStatus = rec.status as string | undefined
+          if (newStatus === 'void') {
             push({
+              id: `order-void-${rec.id || crypto.randomUUID()}-${Date.now()}`,
               category: 'order',
-              title: `Order ${verb}`,
-              body: `Order #${rec.order_number ?? '—'} is now ${rec.status}.`,
+              title: 'Order Voided',
+              body: `Order #${rec.order_number ?? '—'} has been marked as void.`,
+            })
+          } else if (newStatus === 'completed') {
+            push({
+              id: `order-comp-${rec.id || crypto.randomUUID()}-${Date.now()}`,
+              category: 'order',
+              title: 'Order Completed',
+              body: `Order #${rec.order_number ?? '—'} is completed.`,
             })
           }
         }
       )
       .subscribe()
 
-    // Inventory channel
     const inventory = supabase
-      .channel('notif-inventory')
+      .channel('notif-db-inventory')
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'inventory' },
         (payload) => {
           const rec = payload.new as Record<string, unknown>
-          const old = payload.old as Record<string, unknown>
-          if (rec.status !== old.status) {
-            if (rec.status === 'critical') {
-              push({
-                category: 'inventory',
-                title: 'Critical Stock',
-                body: `${rec.name} is critically low (${rec.stock_qty} ${rec.unit} left).`,
-              })
-            } else if (rec.status === 'low') {
-              push({
-                category: 'inventory',
-                title: 'Low Stock',
-                body: `${rec.name} is running low (${rec.stock_qty} ${rec.unit} left).`,
-              })
-            } else if (old.status === 'low' || old.status === 'critical') {
-              push({
-                category: 'inventory',
-                title: 'Stock Restocked',
-                body: `${rec.name} is back to healthy levels.`,
-              })
-            }
-          }
-          // Restock — qty goes up while staying at ok
-          if (
-            typeof rec.stock_qty === 'number' &&
-            typeof old.stock_qty === 'number' &&
-            rec.stock_qty > (old.stock_qty as number) &&
-            rec.status === 'ok' &&
-            old.status === 'ok'
-          ) {
+          const newStatus = rec.status as string | undefined
+          if (newStatus === 'critical') {
             push({
+              id: `inv-crit-${rec.id}-${Date.now()}`,
               category: 'inventory',
-              title: 'Inventory Restocked',
-              body: `${rec.name} restocked to ${rec.stock_qty} ${rec.unit}.`,
+              title: 'Critical Stock',
+              body: `${rec.name} is critically low (${rec.stock_qty} ${rec.unit} left).`,
             })
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'inventory_movements' },
-        (payload) => {
-          const rec = payload.new as Record<string, unknown>
-          if (rec.movement_type === 'waste') {
+          } else if (newStatus === 'low') {
             push({
+              id: `inv-low-${rec.id}-${Date.now()}`,
               category: 'inventory',
-              title: 'Waste Recorded',
-              body: `A waste entry of ${Math.abs(Number(rec.qty_change))} units was logged.`,
+              title: 'Low Stock',
+              body: `${rec.name} is running low (${rec.stock_qty} ${rec.unit} left).`,
             })
           }
         }
       )
       .subscribe()
 
-    // Staff channel
     const staff = supabase
-      .channel('notif-staff')
+      .channel('notif-db-staff')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'staff_profiles' },
         (payload) => {
           const rec = payload.new as Record<string, unknown>
           push({
+            id: `staff-add-${rec.id || crypto.randomUUID()}`,
             category: 'staff',
             title: 'New Staff Added',
             body: `${rec.full_name ?? 'A new member'} joined as ${rec.role ?? 'staff'}.`,
           })
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'staff_profiles' },
-        (payload) => {
-          const rec = payload.new as Record<string, unknown>
-          const old = payload.old as Record<string, unknown>
-          if (rec.is_active !== old.is_active) {
-            push({
-              category: 'staff',
-              title: rec.is_active ? 'Staff Reactivated' : 'Staff Deactivated',
-              body: `${rec.full_name ?? 'Staff'} has been ${rec.is_active ? 'reactivated' : 'deactivated'}.`,
-            })
-          }
-          if (rec.role !== old.role) {
-            push({
-              category: 'staff',
-              title: 'Role Changed',
-              body: `${rec.full_name ?? 'Staff'} role changed to ${rec.role}.`,
-            })
-          }
         }
       )
       .subscribe()
@@ -248,6 +215,37 @@ export default function NotificationCenter() {
       supabase.removeChannel(inventory)
       supabase.removeChannel(staff)
     }
+  }, [push])
+
+  // 3. Initial seed: if notifs is empty, query database for active low stock or recent voids
+  useEffect(() => {
+    async function checkInitialAlerts() {
+      const stored = getStoredNotifications()
+      if (stored.length > 0) return
+
+      try {
+        const { data: lowStock } = await supabase
+          .from('inventory')
+          .select('id, name, stock_qty, unit, status')
+          .in('status', ['low', 'critical'])
+          .limit(3)
+
+        if (lowStock && lowStock.length > 0) {
+          lowStock.forEach(item => {
+            push({
+              id: `init-low-${item.id}`,
+              category: 'inventory',
+              title: item.status === 'critical' ? 'Critical Stock' : 'Low Stock',
+              body: `${item.name} has only ${item.stock_qty} ${item.unit} remaining.`,
+              read: false,
+            })
+          })
+        }
+      } catch {
+        // silent fallback
+      }
+    }
+    checkInitialAlerts()
   }, [push])
 
   // Close panel when clicking outside
@@ -268,16 +266,25 @@ export default function NotificationCenter() {
   const unread = notifs.filter(n => !n.read).length
 
   function markAllRead() {
-    setNotifs(prev => prev.map(n => ({ ...n, read: true })))
+    setNotifs(prev => {
+      const updated = prev.map(n => ({ ...n, read: true }))
+      saveNotifications(updated)
+      return updated
+    })
   }
 
   function clearAll() {
     setNotifs([])
+    saveNotifications([])
     setOpen(false)
   }
 
   function markRead(id: string) {
-    setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+    setNotifs(prev => {
+      const updated = prev.map(n => n.id === id ? { ...n, read: true } : n)
+      saveNotifications(updated)
+      return updated
+    })
   }
 
   return (
@@ -291,43 +298,48 @@ export default function NotificationCenter() {
         aria-expanded={open}
         onClick={() => {
           setOpen(o => !o)
-          if (!open && unread > 0) markAllRead()
         }}
         style={{
           position: 'relative',
-          width: 38, height: 38,
-          borderRadius: 10,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 38,
+          height: 38,
+          borderRadius: 8,
           border: '1px solid var(--border)',
-          background: open ? 'var(--primary)' : 'var(--card)',
-          color: open ? 'var(--primary-foreground)' : 'var(--foreground)',
-          display: 'grid', placeItems: 'center',
+          background: open ? 'var(--muted)' : 'var(--card)',
+          color: unread > 0 ? 'var(--primary)' : 'var(--muted-foreground)',
           cursor: 'pointer',
-          boxShadow: open ? 'var(--shadow-brand)' : 'var(--shadow-xs)',
-          transition: 'all 150ms ease',
+          transition: 'all 0.15s ease',
+          boxShadow: 'var(--shadow-xs)',
           flexShrink: 0,
         }}
       >
         <BellIcon hasBadge={unread > 0} />
         {unread > 0 && (
           <span
-            aria-hidden="true"
             style={{
               position: 'absolute',
-              top: -4, right: -4,
-              minWidth: 17, height: 17,
-              borderRadius: 99,
+              top: -3,
+              right: -3,
               background: '#ea580c',
-              border: '2px solid var(--background)',
+              color: '#fff',
               fontSize: 10,
               fontWeight: 700,
-              fontFamily: 'Inter',
-              color: '#fff',
-              display: 'grid', placeItems: 'center',
+              fontFamily: 'IBM Plex Mono',
+              borderRadius: 999,
+              minWidth: 16,
+              height: 16,
               padding: '0 3px',
-              lineHeight: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '2px solid var(--card)',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
             }}
           >
-            {unread > 99 ? '99+' : unread}
+            {unread > 9 ? '9+' : unread}
           </span>
         )}
       </button>
@@ -340,69 +352,89 @@ export default function NotificationCenter() {
           aria-label="Notification center"
           style={{
             position: 'absolute',
-            top: 'calc(100% + 10px)',
+            top: 'calc(100% + 8px)',
             right: 0,
             width: 360,
-            maxHeight: 520,
-            borderRadius: 14,
-            border: '1px solid var(--border)',
+            maxWidth: 'calc(100vw - 32px)',
             background: 'var(--card)',
-            boxShadow: '0 16px 48px rgba(0,0,0,0.18)',
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            boxShadow: '0 12px 36px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.06)',
+            zIndex: 1000,
+            overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
-            overflow: 'hidden',
-            zIndex: 200,
-            animation: 'notif-panel-in 160ms cubic-bezier(0.16,1,0.3,1) both',
+            maxHeight: 460,
+            animation: 'notif-in 0.18s cubic-bezier(0.16,1,0.3,1)',
           }}
         >
-          {/* Panel header */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '14px 16px 12px',
-            borderBottom: '1px solid var(--border)',
-            flexShrink: 0,
-          }}>
+          {/* Header */}
+          <div
+            style={{
+              padding: '12px 16px',
+              borderBottom: '1px solid var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'var(--card)',
+              flexShrink: 0,
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Inter', color: 'var(--foreground)' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--foreground)' }}>
                 Notifications
               </span>
-              {notifs.length > 0 && (
-                <span style={{
-                  fontSize: 11, fontFamily: 'IBM Plex Mono', fontWeight: 600,
-                  background: 'var(--muted)', color: 'var(--muted-foreground)',
-                  padding: '1px 7px', borderRadius: 99,
-                }}>
-                  {notifs.length}
+              {unread > 0 && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: 'IBM Plex Mono',
+                    background: '#fff7ed',
+                    color: '#ea580c',
+                    border: '1px solid #fed7aa',
+                    padding: '1px 6px',
+                    borderRadius: 999,
+                    fontWeight: 600,
+                  }}
+                >
+                  {unread} new
                 </span>
               )}
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {notifs.some(n => !n.read) && (
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              {unread > 0 && (
                 <button
+                  type="button"
                   onClick={markAllRead}
                   style={{
-                    fontSize: 11, fontFamily: 'Inter', fontWeight: 500,
-                    color: 'var(--primary)', background: 'none', border: 'none',
-                    cursor: 'pointer', padding: '3px 8px', borderRadius: 6,
-                    transition: 'background 120ms',
+                    background: 'none',
+                    border: 'none',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: 'var(--primary)',
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                    borderRadius: 4,
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--muted)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                 >
                   Mark all read
                 </button>
               )}
               {notifs.length > 0 && (
                 <button
+                  type="button"
                   onClick={clearAll}
                   style={{
-                    fontSize: 11, fontFamily: 'Inter', fontWeight: 500,
-                    color: 'var(--muted-foreground)', background: 'none', border: 'none',
-                    cursor: 'pointer', padding: '3px 8px', borderRadius: 6,
-                    transition: 'background 120ms',
+                    background: 'none',
+                    border: 'none',
+                    fontSize: 11,
+                    fontWeight: 500,
+                    color: 'var(--muted-foreground)',
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                    borderRadius: 4,
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--muted)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                 >
                   Clear all
                 </button>
@@ -410,116 +442,118 @@ export default function NotificationCenter() {
             </div>
           </div>
 
-          {/* Notification list */}
-          <div style={{ overflowY: 'auto', flex: 1 }}>
+          {/* List */}
+          <div
+            style={{
+              overflowY: 'auto',
+              flex: 1,
+            }}
+          >
             {notifs.length === 0 ? (
-              <div style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                justifyContent: 'center', gap: 10, padding: '40px 20px',
-                color: 'var(--muted-foreground)',
-              }}>
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity={0.4}>
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                </svg>
-                <p style={{ fontSize: 13, fontFamily: 'Inter', fontWeight: 500, margin: 0 }}>All caught up!</p>
-                <p style={{ fontSize: 12, margin: 0, opacity: 0.7 }}>New activity will appear here in real time.</p>
+              <div
+                style={{
+                  padding: '36px 20px',
+                  textAlign: 'center',
+                  color: 'var(--muted-foreground)',
+                }}
+              >
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: '50%',
+                    background: 'var(--muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 12px',
+                    color: 'var(--muted-foreground)',
+                  }}
+                >
+                  <BellIcon hasBadge={false} />
+                </div>
+                <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--foreground)' }}>
+                  No notifications yet
+                </p>
+                <p style={{ fontSize: 12, margin: '4px 0 0', opacity: 0.8 }}>
+                  Activity across all windows (sales, voids, inventory) appears here in real-time.
+                </p>
               </div>
             ) : (
               notifs.map(n => {
-                const colors = CAT_COLOR[n.category]
+                const col = CAT_COLOR[n.category] ?? CAT_COLOR.system
                 return (
                   <div
                     key={n.id}
                     onClick={() => markRead(n.id)}
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: '28px 1fr auto',
-                      gap: '0 10px',
-                      alignItems: 'start',
-                      padding: '11px 16px',
-                      borderBottom: '1px solid var(--muted)',
-                      cursor: 'default',
-                      background: n.read ? 'transparent' : `${colors.fg}06`,
-                      transition: 'background 120ms',
-                      position: 'relative',
+                      padding: '12px 16px',
+                      display: 'flex',
+                      gap: 12,
+                      alignItems: 'flex-start',
+                      background: n.read ? 'transparent' : 'rgba(234, 88, 12, 0.04)',
+                      borderBottom: '1px solid var(--border)',
+                      cursor: 'pointer',
+                      transition: 'background 0.12s ease',
                     }}
-                    onMouseEnter={e => { if (n.read) e.currentTarget.style.background = 'var(--muted)' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = n.read ? 'transparent' : `${colors.fg}06` }}
                   >
-                    {/* Unread dot */}
-                    {!n.read && (
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          position: 'absolute', left: 5, top: '50%', transform: 'translateY(-50%)',
-                          width: 6, height: 6, borderRadius: '50%',
-                          background: colors.dot,
-                        }}
-                      />
-                    )}
-
-                    {/* Category icon bubble */}
-                    <span style={{
-                      width: 28, height: 28, borderRadius: 8,
-                      background: colors.bg, color: colors.fg,
-                      display: 'grid', placeItems: 'center', flexShrink: 0,
-                      marginTop: 1,
-                    }}>
+                    {/* Category badge */}
+                    <div
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 7,
+                        background: col.bg,
+                        color: col.fg,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        marginTop: 1,
+                      }}
+                    >
                       <CategoryIcon cat={n.category} />
-                    </span>
+                    </div>
 
-                    {/* Text */}
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{
-                        fontSize: 13, fontWeight: n.read ? 500 : 600,
-                        fontFamily: 'Inter', color: 'var(--foreground)',
-                        margin: 0, lineHeight: 1.35,
-                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                      }}>
-                        {n.title}
-                      </p>
-                      <p style={{
-                        fontSize: 12, color: 'var(--muted-foreground)',
-                        fontFamily: 'Inter', margin: '2px 0 0', lineHeight: 1.4,
-                      }}>
+                    {/* Content */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 2 }}>
+                        <span style={{ fontSize: 12, fontWeight: n.read ? 600 : 700, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {n.title}
+                        </span>
+                        <span style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', flexShrink: 0 }}>
+                          {relativeTime(n.ts)}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: 12, color: 'var(--muted-foreground)', margin: 0, lineHeight: 1.4, wordBreak: 'break-word' }}>
                         {n.body}
                       </p>
                     </div>
 
-                    {/* Timestamp */}
-                    <span style={{
-                      fontSize: 10, fontFamily: 'IBM Plex Mono',
-                      color: 'var(--muted-foreground)', whiteSpace: 'nowrap',
-                      marginTop: 3, flexShrink: 0,
-                    }}>
-                      {relativeTime(n.ts)}
-                    </span>
+                    {/* Unread indicator */}
+                    {!n.read && (
+                      <span
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: '50%',
+                          background: col.dot,
+                          flexShrink: 0,
+                          marginTop: 6,
+                        }}
+                      />
+                    )}
                   </div>
                 )
               })
             )}
           </div>
-
-          {/* Footer hint */}
-          {notifs.length > 0 && (
-            <div style={{
-              padding: '8px 16px', borderTop: '1px solid var(--border)',
-              flexShrink: 0,
-            }}>
-              <p style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'Inter', margin: 0, textAlign: 'center' }}>
-                Showing last {notifs.length} notification{notifs.length !== 1 ? 's' : ''} · Live via Supabase Realtime
-              </p>
-            </div>
-          )}
         </div>
       )}
-
-      {/* Panel entrance animation */}
       <style>{`
-        @keyframes notif-panel-in {
-          from { opacity: 0; transform: translateY(-8px) scale(0.97); }
-          to   { opacity: 1; transform: translateY(0)   scale(1); }
+        @keyframes notif-in {
+          from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
         }
       `}</style>
     </div>

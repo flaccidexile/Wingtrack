@@ -47,6 +47,19 @@ const RESET_COOLDOWN_MS = 60_000
  */
 const resetCooldowns = new Map<string, number>()
 
+/** In-memory store for pending registration OTPs and profile data. */
+interface PendingRegistrationOtp {
+  code: string
+  expiresAt: number
+  userId?: string
+  password?: string
+  fullName: string
+  role: string
+  attempts: number
+  sentAt: number
+}
+const registrationOtps = new Map<string, PendingRegistrationOtp>()
+
 /** Seconds the caller must still wait, or 0 when the address is clear. */
 function resetCooldownRemaining(email: string): number {
   const until = resetCooldowns.get(email)
@@ -129,6 +142,302 @@ router.post('/check-registered', async (req: Request, res: Response): Promise<vo
   } catch (err: unknown) {
     console.error('check-registered error:', err)
     res.status(500).json({ message: 'Unable to verify this email right now. Please try again.' })
+  }
+})
+
+/**
+ * POST /api/auth/register-otp — Public.
+ *
+ * Initiates registration: validates credentials, generates a 6-digit confirmation
+ * OTP via Supabase Auth admin, emails it using custom SMTP if configured, or
+ * makes it available for development testing.
+ */
+router.post('/register-otp', async (req: Request, res: Response): Promise<void> => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+  const password = typeof req.body?.password === 'string' ? req.body.password : ''
+  const fullName = typeof req.body?.full_name === 'string' ? req.body.full_name.trim() : ''
+  const requestedRole = typeof req.body?.role === 'string' ? req.body.role : 'cashier'
+  const role: SelfSignupRole = isSelfSignupRole(requestedRole) ? requestedRole : 'cashier'
+
+  if (!email || !email.includes('@')) {
+    res.status(400).json({ message: 'A valid email address is required.' })
+    return
+  }
+  if (!fullName) {
+    res.status(400).json({ message: 'Full name is required.' })
+    return
+  }
+  const pwdErr = validatePassword(password)
+  if (pwdErr) {
+    res.status(400).json({ message: pwdErr })
+    return
+  }
+
+  try {
+    // 1. Check if an active staff account already exists
+    const { data: existingStaff } = await supabaseAdmin
+      .from('staff_profiles')
+      .select('id, is_active')
+      .ilike('email', email)
+      .maybeSingle()
+
+    if (existingStaff && existingStaff.is_active) {
+      res.status(400).json({ message: 'An account with this email is already registered. Please log in.' })
+      return
+    }
+
+    // 2. Cooldown check: 30 seconds
+    const existingEntry = registrationOtps.get(email)
+    if (existingEntry && Date.now() - existingEntry.sentAt < 30_000) {
+      const waitSec = Math.ceil((30_000 - (Date.now() - existingEntry.sentAt)) / 1000)
+      res.status(429).json({ message: `Please wait ${waitSec}s before requesting a new code.` })
+      return
+    }
+
+    // 3. Generate signup link & 6-digit OTP via Supabase admin
+    let emailOtp = ''
+    let userId: string | undefined = undefined
+
+    try {
+      const linkRes = await supabaseAdmin.auth.admin.generateLink({
+        type: 'signup',
+        email,
+        password,
+        options: { data: { full_name: fullName, role } },
+      })
+
+      if (linkRes.data?.properties?.email_otp) {
+        emailOtp = linkRes.data.properties.email_otp
+        userId = linkRes.data.user?.id
+      }
+    } catch {
+      // Fallback: generate custom 6-digit code
+    }
+
+    if (!emailOtp) {
+      emailOtp = String(crypto.randomInt(100_000, 1_000_000))
+    }
+
+    // 4. Save in-memory cache
+    registrationOtps.set(email, {
+      code: emailOtp,
+      expiresAt: Date.now() + 5 * 60_000, // 5 minutes
+      userId,
+      password,
+      fullName,
+      role,
+      attempts: 0,
+      sentAt: Date.now(),
+    })
+
+    // 5. Send email if custom SMTP is configured
+    let delivered = false
+    if (isSmtpConfigured()) {
+      const { subject, text } = buildOtpEmail(emailOtp)
+      const delivery = await sendMail({ to: email, subject, text })
+      delivered = delivery.delivered
+    } else {
+      console.log(`\n============================================================\n[AUTH REGISTRATION OTP] 6-digit code for ${email}: ${emailOtp}\n============================================================\n`)
+    }
+
+    res.json({
+      success: true,
+      email,
+      delivered,
+      // Provide devOtp if SMTP is not configured or in development mode
+      devOtp: !isSmtpConfigured() || process.env.NODE_ENV !== 'production' ? emailOtp : undefined,
+      message: delivered
+        ? `A 6-digit verification code has been sent to ${email}.`
+        : `Verification code generated for ${email}.`,
+    })
+  } catch (err: unknown) {
+    console.error('register-otp error:', err)
+    res.status(500).json({ message: 'Unable to start registration right now. Please try again.' })
+  }
+})
+
+/**
+ * POST /api/auth/resend-registration-otp — Public.
+ */
+router.post('/resend-registration-otp', async (req: Request, res: Response): Promise<void> => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+  if (!email || !email.includes('@')) {
+    res.status(400).json({ message: 'A valid email address is required.' })
+    return
+  }
+
+  const existing = registrationOtps.get(email)
+  if (existing && Date.now() - existing.sentAt < 30_000) {
+    const waitSec = Math.ceil((30_000 - (Date.now() - existing.sentAt)) / 1000)
+    res.status(429).json({ message: `Please wait ${waitSec}s before resending.` })
+    return
+  }
+
+  try {
+    let emailOtp = ''
+    let userId = existing?.userId
+    const fullName = existing?.fullName || email.split('@')[0]
+    const role = existing?.role || 'cashier'
+
+    try {
+      const linkRes = await supabaseAdmin.auth.admin.generateLink({
+        type: 'signup',
+        email,
+        password: existing?.password || 'Wingtrack123!',
+        options: { data: { full_name: fullName, role } },
+      })
+      if (linkRes.data?.properties?.email_otp) {
+        emailOtp = linkRes.data.properties.email_otp
+        userId = linkRes.data.user?.id || userId
+      }
+    } catch {
+      // fallback
+    }
+
+    if (!emailOtp) {
+      emailOtp = String(crypto.randomInt(100_000, 1_000_000))
+    }
+
+    registrationOtps.set(email, {
+      code: emailOtp,
+      expiresAt: Date.now() + 5 * 60_000,
+      userId,
+      password: existing?.password,
+      fullName,
+      role,
+      attempts: 0,
+      sentAt: Date.now(),
+    })
+
+    let delivered = false
+    if (isSmtpConfigured()) {
+      const { subject, text } = buildOtpEmail(emailOtp)
+      const delivery = await sendMail({ to: email, subject, text })
+      delivered = delivery.delivered
+    } else {
+      console.log(`\n============================================================\n[AUTH REGISTRATION OTP RESEND] 6-digit code for ${email}: ${emailOtp}\n============================================================\n`)
+    }
+
+    res.json({
+      success: true,
+      email,
+      delivered,
+      devOtp: !isSmtpConfigured() || process.env.NODE_ENV !== 'production' ? emailOtp : undefined,
+      message: delivered
+        ? `A new verification code has been sent to ${email}.`
+        : `New verification code generated for ${email}.`,
+    })
+  } catch (err: unknown) {
+    console.error('resend-registration-otp error:', err)
+    res.status(500).json({ message: 'Unable to resend code right now. Please try again.' })
+  }
+})
+
+/**
+ * POST /api/auth/verify-registration-otp — Public.
+ *
+ * Validates the 6-digit registration OTP, confirms the Supabase Auth user,
+ * and provisions the staff_profiles row with their chosen role.
+ */
+router.post('/verify-registration-otp', async (req: Request, res: Response): Promise<void> => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+  const token = typeof req.body?.token === 'string' ? req.body.token.trim() : ''
+  const fullName = typeof req.body?.full_name === 'string' ? req.body.full_name.trim() : ''
+  const role = typeof req.body?.role === 'string' ? req.body.role : 'cashier'
+
+  if (!email || !token) {
+    res.status(400).json({ message: 'Email and 6-digit verification code are required.' })
+    return
+  }
+
+  const cached = registrationOtps.get(email)
+  if (!cached) {
+    // If cache missed, check if user is already confirmed in auth
+    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+    const user = usersData?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
+    if (user && user.email_confirmed_at) {
+      res.json({ success: true, verified: true, message: 'Account is already verified. You can now log in.' })
+      return
+    }
+    res.status(400).json({ message: 'Verification code not found or expired. Please request a new code.' })
+    return
+  }
+
+  if (Date.now() > cached.expiresAt) {
+    registrationOtps.delete(email)
+    res.status(400).json({ message: 'This code has expired. Please request a new one.' })
+    return
+  }
+
+  cached.attempts += 1
+  if (cached.attempts > 5) {
+    registrationOtps.delete(email)
+    res.status(429).json({ message: 'Too many incorrect attempts. Please request a new code.' })
+    return
+  }
+
+  if (cached.code !== token) {
+    res.status(400).json({ message: 'Invalid verification code. Please check and try again.' })
+    return
+  }
+
+  // Code verified!
+  try {
+    let resolvedUserId = cached.userId
+    if (!resolvedUserId) {
+      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+      const found = usersData?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
+      resolvedUserId = found?.id
+    }
+
+    // 1. Confirm user email in Supabase Auth
+    if (resolvedUserId) {
+      await supabaseAdmin.auth.admin.updateUserById(resolvedUserId, {
+        email_confirm: true,
+      })
+    }
+
+    // 2. Ensure staff_profiles row exists
+    const profileRole: SelfSignupRole = isSelfSignupRole(role) ? role : isSelfSignupRole(cached.role) ? cached.role : 'cashier'
+    const profileName = fullName || cached.fullName || email.split('@')[0]
+
+    const { data: existingProf } = await supabaseAdmin
+      .from('staff_profiles')
+      .select('id, user_id')
+      .ilike('email', email)
+      .maybeSingle()
+
+    if (existingProf) {
+      await supabaseAdmin
+        .from('staff_profiles')
+        .update({
+          user_id: resolvedUserId || existingProf.user_id,
+          full_name: profileName,
+          role: profileRole,
+          is_active: true,
+        })
+        .eq('id', existingProf.id)
+    } else if (resolvedUserId) {
+      await supabaseAdmin.from('staff_profiles').insert({
+        user_id: resolvedUserId,
+        full_name: profileName,
+        email,
+        role: profileRole,
+        is_active: true,
+        created_by: null,
+      })
+    }
+
+    registrationOtps.delete(email)
+
+    res.json({
+      success: true,
+      verified: true,
+      message: 'Account verified successfully. You can now sign in.',
+    })
+  } catch (err: unknown) {
+    console.error('verify-registration-otp error:', err)
+    res.status(500).json({ message: 'Verification error. Please contact an administrator.' })
   }
 })
 

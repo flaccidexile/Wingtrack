@@ -466,6 +466,7 @@ export async function apiCreateProduct(payload: {
   name: string
   category_id: string
   price: number
+  unit_cost?: number
   is_available?: boolean
   image_url?: string
   product_type?: string
@@ -491,6 +492,7 @@ export async function apiUpdateProduct(id: string, payload: {
   name?: string
   category_id?: string
   price?: number
+  unit_cost?: number
   is_available?: boolean
   image_url?: string
   product_type?: string
@@ -706,6 +708,79 @@ export async function apiProvisionSelf(payload?: { full_name?: string; role?: st
     created: boolean
     role?: string
     is_active?: boolean
+  }>
+}
+
+/**
+ * POST /api/auth/register-otp (Public)
+ * Initiates staff registration, generating a 6-digit confirmation OTP.
+ */
+export async function apiRegisterWithOtp(data: {
+  email: string
+  password: string
+  full_name: string
+  role?: string
+}) {
+  const res = await fetch(`${API_BASE}/auth/register-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Registration failed')
+  }
+  return res.json() as Promise<{
+    success: boolean
+    email: string
+    delivered: boolean
+    devOtp?: string
+    message: string
+  }>
+}
+
+/**
+ * POST /api/auth/resend-registration-otp (Public)
+ */
+export async function apiResendRegistrationOtp(email: string) {
+  const res = await fetch(`${API_BASE}/auth/resend-registration-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Failed to resend verification code')
+  }
+  return res.json() as Promise<{
+    success: boolean
+    email: string
+    delivered: boolean
+    devOtp?: string
+    message: string
+  }>
+}
+
+/**
+ * POST /api/auth/verify-registration-otp (Public)
+ * Validates registration OTP and provisions the staff account.
+ */
+export async function apiVerifyRegistrationOtp(data: {
+  email: string
+  token: string
+  full_name?: string
+  role?: string
+}) {
+  const res = await fetch(`${API_BASE}/auth/verify-registration-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Verification failed')
+  }
+  return res.json() as Promise<{
+    success: boolean
+    verified: boolean
+    message: string
   }>
 }
 

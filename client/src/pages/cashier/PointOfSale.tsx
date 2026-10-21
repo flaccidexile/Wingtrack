@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { apiCheckout } from '@/lib/api'
+import { dispatchNotification } from '@/lib/notifications'
 import { useAuth } from '@/hooks/useAuth'
 import type { Product, ProductCategory, CartItem, Order } from '@/types'
 import ReceiptModal from '@/components/receipt/ReceiptModal'
@@ -279,6 +280,12 @@ export default function PointOfSale() {
         })),
       })
       setCheckoutSuccess(true)
+      // Broadcast new order notification to all windows (Dashboard receives this live)
+      dispatchNotification({
+        category: 'order',
+        title: 'New Order Placed',
+        body: `Order #${result.order_number} placed via ${method === 'online' ? 'card' : 'cash'}. Total: ₱${total.toFixed(2)}.`,
+      })
       setCart([])
       setNotes('')
     } catch (err: unknown) {

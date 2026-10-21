@@ -2,7 +2,14 @@ import express, { Router, type Response } from 'express'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
-import { getProductType, setProductType, getAllProductTypes } from '../lib/productMetadata'
+import {
+  getProductType,
+  setProductType,
+  getAllProductTypes,
+  getProductCost,
+  setProductCost,
+  getAllProductCosts,
+} from '../lib/productMetadata'
 
 const router = Router()
 
@@ -66,6 +73,31 @@ function parsePrice(raw: unknown): { ok: true; value: number } | { ok: false; me
   }
   return { ok: true, value: Math.round(value * 100) / 100 }
 }
+
+/**
+ * Validate a unit cost (cost price) coming from the client.
+ * Defaults to 0 when omitted, and validates range.
+ */
+function parseCost(raw: unknown): { ok: true; value: number } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') {
+    return { ok: true, value: 0 }
+  }
+  if (typeof raw !== 'number' && typeof raw !== 'string') {
+    return { ok: false, message: 'Unit cost must be a number.' }
+  }
+  const value = Number(raw)
+  if (!Number.isFinite(value)) {
+    return { ok: false, message: 'Unit cost must be a valid number.' }
+  }
+  if (value < 0) {
+    return { ok: false, message: 'Unit cost must be 0 or greater.' }
+  }
+  if (value > MAX_PRICE) {
+    return { ok: false, message: `Unit cost must not exceed ${MAX_PRICE.toLocaleString()}.` }
+  }
+  return { ok: true, value: Math.round(value * 100) / 100 }
+}
+
 
 /**
  * Validate and normalise the recipe list.
@@ -222,9 +254,11 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response): P
 
     if (error) throw error
     const typesMap = getAllProductTypes()
+    const costsMap = getAllProductCosts()
     const enriched = (data || []).map((p: any) => ({
       ...p,
       product_type: p.product_type || typesMap[p.id] || 'Regular',
+      unit_cost: p.unit_cost != null ? Number(p.unit_cost) : (costsMap[p.id] ?? 0),
     }))
     res.json(enriched)
   } catch (err: unknown) {
@@ -310,10 +344,11 @@ router.post('/categories', requireAuth, requireRole('admin'), async (req: Authen
  * Supports adding recipe ingredient mappings at the same time.
  */
 router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { name, category_id, price, is_available = true, image_url, recipes, product_type } = req.body as {
+  const { name, category_id, price, unit_cost, is_available = true, image_url, recipes, product_type } = req.body as {
     name?: string
     category_id?: string
     price?: number
+    unit_cost?: number
     is_available?: boolean
     image_url?: string
     recipes?: Array<{ inventory_id: string; qty_per_unit: number }>
@@ -341,16 +376,23 @@ router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedReq
     return
   }
 
+  const parsedCost = parseCost(unit_cost)
+  if (!parsedCost.ok) {
+    res.status(400).json({ message: parsedCost.message })
+    return
+  }
+
   const typeToSet = ['Regular', 'Bestseller', 'New', 'Seasonal', 'Special'].includes(String(product_type))
     ? String(product_type)
     : 'Regular'
 
   try {
-    // 1. Insert product (try with product_type, graceful fallback if column not yet migrated)
+    // 1. Insert product (try with unit_cost and product_type, graceful fallback if column not yet migrated)
     const basePayload: Record<string, unknown> = {
       name: name.trim().slice(0, 120),
       category_id,
       price: parsedPrice.value,
+      unit_cost: parsedCost.value,
       is_available: Boolean(is_available),
       image_url: typeof image_url === 'string' ? image_url.trim().slice(0, 500) || null : null,
       product_type: typeToSet,
@@ -366,10 +408,12 @@ router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedReq
       .single()
 
     if (firstTry.error && firstTry.error.code === 'PGRST204') {
-      delete basePayload.product_type
+      const strippedPayload = { ...basePayload }
+      delete strippedPayload.product_type
+      delete strippedPayload.unit_cost
       const secondTry = await supabaseAdmin
         .from('products')
-        .insert(basePayload)
+        .insert(strippedPayload)
         .select('*, category:product_categories(id, name, sort_order)')
         .single()
       newProduct = secondTry.data
@@ -391,8 +435,9 @@ router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedReq
       throw new Error('Failed to create product row.')
     }
 
-    // Persist product_type metadata cache
+    // Persist product_type and unit_cost metadata cache
     setProductType(newProduct.id, typeToSet)
+    setProductCost(newProduct.id, parsedCost.value)
 
     // 2. Insert recipes if provided
     const validRecipes = parseRecipes(recipes, newProduct.id)
@@ -413,7 +458,7 @@ router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedReq
       }
     }
 
-    res.status(201).json({ ...newProduct, product_type: typeToSet })
+    res.status(201).json({ ...newProduct, product_type: typeToSet, unit_cost: parsedCost.value })
   } catch (err: unknown) {
     // Log the real error server-side; never hand raw database text to the client.
     console.error('[Products] Failed to create product:', err)
@@ -427,10 +472,11 @@ router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedReq
  */
 router.patch('/:id', requireAuth, requireRole('admin'), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string }
-  const { name, category_id, price, is_available, image_url, recipes, product_type } = req.body as {
+  const { name, category_id, price, unit_cost, is_available, image_url, recipes, product_type } = req.body as {
     name?: string
     category_id?: string
     price?: number
+    unit_cost?: number
     is_available?: boolean
     image_url?: string
     recipes?: Array<{ inventory_id: string; qty_per_unit: number }>
@@ -462,6 +508,19 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req: Authenticate
     }
     updates.price = parsedPrice.value
   }
+
+  let costToSet: number | undefined = undefined
+  if (unit_cost !== undefined) {
+    const parsedCost = parseCost(unit_cost)
+    if (!parsedCost.ok) {
+      res.status(400).json({ message: parsedCost.message })
+      return
+    }
+    costToSet = parsedCost.value
+    updates.unit_cost = costToSet
+    setProductCost(id, costToSet)
+  }
+
   if (is_available !== undefined) updates.is_available = Boolean(is_available)
   if (image_url !== undefined) {
     updates.image_url = typeof image_url === 'string' ? image_url.trim().slice(0, 500) || null : null
@@ -488,10 +547,12 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req: Authenticate
       .maybeSingle()
 
     if (firstTry.error && firstTry.error.code === 'PGRST204') {
-      delete updates.product_type
+      const strippedUpdates = { ...updates }
+      delete strippedUpdates.product_type
+      delete strippedUpdates.unit_cost
       const secondTry = await supabaseAdmin
         .from('products')
-        .update(updates)
+        .update(strippedUpdates)
         .eq('id', id)
         .select('*, category:product_categories(id, name, sort_order)')
         .maybeSingle()
@@ -532,7 +593,10 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req: Authenticate
     }
 
     const finalType = typeToSet || updatedProduct.product_type || getProductType(id) || 'Regular'
-    res.json({ ...updatedProduct, product_type: finalType })
+    const finalCost = costToSet !== undefined
+      ? costToSet
+      : (updatedProduct.unit_cost != null ? Number(updatedProduct.unit_cost) : getProductCost(id))
+    res.json({ ...updatedProduct, product_type: finalType, unit_cost: finalCost })
   } catch (err: unknown) {
     console.error('[Products] Failed to update product:', err)
     res.status(500).json({ message: 'Failed to update product. Please try again.' })

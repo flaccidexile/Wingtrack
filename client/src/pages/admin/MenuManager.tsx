@@ -12,6 +12,7 @@ import {
   apiRemoveProductImage,
 } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
+import { dispatchNotification } from '@/lib/notifications'
 import { useIsCompact } from '@/hooks/useMediaQuery'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import FoodImage from '@/components/ui/FoodImage'
@@ -24,6 +25,64 @@ export const TYPE_CONFIG: Record<string, { label: string; bg: string; color: str
   New:        { label: 'New',        bg: '#e8f5e9', color: '#15803d', border: '1px solid #bbf7d0' },
   Seasonal:   { label: 'Seasonal',   bg: '#fce8e8', color: '#b91c1c', border: '1px solid #fecaca' },
   Special:    { label: 'Special',    bg: '#f0f4ff', color: '#4338ca', border: '1px solid #c7d2fe' },
+}
+
+/**
+ * Calculates profit margin and returns badge styling based on margin health.
+ */
+export function getMarginInfo(price: number, cost: number) {
+  const p = Number(price) || 0
+  const c = Number(cost) || 0
+  if (p <= 0) {
+    return {
+      pct: 0,
+      profit: 0,
+      label: '—',
+      bg: 'rgba(100,116,139,0.08)',
+      color: 'var(--muted-foreground)',
+      border: '1px solid rgba(100,116,139,0.18)',
+    }
+  }
+  const profit = p - c
+  const pct = (profit / p) * 100
+  if (pct < 0) {
+    return {
+      pct,
+      profit,
+      label: `${pct.toFixed(1)}%`,
+      bg: '#fee2e2',
+      color: '#b91c1c',
+      border: '1px solid #fca5a5',
+    }
+  }
+  if (pct < 20) {
+    return {
+      pct,
+      profit,
+      label: `+${pct.toFixed(1)}%`,
+      bg: '#fff7ed',
+      color: '#c2410c',
+      border: '1px solid #ffedd5',
+    }
+  }
+  if (pct < 50) {
+    return {
+      pct,
+      profit,
+      label: `+${pct.toFixed(1)}%`,
+      bg: '#eff6ff',
+      color: '#1d4ed8',
+      border: '1px solid #bfdbfe',
+    }
+  }
+  return {
+    pct,
+    profit,
+    label: `+${pct.toFixed(1)}%`,
+    bg: '#e8f5e9',
+    color: '#15803d',
+    border: '1px solid #bbf7d0',
+  }
 }
 
 /** Pre-defined category list for dropdown selection when creating a category. */
@@ -159,6 +218,7 @@ function MenuCard({
   const recipes = prod.recipes ?? []
   const prodType = prod.product_type ?? 'Regular'
   const tc = TYPE_CONFIG[prodType] ?? TYPE_CONFIG.Regular
+  const margin = getMarginInfo(prod.price, prod.unit_cost ?? 0)
 
   return (
     <div className="card" style={{ padding: '14px 16px', opacity: prod.is_available ? 1 : 0.65 }}>
@@ -179,8 +239,8 @@ function MenuCard({
         </div>
       </div>
 
-      {/* Category + price */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
+      {/* Category + price + cost */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
         <span
           style={{
             padding: '4px 10px', borderRadius: 12, fontSize: 12, fontWeight: 500,
@@ -189,8 +249,23 @@ function MenuCard({
         >
           {catName}
         </span>
-        <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 700, fontSize: 16, color: 'var(--foreground)' }}>
-          &#8369;{Number(prod.price).toFixed(2)}
+        <div style={{ textAlign: 'right' }}>
+          <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 700, fontSize: 16, color: 'var(--foreground)' }}>
+            &#8369;{Number(prod.price).toFixed(2)}
+          </span>
+          <div style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}>
+            Cost: &#8369;{Number(prod.unit_cost || 0).toFixed(2)}
+          </div>
+        </div>
+      </div>
+
+      {/* Margin indicator */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: margin.bg, border: margin.border, borderRadius: 6, marginBottom: 12 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: margin.color }}>
+          Profit Margin
+        </span>
+        <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'IBM Plex Mono', color: margin.color }}>
+          {margin.label} ({margin.profit >= 0 ? '+' : ''}&#8369;{margin.profit.toFixed(2)}/unit)
         </span>
       </div>
 
@@ -277,6 +352,9 @@ export default function MenuManager() {
   const [formType, setFormType] = useState('Regular')
   const [formCatId, setFormCatId] = useState('')
   const [formPrice, setFormPrice] = useState('')
+  const [formCost, setFormCost] = useState('')
+  /** True when the user has manually typed a cost — stops recipe auto-fill from overwriting it. */
+  const [costManuallySet, setCostManuallySet] = useState(false)
   const [formAvailable, setFormAvailable] = useState(true)
   const [formRecipes, setFormRecipes] = useState<RecipeRow[]>([])
   const [formLoading, setFormLoading] = useState(false)
@@ -336,7 +414,7 @@ export default function MenuManager() {
     const [prodsRes, catsRes, invRes] = await Promise.allSettled([
       apiGetProducts(),
       apiGetCategories(),
-      supabase.from('inventory').select('id, name, unit, stock_qty').order('name'),
+      supabase.from('inventory').select('id, name, unit, stock_qty, unit_cost').order('name'),
     ])
 
     const criticalFailure =
@@ -368,15 +446,31 @@ export default function MenuManager() {
     loadData()
   }, [loadData])
 
+  // Auto-fill Unit Cost from recipe ingredient costs whenever recipes change
+  useEffect(() => {
+    if (costManuallySet) return
+    const total = formRecipes.reduce((sum, row) => {
+      const inv = inventoryList.find(i => i.id === row.inventory_id)
+      const qty = Number(row.qty_per_unit) || 0
+      const cost = Number(inv?.unit_cost) || 0
+      return sum + qty * cost
+    }, 0)
+    if (total > 0) {
+      setFormCost(total.toFixed(2))
+    }
+  }, [formRecipes, inventoryList, costManuallySet])
+
   function openCreateModal() {
     setEditingProduct(null)
     setFormName('')
     setFormType('Regular')
     setFormCatId(categories[0]?.id || '')
     setFormPrice('')
+    setFormCost('')
     setFormAvailable(true)
     setFormRecipes([])
     setFormError(null)
+    setCostManuallySet(false)
     resetImageState(null)
     setSelectedPresetCategory('')
     setNewCatName('')
@@ -389,7 +483,9 @@ export default function MenuManager() {
     setFormType(prod.product_type ?? 'Regular')
     setFormCatId(prod.category_id)
     setFormPrice(String(prod.price))
+    setFormCost(prod.unit_cost != null && prod.unit_cost > 0 ? String(prod.unit_cost) : (prod.unit_cost === 0 ? '0' : ''))
     setFormAvailable(prod.is_available)
+    setCostManuallySet(prod.unit_cost != null && prod.unit_cost > 0)
     setFormRecipes(
       prod.recipes?.map(r => ({
         inventory_id: r.inventory_id,
@@ -508,6 +604,16 @@ export default function MenuManager() {
       return
     }
 
+    const costNum = formCost.trim() === '' ? 0 : Number(formCost)
+    if (isNaN(costNum) || costNum < 0) {
+      setFormError('Please enter a valid unit cost (>= 0).')
+      return
+    }
+    if (costNum > 1000000) {
+      setFormError('Unit cost cannot exceed ₱1,000,000.00. Please enter a valid amount.')
+      return
+    }
+
     // Validate recipes
     const recipesPayload = formRecipes
       .filter(r => r.inventory_id && Number(r.qty_per_unit) > 0)
@@ -525,6 +631,7 @@ export default function MenuManager() {
           name: formName.trim(),
           category_id: formCatId,
           price: priceNum,
+          unit_cost: costNum,
           is_available: formAvailable,
           product_type: formType,
           recipes: recipesPayload,
@@ -535,6 +642,7 @@ export default function MenuManager() {
           name: formName.trim(),
           category_id: formCatId,
           price: priceNum,
+          unit_cost: costNum,
           is_available: formAvailable,
           product_type: formType,
           recipes: recipesPayload,
@@ -576,6 +684,13 @@ export default function MenuManager() {
           editingProduct ? `"${formName}" updated successfully.` : `"${formName}" added to the menu!`,
         )
       }
+
+      // Broadcast menu update to Dashboard and other windows
+      dispatchNotification({
+        category: 'system',
+        title: editingProduct ? 'Menu Item Updated' : 'New Menu Item Added',
+        body: `"${formName}" (₱${priceNum.toFixed(2)}) was ${editingProduct ? 'updated' : 'added to the menu'}.`,
+      })
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : 'Failed to save product')
     } finally {
@@ -594,6 +709,11 @@ export default function MenuManager() {
         'success',
         `"${prod.name}" marked as ${nextState ? 'Available' : 'Out of Stock'}.`
       )
+      dispatchNotification({
+        category: 'system',
+        title: 'Product Availability Changed',
+        body: `"${prod.name}" is now ${nextState ? 'Available' : 'Out of Stock'}.`,
+      })
     } catch (err: unknown) {
       showBanner('error', err instanceof Error ? err.message : 'Failed to toggle availability')
     }
@@ -936,6 +1056,8 @@ export default function MenuManager() {
                   <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', fontSize: 12 }}>ITEM NAME</th>
                   <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', fontSize: 12 }}>CATEGORY</th>
                   <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', fontSize: 12 }}>PRICE</th>
+                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', fontSize: 12 }}>UNIT COST</th>
+                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', fontSize: 12 }}>MARGIN</th>
                   <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', fontSize: 12 }}>INVENTORY RECIPE</th>
                   <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', fontSize: 12, textAlign: 'center' }}>POS STATUS</th>
                   <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', fontSize: 12, textAlign: 'right' }}>ACTIONS</th>
@@ -947,6 +1069,7 @@ export default function MenuManager() {
                   const recipeCount = prod.recipes?.length ?? 0
                   const prodType = prod.product_type ?? 'Regular'
                   const tc = TYPE_CONFIG[prodType] ?? TYPE_CONFIG.Regular
+                  const margin = getMarginInfo(prod.price, prod.unit_cost ?? 0)
 
                   return (
                     <tr
@@ -995,8 +1118,35 @@ export default function MenuManager() {
                       </td>
 
                       {/* Price */}
-                      <td style={{ padding: '16px 20px', fontFamily: 'IBM Plex Mono', fontWeight: 700, fontSize: 15, color: 'var(--foreground)' }}>
+                      <td style={{ padding: '16px 20px', fontFamily: 'IBM Plex Mono', fontWeight: 700, fontSize: 14, color: 'var(--foreground)' }}>
                         &#8369;{Number(prod.price).toFixed(2)}
+                      </td>
+
+                      {/* Unit Cost */}
+                      <td style={{ padding: '16px 20px', fontFamily: 'IBM Plex Mono', fontWeight: 600, fontSize: 14, color: 'var(--muted-foreground)' }}>
+                        &#8369;{Number(prod.unit_cost || 0).toFixed(2)}
+                      </td>
+
+                      {/* Margin */}
+                      <td style={{ padding: '16px 20px' }}>
+                        <span
+                          title={`Profit: ${margin.profit >= 0 ? '+' : ''}₱${margin.profit.toFixed(2)} / unit`}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '4px 9px',
+                            borderRadius: 12,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            fontFamily: 'IBM Plex Mono',
+                            background: margin.bg,
+                            color: margin.color,
+                            border: margin.border,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {margin.label}
+                        </span>
                       </td>
 
                       {/* Inventory Recipe */}
@@ -1263,38 +1413,39 @@ export default function MenuManager() {
                 </div>
               </div>
 
-              {/* Category & Price */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 14 }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground)' }}>
-                      CATEGORY *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setShowCategoryModal(true)}
-                      style={{ fontSize: 11, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
-                    >
-                      + New Category
-                    </button>
-                  </div>
-                  <select
-                    className="input"
-                    value={formCatId}
-                    onChange={e => setFormCatId(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', fontSize: 13 }}
+              {/* Category */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground)' }}>
+                    CATEGORY *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowCategoryModal(true)}
+                    style={{ fontSize: 11, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
                   >
-                    {categories.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    + New Category
+                  </button>
                 </div>
+                <select
+                  className="input"
+                  value={formCatId}
+                  onChange={e => setFormCatId(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', fontSize: 13 }}
+                >
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
+              {/* Selling Price & Unit Cost (Side-by-Side) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>
-                    PRICE (PHP) *
+                    SELLING PRICE (PHP) *
                   </label>
                   <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: 12, top: 10, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', fontWeight: 600 }}>
@@ -1321,9 +1472,135 @@ export default function MenuManager() {
                       style={{ width: '100%', padding: '10px 14px 10px 30px', fontSize: 14, fontFamily: 'IBM Plex Mono' }}
                     />
                   </div>
-                  <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 4 }}>Max ₱10,000.00</p>
+                  <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 4 }}>Menu customer price (Max ₱10,000)</p>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>
+                    UNIT COST / COST PRICE (PHP)
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 12, top: 10, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', fontWeight: 600 }}>
+                      &#8369;
+                    </span>
+                    <input
+                      className="input"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1000000"
+                      placeholder="0.00"
+                      value={formCost}
+                      onChange={e => { setFormCost(e.target.value); setCostManuallySet(true) }}
+                      style={{
+                        width: '100%', padding: '10px 14px 10px 30px', fontSize: 14, fontFamily: 'IBM Plex Mono',
+                        background: !costManuallySet && Number(formCost) > 0 ? '#f0f9ff' : undefined,
+                        borderColor: !costManuallySet && Number(formCost) > 0 ? '#7dd3fc' : undefined,
+                      }}
+                    />
+                  </div>
+                  <p style={{ fontSize: 11, color: !costManuallySet && Number(formCost) > 0 ? '#0369a1' : 'var(--muted-foreground)', marginTop: 4 }}>
+                    {!costManuallySet && Number(formCost) > 0
+                      ? 'Auto-filled from recipe ingredients'
+                      : 'Ingredient / purchase cost'}
+                  </p>
                 </div>
               </div>
+
+              {/* Dynamic Expected Profit Margin Badge */}
+              {(() => {
+                const p = parseFloat(formPrice) || 0
+                const c = parseFloat(formCost) || 0
+                const margin = getMarginInfo(p, c)
+                const hasPrice = p > 0
+                const hasCost = c > 0
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {/* Main margin badge */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        borderRadius: 8,
+                        background: hasPrice ? margin.bg : 'rgba(0,0,0,0.03)',
+                        border: hasPrice ? margin.border : '1px dashed var(--border)',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {/* ₱ peso icon instead of dollar sign */}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <text x="12" y="17" textAnchor="middle" fontSize="16" fontWeight="700"
+                            stroke="none" fill={hasPrice ? margin.color : 'var(--muted-foreground)'}>₱</text>
+                        </svg>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: hasPrice ? margin.color : 'var(--muted-foreground)' }}>
+                          Expected Profit Margin
+                        </span>
+                      </div>
+
+                      <div style={{ textAlign: 'right' }}>
+                        {hasPrice ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 800, fontSize: 14, color: margin.color }}>
+                              {margin.label}
+                            </span>
+                            <span style={{ fontSize: 11.5, color: margin.color, opacity: 0.9 }}>
+                              ({margin.profit >= 0 ? '+' : ''}&#8369;{margin.profit.toFixed(2)}/unit profit)
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 11.5, color: 'var(--muted-foreground)', fontStyle: 'italic' }}>
+                            Enter price and cost to calculate margin
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Cost breakdown summary row */}
+                    {hasPrice && (
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr 1fr',
+                        gap: 8,
+                        padding: '10px 14px',
+                        borderRadius: 8,
+                        background: 'rgba(0,0,0,0.025)',
+                        border: '1px solid var(--border)',
+                      }}>
+                        <div>
+                          <p style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
+                            Selling Price
+                          </p>
+                          <p style={{ fontSize: 13, fontWeight: 700, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)' }}>
+                            &#8369;{p.toFixed(2)}
+                          </p>
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
+                            Unit Cost
+                          </p>
+                          <p style={{ fontSize: 13, fontWeight: 700, fontFamily: 'IBM Plex Mono', color: hasCost ? 'var(--foreground)' : 'var(--muted-foreground)' }}>
+                            {hasCost ? `₱${c.toFixed(2)}` : <span style={{ fontStyle: 'italic', fontWeight: 400 }}>not set</span>}
+                          </p>
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
+                            Net Profit / Unit
+                          </p>
+                          <p style={{ fontSize: 13, fontWeight: 700, fontFamily: 'IBM Plex Mono', color: margin.color }}>
+                            {hasCost
+                              ? `${margin.profit >= 0 ? '+' : ''}₱${margin.profit.toFixed(2)}`
+                              : <span style={{ fontStyle: 'italic', fontWeight: 400, color: 'var(--muted-foreground)' }}>enter cost</span>}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Availability Toggle */}
               <div
@@ -1370,76 +1647,171 @@ export default function MenuManager() {
                   </button>
                 </div>
 
-                {formRecipes.length === 0 ? (
-                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)', fontStyle: 'italic', padding: '10px 0' }}>
-                    No raw inventory items linked yet. Click "+ Add Ingredient" if this dish consumes inventory stock.
-                  </p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-                    {formRecipes.map((row, idx) => {
-                      const selectedItem = inventoryList.find(i => i.id === row.inventory_id)
-                      return (
-                        <div
-                          key={idx}
-                          style={{
-                            display: 'flex',
-                            gap: 10,
-                            alignItems: 'center',
-                            background: 'rgba(0,0,0,0.02)',
-                            padding: '8px 10px',
-                            borderRadius: 6,
-                            border: '1px solid var(--border)',
-                          }}
-                        >
-                          <select
-                            className="input"
-                            value={row.inventory_id}
-                            onChange={e => updateRecipeRow(idx, 'inventory_id', e.target.value)}
-                            style={{ flex: 2, padding: '7px 10px', fontSize: 13 }}
-                          >
-                            {inventoryList.map(inv => (
-                              <option key={inv.id} value={inv.id}>
-                                {inv.name} ({inv.stock_qty} {inv.unit} in stock)
-                              </option>
-                            ))}
-                          </select>
+{(() => {
+                  // Compute total ingredient cost from recipe rows using inventory unit_cost
+                  const recipeCostTotal = formRecipes.reduce((sum, row) => {
+                    const inv = inventoryList.find(i => i.id === row.inventory_id)
+                    const qty = Number(row.qty_per_unit) || 0
+                    const cost = Number(inv?.unit_cost) || 0
+                    return sum + qty * cost
+                  }, 0)
+                  const hasRecipeCost = formRecipes.length > 0 && recipeCostTotal > 0
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
-                            <input
-                              className="input"
-                              type="number"
-                              step="0.01"
-                              min="0.01"
-                              placeholder="Qty"
-                              value={row.qty_per_unit}
-                              onChange={e => updateRecipeRow(idx, 'qty_per_unit', e.target.value)}
-                              style={{ width: '100%', padding: '7px 10px', fontSize: 13, fontFamily: 'IBM Plex Mono' }}
-                            />
-                            <span style={{ fontSize: 12, color: 'var(--muted-foreground)', minWidth: 30 }}>
-                              {selectedItem?.unit ?? ''}
-                            </span>
-                          </div>
+                  return (
+                    <>
+                      {formRecipes.length === 0 ? (
+                        <p style={{ fontSize: 12, color: 'var(--muted-foreground)', fontStyle: 'italic', padding: '10px 0' }}>
+                          No raw inventory items linked yet. Click "+ Add Ingredient" if this dish consumes inventory stock.
+                        </p>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                          {formRecipes.map((row, idx) => {
+                            const selectedItem = inventoryList.find(i => i.id === row.inventory_id)
+                            const qty = Number(row.qty_per_unit) || 0
+                            const invCost = Number(selectedItem?.unit_cost) || 0
+                            const lineCost = qty * invCost
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  background: 'rgba(0,0,0,0.02)',
+                                  padding: '8px 10px',
+                                  borderRadius: 6,
+                                  border: '1px solid var(--border)',
+                                }}
+                              >
+                                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                                  <select
+                                    className="input"
+                                    value={row.inventory_id}
+                                    onChange={e => updateRecipeRow(idx, 'inventory_id', e.target.value)}
+                                    style={{ flex: 2, padding: '7px 10px', fontSize: 13 }}
+                                  >
+                                    {inventoryList.map(inv => (
+                                      <option key={inv.id} value={inv.id}>
+                                        {inv.name} ({inv.stock_qty} {inv.unit} in stock)
+                                      </option>
+                                    ))}
+                                  </select>
 
-                          <button
-                            type="button"
-                            onClick={() => removeRecipeRow(idx)}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              color: '#b91c1c',
-                              cursor: 'pointer',
-                              fontSize: 16,
-                              padding: '4px 8px',
-                            }}
-                            title="Remove ingredient"
-                          >
-                            &times;
-                          </button>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                                    <input
+                                      className="input"
+                                      type="number"
+                                      step="0.01"
+                                      min="0.01"
+                                      placeholder="Qty"
+                                      value={row.qty_per_unit}
+                                      onChange={e => updateRecipeRow(idx, 'qty_per_unit', e.target.value)}
+                                      style={{ width: '100%', padding: '7px 10px', fontSize: 13, fontFamily: 'IBM Plex Mono' }}
+                                    />
+                                    <span style={{ fontSize: 12, color: 'var(--muted-foreground)', minWidth: 30 }}>
+                                      {selectedItem?.unit ?? ''}
+                                    </span>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => removeRecipeRow(idx)}
+                                    style={{
+                                      background: 'transparent',
+                                      border: 'none',
+                                      color: '#b91c1c',
+                                      cursor: 'pointer',
+                                      fontSize: 16,
+                                      padding: '4px 8px',
+                                    }}
+                                    title="Remove ingredient"
+                                  >
+                                    &times;
+                                  </button>
+                                </div>
+
+                                {/* Per-ingredient cost hint */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, paddingTop: 5, borderTop: '1px dashed var(--border)' }}>
+                                  <span style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}>
+                                    {invCost > 0
+                                      ? `&#8369;${invCost.toFixed(2)} / ${selectedItem?.unit ?? 'unit'} (inventory cost)`
+                                      : <span style={{ fontStyle: 'italic' }}>No unit cost set in inventory</span>}
+                                  </span>
+                                  <span style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    fontFamily: 'IBM Plex Mono',
+                                    color: lineCost > 0 ? 'var(--foreground)' : 'var(--muted-foreground)',
+                                  }}>
+                                    {lineCost > 0 ? `= &#8369;${lineCost.toFixed(2)}` : '—'}
+                                  </span>
+                                </div>
+                              </div>
+                            )
+                          })}
+
+                          {/* Recipe cost total + auto-fill notice */}
+                          {hasRecipeCost && (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '9px 12px',
+                              borderRadius: 6,
+                              background: '#f0f9ff',
+                              border: '1px solid #bae6fd',
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0369a1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                                </svg>
+                                <span style={{ fontSize: 12, color: '#0369a1', fontWeight: 600 }}>
+                                  Total ingredient cost auto-calculated
+                                </span>
+                              </div>
+                              <span style={{ fontSize: 13, fontWeight: 800, fontFamily: 'IBM Plex Mono', color: '#0369a1' }}>
+                                &#8369;{recipeCostTotal.toFixed(2)}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Auto-fill the Unit Cost field from recipe total */}
+                          {hasRecipeCost && (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '8px 12px',
+                              borderRadius: 6,
+                              background: 'rgba(0,0,0,0.025)',
+                              border: '1px dashed var(--border)',
+                            }}>
+                              <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
+                                {costManuallySet
+                                  ? 'Unit Cost is manually set — recipe total not applied.'
+                                  : 'Unit Cost field auto-filled from ingredients above.'}
+                              </span>
+                              {costManuallySet ? (
+                                <button
+                                  type="button"
+                                  onClick={() => { setFormCost(recipeCostTotal.toFixed(2)); setCostManuallySet(false) }}
+                                  style={{ fontSize: 11, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                                >
+                                  Use recipe cost (&#8369;{recipeCostTotal.toFixed(2)})
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setCostManuallySet(true)}
+                                  style={{ fontSize: 11, color: 'var(--muted-foreground)', background: 'none', border: 'none', cursor: 'pointer' }}
+                                >
+                                  Override manually
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      )
-                    })}
-                  </div>
-                )}
+                      )}
+                    </>
+                  )
+                })()}
               </div>
 
               {formError && (

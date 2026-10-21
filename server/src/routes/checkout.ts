@@ -2,6 +2,7 @@ import { Router, type Response } from 'express'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
+import { getProductCost, setOrderItemCosts } from '../lib/productMetadata'
 
 const router = Router()
 
@@ -107,14 +108,26 @@ router.post(
     }
     const { items, paymentMethod, notes } = validation
 
-    // ── Step 1: Load product prices ──────────────────────────
+    // ── Step 1: Load product prices & unit costs ────────────
     const productIds = items.map(i => i.product_id)
-    const { data: products, error: prodError } = await supabaseAdmin
+    let products: Array<{ id: string; name: string; price: number; unit_cost?: number }> | null = null
+
+    const prodTry = await supabaseAdmin
       .from('products')
-      .select('id, name, price')
+      .select('id, name, price, unit_cost')
       .in('id', productIds)
 
-    if (prodError || !products || products.length !== productIds.length) {
+    if (prodTry.error && (prodTry.error.code === '42703' || /unit_cost/i.test(prodTry.error.message))) {
+      const fallbackTry = await supabaseAdmin
+        .from('products')
+        .select('id, name, price')
+        .in('id', productIds)
+      products = fallbackTry.data as any
+    } else {
+      products = prodTry.data as any
+    }
+
+    if (!products || products.length !== productIds.length) {
       res.status(400).json({ message: 'One or more products not found or unavailable.' })
       return
     }
@@ -132,10 +145,12 @@ router.post(
     // from the operands instead.
     const orderItems = items.map(i => {
       const p = productMap.get(i.product_id)!
+      const cost = p.unit_cost != null ? Number(p.unit_cost) : getProductCost(i.product_id)
       return {
         product_id:   i.product_id,
         product_name: p.name as string,
         unit_price:   Number(p.price),
+        unit_cost:    Math.round(Number(cost || 0) * 100) / 100,
         quantity:     i.quantity,
       }
     })
@@ -287,6 +302,24 @@ router.post(
         order_number: number
         deductions_applied: number
       }
+
+      // Persist order item costs locally for guaranteed historical tracking
+      try {
+        const { data: dbItems } = await supabaseAdmin
+          .from('order_items')
+          .select('id, product_id, unit_cost')
+          .eq('order_id', row.id)
+        if (dbItems && Array.isArray(dbItems)) {
+          const costMap = new Map(orderItems.map(oi => [oi.product_id, oi.unit_cost]))
+          setOrderItemCosts(dbItems.map((item: any) => ({
+            id: item.id,
+            cost: item.unit_cost != null ? Number(item.unit_cost) : (costMap.get(item.product_id) ?? 0),
+          })))
+        }
+      } catch (cacheErr) {
+        console.warn('[checkout] Failed to cache order item costs:', cacheErr)
+      }
+
       res.status(201).json({
         id:                 row.id,
         order_number:       row.order_number,
@@ -347,25 +380,43 @@ router.post(
       await supabaseAdmin.from('orders').delete().eq('id', order.id)
     }
 
-    const { error: itemsError } = await supabaseAdmin
+    const lineItemPayload = orderItems.map(i => ({
+      order_id:     order.id,
+      product_id:   i.product_id,
+      product_name: i.product_name,
+      unit_price:   i.unit_price,
+      unit_cost:    i.unit_cost,
+      quantity:     i.quantity,
+    }))
+
+    let { data: insertedItems, error: itemsError } = await supabaseAdmin
       .from('order_items')
-      .insert(
-        orderItems.map(i => ({
-          order_id:     order.id,
-          product_id:   i.product_id,
-          product_name: i.product_name,
-          unit_price:   i.unit_price,
-          quantity:     i.quantity,
-          // line_total is deliberately omitted — it is a GENERATED column.
-          // Listing the columns explicitly means a future field added to
-          // `orderItems` cannot silently break this insert.
-        }))
-      )
+      .insert(lineItemPayload)
+      .select('id, product_id, unit_cost')
+
+    if (itemsError && (itemsError.code === 'PGRST204' || itemsError.code === '42703' || /unit_cost/i.test(itemsError.message))) {
+      // Fallback if column not yet added to remote database
+      const strippedPayload = lineItemPayload.map(({ unit_cost, ...rest }) => rest)
+      const retry = await supabaseAdmin
+        .from('order_items')
+        .insert(strippedPayload)
+        .select('id, product_id')
+      insertedItems = retry.data as any
+      itemsError = retry.error
+    }
 
     if (itemsError) {
       await rollback('order_items insert failed: ' + itemsError.message)
       res.status(500).json({ message: 'Failed to save order items. The order was not recorded.' })
       return
+    }
+
+    if (insertedItems && Array.isArray(insertedItems)) {
+      const costMap = new Map(orderItems.map(oi => [oi.product_id, oi.unit_cost]))
+      setOrderItemCosts(insertedItems.map((item: any) => ({
+        id: item.id,
+        cost: item.unit_cost != null ? Number(item.unit_cost) : (costMap.get(item.product_id) ?? 0),
+      })))
     }
 
     if (deductionMap.size === 0) {
