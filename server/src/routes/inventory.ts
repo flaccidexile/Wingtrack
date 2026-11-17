@@ -2,8 +2,27 @@ import { Router, type Response } from 'express'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
+import { getAllInventoryMeta, setInventoryMeta } from '../lib/productMetadata'
 
 const router = Router()
+
+const PERISHABLE_CATEGORIES = new Set(['Proteins', 'Dairy', 'Produce', 'Sides', 'Beverages', 'Sauces', 'Bakery'])
+
+function defaultLeadTimeDays(category: string): number {
+  if (category === 'Proteins' || category === 'Dairy' || category === 'Produce' || category === 'Bakery') {
+    return 2
+  }
+  return 3
+}
+
+function defaultShelfLifeDays(category: string, index: number): number | null {
+  if (category === 'Packaging') return null
+  if (category === 'Proteins' || category === 'Produce' || category === 'Bakery') return 5 + (index % 6)
+  if (category === 'Dairy') return 6 + (index % 8)
+  if (category === 'Sides' || category === 'Beverages') return 14 + (index % 15)
+  if (PERISHABLE_CATEGORIES.has(category)) return 30 + (index % 20)
+  return 60
+}
 
 /** Movement types the audit log accepts. Anything else is rejected. */
 const MOVEMENT_TYPES = ['restock', 'adjustment', 'waste'] as const
@@ -36,18 +55,93 @@ const MAX_INVENTORY_ROWS = 1000
 // `limit` is a guard rail against runaway growth, not a paging control — it
 // sits high enough that no realistic catalogue is ever truncated.
 router.get('/', requireAuth, requireRole('admin', 'inventory_personnel'), async (_req, res: Response) => {
-  const { data, error } = await supabaseAdmin
-    .from('inventory')
-    .select('*')
-    .order('name')
-    .limit(MAX_INVENTORY_ROWS)
+  const since30d = new Date(Date.now() - 30 * 86_400_000).toISOString()
+
+  const [{ data, error }, { data: deductions }] = await Promise.all([
+    supabaseAdmin
+      .from('inventory')
+      .select('*')
+      .order('name')
+      .limit(MAX_INVENTORY_ROWS),
+    supabaseAdmin
+      .from('inventory_movements')
+      .select('inventory_id, qty_change')
+      .eq('movement_type', 'deduction')
+      .gte('created_at', since30d),
+  ])
 
   if (error) {
     console.error('Fetch inventory failed:', error)
     res.status(500).json({ message: 'Failed to fetch inventory.' })
     return
   }
-  res.json(data ?? [])
+
+  // Sum 30-day consumption per ingredient
+  const usage30dMap = new Map<string, number>()
+  for (const m of deductions ?? []) {
+    const id = (m as { inventory_id: string }).inventory_id
+    const qty = Math.abs(Number((m as { qty_change: number }).qty_change) || 0)
+    usage30dMap.set(id, (usage30dMap.get(id) ?? 0) + qty)
+  }
+
+  const metaMap = getAllInventoryMeta()
+  const nowMs = Date.now()
+
+  const enriched = (data ?? []).map((item: any, idx: number) => {
+    const meta = metaMap[item.id] ?? {}
+    const stockQty = Number(item.stock_qty) || 0
+    const minLevel = Number(item.min_stock_level) || 0
+    const leadTimeDays =
+      typeof item.lead_time_days === 'number'
+        ? item.lead_time_days
+        : typeof meta.lead_time_days === 'number'
+          ? meta.lead_time_days
+          : defaultLeadTimeDays(item.category)
+
+    // Average Daily Usage = 30-day deductions / 30, with a baseline of minLevel / 7
+    // when historical deduction data is still sparse.
+    const observedDaily = (usage30dMap.get(item.id) ?? 0) / 30
+    const baselineDaily = minLevel > 0 ? minLevel / 7 : 0.5
+    const avgDailyUsage = Math.round(Math.max(observedDaily, baselineDaily) * 100) / 100
+
+    // Standard ROP Formula: (Avg Daily Usage × Lead Time in Days) + Safety Stock
+    const safetyStock = minLevel * 0.5
+    const reorderPoint = Math.round(((avgDailyUsage * leadTimeDays) + safetyStock) * 100) / 100
+
+    // Suggested Reorder Quantity when stock is at/below ROP or min_stock_level
+    const needsReorder = stockQty <= reorderPoint || stockQty <= minLevel
+    const targetStock = Math.max(reorderPoint + minLevel, minLevel * 2)
+    const suggestedReorderQty = needsReorder
+      ? Math.max(Math.ceil((targetStock - stockQty) * 10) / 10, Math.ceil(minLevel))
+      : 0
+
+    // Expiration / Best-Before Date (explicit metadata/column or default perishable batch window)
+    let expirationDate: string | null =
+      item.expiration_date !== undefined
+        ? item.expiration_date
+        : meta.expiration_date !== undefined
+          ? meta.expiration_date
+          : null
+
+    if (expirationDate === null && meta.expiration_date === undefined) {
+      const shelfDays = defaultShelfLifeDays(item.category, idx)
+      if (shelfDays !== null) {
+        const exp = new Date(nowMs + shelfDays * 86_400_000)
+        expirationDate = exp.toISOString().split('T')[0]
+      }
+    }
+
+    return {
+      ...item,
+      expiration_date: expirationDate,
+      lead_time_days: leadTimeDays,
+      avg_daily_usage: avgDailyUsage,
+      reorder_point: reorderPoint,
+      suggested_reorder_qty: suggestedReorderQty,
+    }
+  })
+
+  res.json(enriched)
 })
 
 // PATCH /api/inventory/:id/adjust — Manual stock adjustment
@@ -56,11 +150,13 @@ router.patch(
   requireAuth,
   requireRole('admin', 'inventory_personnel'),
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params
+    const id = String(req.params.id)
     const body = (req.body ?? {}) as Record<string, unknown>
-    const qtyChange    = body.qty_change
+    const qtyChange = body.qty_change
     const movementType = body.movement_type
-    const rawNotes     = body.notes
+    const rawNotes = body.notes
+    const rawExpDate = body.expiration_date
+    const rawLeadTime = body.lead_time_days
 
     // ── Validation ───────────────────────────────────────────
     // Every value is checked at runtime. The body is typed as `unknown` above
@@ -102,7 +198,7 @@ router.patch(
     }
 
     const currentQty = Number(invItem.stock_qty)
-    const newQty     = Math.max(0, currentQty + qtyChange)
+    const newQty = Math.max(0, currentQty + qtyChange)
 
     // Update stock
     const { error: updateError } = await supabaseAdmin
@@ -133,12 +229,12 @@ router.patch(
     const { error: movementError } = await supabaseAdmin
       .from('inventory_movements')
       .insert({
-        inventory_id:  id,
+        inventory_id: id,
         movement_type: movementType as MovementType,
-        qty_change:    qtyChange,
-        qty_before:    currentQty,
-        qty_after:     newQty,
-        performed_by:  staffProfile?.id ?? null,
+        qty_change: qtyChange,
+        qty_before: currentQty,
+        qty_after: newQty,
+        performed_by: staffProfile?.id ?? null,
         notes,
       })
 
@@ -158,6 +254,18 @@ router.patch(
         message: 'Could not record this adjustment in the audit log, so it was cancelled.',
       })
       return
+    }
+
+    // Persist batch expiration date / lead time metadata if supplied
+    if (rawExpDate !== undefined || rawLeadTime !== undefined) {
+      setInventoryMeta(id, {
+        ...(rawExpDate !== undefined
+          ? { expiration_date: typeof rawExpDate === 'string' && rawExpDate.trim() !== '' ? rawExpDate.trim() : null }
+          : {}),
+        ...(typeof rawLeadTime === 'number' && Number.isFinite(rawLeadTime)
+          ? { lead_time_days: rawLeadTime }
+          : {}),
+      })
     }
 
     res.json({ id, previous_qty: currentQty, new_qty: newQty, qty_change: qtyChange })
@@ -229,7 +337,7 @@ router.post(
   requireAuth,
   requireRole('admin', 'inventory_personnel'),
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { name, category, unit, stock_qty, min_stock_level, unit_cost, supplier } = req.body as {
+    const { name, category, unit, stock_qty, min_stock_level, unit_cost, supplier, expiration_date, lead_time_days } = req.body as {
       name: string
       category: string
       unit: string
@@ -237,6 +345,8 @@ router.post(
       min_stock_level?: number
       unit_cost?: number
       supplier?: string
+      expiration_date?: string | null
+      lead_time_days?: number
     }
 
     if (!name || !category || !unit) {
@@ -305,6 +415,13 @@ router.post(
         })
         return
       }
+    }
+
+    if (expiration_date !== undefined || lead_time_days !== undefined) {
+      setInventoryMeta(newItem.id, {
+        expiration_date: typeof expiration_date === 'string' && expiration_date.trim() !== '' ? expiration_date.trim() : null,
+        ...(typeof lead_time_days === 'number' && Number.isFinite(lead_time_days) ? { lead_time_days } : {}),
+      })
     }
 
     res.status(201).json(newItem)

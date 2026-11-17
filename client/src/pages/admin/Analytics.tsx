@@ -4,6 +4,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts'
 import { supabase } from '@/lib/supabase'
+import { downloadCsv } from '@/lib/csv'
 import { useChartWidth, tickInterval } from '@/hooks/useChartWidth'
 import EmptyState, { EMPTY_ICONS } from '@/components/ui/EmptyState'
 import type { Order } from '@/types'
@@ -139,6 +140,20 @@ export default function Analytics() {
   const avgOrder  = totalOrd > 0 ? totalRev / totalOrd : 0
   const bestMonth = monthlyData.reduce((best, m) => m.revenue > (best?.revenue ?? 0) ? m : best, monthlyData[0])
 
+  function handleExportAnalyticsCsv() {
+    const today = new Date().toISOString().split('T')[0]
+    const headers = ['Section', 'Metric / Item', 'Orders / Share', 'Revenue (PHP)']
+    const rows: Array<Array<string | number>> = [
+      ['SUMMARY KPI', `Period (${period}) — Total Orders`, totalOrd, totalRev.toFixed(2)],
+      ['SUMMARY KPI', 'Average Order Value', 1, avgOrder.toFixed(2)],
+      ...(bestMonth ? [['SUMMARY KPI', `Best Month (${bestMonth.month})`, bestMonth.orders, bestMonth.revenue.toFixed(2)]] : []),
+      ...monthlyData.map(m => ['MONTHLY TREND', m.month, m.orders, m.revenue.toFixed(2)]),
+      ...categoryData.map(c => ['CATEGORY SHARE', c.name, `${c.value}%`, '']),
+      ...topProducts.map(p => ['TOP PRODUCT', p.name, p.orders, p.revenue.toFixed(2)]),
+    ]
+    downloadCsv(`wings-zone-sales-analytics-${today}.csv`, headers, rows)
+  }
+
   return (
     <div className="page">
       {/* Header */}
@@ -148,7 +163,25 @@ export default function Analytics() {
           <h1 className="page-title" style={{ fontSize: 26 }}>Wing&apos;s Zone — Sales Analytics</h1>
           <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Performance overview for Wing&apos;s Zone · Powered by WINGTRACK</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            id="btn-export-analytics-csv"
+            type="button"
+            onClick={handleExportAnalyticsCsv}
+            disabled={loading}
+            className="btn-secondary"
+            style={{
+              padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export CSV
+          </button>
           {PERIODS.map(p => (
             <button key={p} id={`analytics-period-${p.replace(/\s/g,'-').toLowerCase()}`} onClick={() => setPeriod(p)} style={{
               padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', border: '1px solid var(--border)',

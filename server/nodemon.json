@@ -3,10 +3,12 @@
     "src",
     ".env"
   ],
-  "ext": "ts,js,json,env",
+  "ext": "ts,js,env",
   "ignore": [
     "node_modules",
-    "dist"
+    "dist",
+    "data"
   ],
-  "exec": "ts-node src/index.ts"
+  "delay": 400,
+  "exec": "ts-node --transpile-only src/index.ts"
 }

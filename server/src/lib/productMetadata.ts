@@ -204,4 +204,65 @@ export function getAllOrderPaymentMethods(): Record<string, string> {
   return { ...ensureOrderPaymentMethodsLoaded() }
 }
 
+// ── Inventory Item Metadata Persistence (Expiration Date & Lead Time) ──
+export interface InventoryItemMeta {
+  expiration_date?: string | null
+  lead_time_days?: number
+}
+
+const INVENTORY_META_FILE = path.join(DATA_DIR, 'inventory_metadata.json')
+let inventoryMetaCache: Record<string, InventoryItemMeta> | null = null
+
+function ensureInventoryMetaLoaded(): Record<string, InventoryItemMeta> {
+  if (inventoryMetaCache) return inventoryMetaCache
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true })
+    }
+    if (fs.existsSync(INVENTORY_META_FILE)) {
+      const raw = fs.readFileSync(INVENTORY_META_FILE, 'utf-8')
+      inventoryMetaCache = JSON.parse(raw)
+      return inventoryMetaCache || {}
+    }
+  } catch (err) {
+    console.error('[productMetadata] Failed to load inventory metadata cache:', err)
+  }
+  inventoryMetaCache = {}
+  return inventoryMetaCache
+}
+
+function persistInventoryMeta(): void {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true })
+    }
+    fs.writeFileSync(INVENTORY_META_FILE, JSON.stringify(inventoryMetaCache || {}, null, 2), 'utf-8')
+  } catch (err) {
+    console.error('[productMetadata] Failed to persist inventory metadata cache:', err)
+  }
+}
+
+export function getInventoryMeta(itemId: string): InventoryItemMeta {
+  const map = ensureInventoryMetaLoaded()
+  return map[itemId] || {}
+}
+
+export function setInventoryMeta(itemId: string, patch: InventoryItemMeta): void {
+  const map = ensureInventoryMetaLoaded()
+  const existing = map[itemId] || {}
+  map[itemId] = {
+    ...existing,
+    ...(patch.expiration_date !== undefined ? { expiration_date: patch.expiration_date } : {}),
+    ...(typeof patch.lead_time_days === 'number' && Number.isFinite(patch.lead_time_days)
+      ? { lead_time_days: Math.max(1, Math.round(patch.lead_time_days)) }
+      : {}),
+  }
+  persistInventoryMeta()
+}
+
+export function getAllInventoryMeta(): Record<string, InventoryItemMeta> {
+  return { ...ensureInventoryMetaLoaded() }
+}
+
+
 

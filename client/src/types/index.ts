@@ -72,6 +72,16 @@ export interface InventoryItem {
   supplier?: string
   status: 'ok' | 'low' | 'critical'
   updated_at: string
+  /** Optional batch expiration / best-before date (YYYY-MM-DD). */
+  expiration_date?: string | null
+  /** Supplier lead time in days used for Reorder Point (ROP) calculation. */
+  lead_time_days?: number
+  /** Average daily usage (units/day) computed from 30-day consumption. */
+  avg_daily_usage?: number
+  /** Calculated Reorder Point: (Avg Daily Usage × Lead Time) + Safety Stock. */
+  reorder_point?: number
+  /** Suggested restock quantity when stock is at or below ROP / min level. */
+  suggested_reorder_qty?: number
 }
 
 export interface Order {
@@ -130,6 +140,8 @@ export interface InventoryAdjustmentPayload {
   qty_change: number
   movement_type: 'restock' | 'adjustment' | 'waste'
   notes?: string
+  expiration_date?: string | null
+  lead_time_days?: number
 }
 
 export interface InventoryMovement {
@@ -155,5 +167,7 @@ export interface CreateInventoryItemPayload {
   min_stock_level?: number
   unit_cost?: number
   supplier?: string
+  expiration_date?: string | null
+  lead_time_days?: number
 }
 

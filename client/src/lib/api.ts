@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import type {
   CheckoutPayload,
   InventoryAdjustmentPayload,
+  InventoryItem,
   InventoryMovement,
   Order,
   OrderSummary,
@@ -29,6 +30,28 @@ async function getAuthHeader(): Promise<Record<string, string>> {
 
   if (!token) throw new Error('Not authenticated')
   return { Authorization: `Bearer ${token}` }
+}
+
+/**
+ * Wrapper around fetch that automatically retries once on transient gateway
+ * errors (502/503/504) or network hiccups when the API server is restarting.
+ */
+async function fetchWithRetry(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    const res = await fetch(url, init)
+    if (res.status === 502 || res.status === 503 || res.status === 504) {
+      await new Promise(r => setTimeout(r, 700))
+      return await fetch(url, init)
+    }
+    return res
+  } catch {
+    await new Promise(r => setTimeout(r, 700))
+    return await fetch(url, init)
+  }
+}
+
+function isGatewayDown(res: Response): boolean {
+  return res.status === 502 || res.status === 503 || res.status === 504
 }
 
 /**
@@ -334,10 +357,30 @@ export async function apiGetOrders(params?: {
   if (params?.search) qs.set('search', params.search)
   const suffix = qs.toString() ? `?${qs.toString()}` : ''
 
-  const res = await fetch(`${API_BASE}/orders${suffix}`, {
+  const res = await fetchWithRetry(`${API_BASE}/orders${suffix}`, {
     method: 'GET',
     headers,
   })
+  if (isGatewayDown(res)) {
+    const limit = params?.limit ?? 100
+    const offset = params?.offset ?? 0
+    let query = supabase
+      .from('orders')
+      .select('*, order_items(*), cashier:cashier_id(full_name, email)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
+    if (params?.status) query = query.eq('status', params.status)
+    const { data, count, error } = await query
+    if (!error && data) {
+      return {
+        orders: data as Order[],
+        total: count ?? data.length,
+        limit,
+        offset,
+        summary: null,
+      }
+    }
+  }
   if (!res.ok) {
     throw await toApiError(res, 'Failed to fetch orders')
   }
@@ -404,10 +447,30 @@ export async function apiGetInventoryMovements(params?: {
   if (params?.inventory_id) qs.set('inventory_id', params.inventory_id)
   const suffix = qs.toString() ? `?${qs.toString()}` : ''
 
-  const res = await fetch(`${API_BASE}/inventory/movements${suffix}`, {
+  const res = await fetchWithRetry(`${API_BASE}/inventory/movements${suffix}`, {
     method: 'GET',
     headers,
   })
+  if (isGatewayDown(res)) {
+    const limit = params?.limit ?? 100
+    const offset = params?.offset ?? 0
+    let query = supabase
+      .from('inventory_movements')
+      .select('*, inventory:inventory_id(name, unit), staff:performed_by(full_name)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(offset, offset + limit - 1)
+    if (params?.inventory_id) query = query.eq('inventory_id', params.inventory_id)
+    const { data, count, error } = await query
+    if (!error && data) {
+      return {
+        movements: data as InventoryMovement[],
+        total: count ?? data.length,
+        limit,
+        offset,
+      }
+    }
+  }
   if (!res.ok) {
     throw await toApiError(res, 'Failed to fetch inventory movements')
   }
@@ -425,6 +488,26 @@ export async function apiGetInventoryMovements(params?: {
 }
 
 /**
+ * GET /api/inventory (Admin or Inventory Personnel)
+ * Returns inventory items enriched with ROP, suggested reorder quantity, and batch expiration date.
+ */
+export async function apiGetInventory(): Promise<InventoryItem[]> {
+  const headers = await getAuthHeader()
+  const res = await fetchWithRetry(`${API_BASE}/inventory`, {
+    method: 'GET',
+    headers,
+  })
+  if (isGatewayDown(res)) {
+    const { data, error } = await supabase.from('inventory').select('*').order('name')
+    if (!error && data) return data as InventoryItem[]
+  }
+  if (!res.ok) {
+    throw await toApiError(res, 'Failed to fetch inventory')
+  }
+  return res.json() as Promise<InventoryItem[]>
+}
+
+/**
  * POST /api/inventory (Admin or Inventory Personnel)
  */
 export async function apiCreateInventoryItem(payload: {
@@ -435,6 +518,8 @@ export async function apiCreateInventoryItem(payload: {
   min_stock_level?: number
   unit_cost?: number
   supplier?: string
+  expiration_date?: string | null
+  lead_time_days?: number
 }) {
   const headers = await getAuthHeader()
   const res = await fetch(`${API_BASE}/inventory`, {
@@ -454,10 +539,17 @@ export async function apiCreateInventoryItem(payload: {
  */
 export async function apiGetProducts() {
   const headers = await getAuthHeader()
-  const res = await fetch(`${API_BASE}/products`, {
+  const res = await fetchWithRetry(`${API_BASE}/products`, {
     method: 'GET',
     headers,
   })
+  if (isGatewayDown(res)) {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*, category:product_categories(id, name, sort_order), recipes:product_recipes(id, inventory_id, qty_per_unit, inventory:inventory(id, name, unit, stock_qty))')
+      .order('name')
+    if (!error && data) return data
+  }
   if (!res.ok) {
     throw await toApiError(res, 'Failed to fetch products')
   }
@@ -469,10 +561,17 @@ export async function apiGetProducts() {
  */
 export async function apiGetCategories() {
   const headers = await getAuthHeader()
-  const res = await fetch(`${API_BASE}/products/categories`, {
+  const res = await fetchWithRetry(`${API_BASE}/products/categories`, {
     method: 'GET',
     headers,
   })
+  if (isGatewayDown(res)) {
+    const { data, error } = await supabase
+      .from('product_categories')
+      .select('*')
+      .order('sort_order')
+    if (!error && data) return data
+  }
   if (!res.ok) {
     throw await toApiError(res, 'Failed to fetch categories')
   }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { apiGetOrders, apiVoidOrder } from '@/lib/api'
+import { downloadCsv } from '@/lib/csv'
 import { dispatchNotification } from '@/lib/notifications'
 import type { Order, OrderSummary } from '@/types'
 import { useAuth } from '@/hooks/useAuth'
@@ -303,6 +304,55 @@ export default function OrdersList() {
     setVoidError(null)
   }, [])
 
+  function handleExportOrdersCsv() {
+    const today = new Date().toISOString().split('T')[0]
+    const headers = [
+      'Order #',
+      'Date & Time',
+      'Cashier',
+      'Items Ordered',
+      'Payment Method',
+      'Subtotal (PHP)',
+      'VAT 12% (PHP)',
+      'Total Amount (PHP)',
+      'Total Cost (PHP)',
+      'Net Profit (PHP)',
+      'Margin (%)',
+      'Status',
+      'Notes',
+    ]
+    const rows = filteredOrders.map(order => {
+      const dateStr = new Date(order.created_at).toLocaleString('en-PH', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      })
+      const itemsSummary = (order.order_items ?? [])
+        .map(i => `${i.quantity}x ${i.product_name}`)
+        .join('; ')
+      const profit = getOrderProfit(order)
+      return [
+        `#${order.order_number}`,
+        dateStr,
+        order.cashier?.full_name ?? 'Staff',
+        itemsSummary || 'No items',
+        order.payment_method.toUpperCase(),
+        Number(order.subtotal ?? 0).toFixed(2),
+        Number(order.vat_amount ?? 0).toFixed(2),
+        Number(order.total_amount ?? 0).toFixed(2),
+        profit.totalCost.toFixed(2),
+        profit.netProfit.toFixed(2),
+        profit.marginPct.toFixed(1),
+        order.status.toUpperCase(),
+        order.notes ?? '',
+      ]
+    })
+    downloadCsv(`wings-zone-transactions-${today}.csv`, headers, rows)
+  }
+
   async function handleConfirmVoid(e: React.FormEvent) {
     e.preventDefault()
     if (!voidModalOrder) return
@@ -394,17 +444,38 @@ export default function OrdersList() {
               : "All Wing's Zone customer orders and transaction audits"}
           </p>
         </div>
-        <button
-          onClick={fetchOrders}
-          className="btn-ghost"
-          style={{ padding: '8px 14px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="23 4 23 10 17 10"/>
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-          </svg>
-          Refresh
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            id="btn-export-orders-csv"
+            type="button"
+            onClick={handleExportOrdersCsv}
+            disabled={filteredOrders.length === 0}
+            className="btn-secondary"
+            style={{
+              padding: '8px 14px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6,
+              cursor: filteredOrders.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: filteredOrders.length === 0 ? 0.5 : 1,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export CSV ({filteredOrders.length})
+          </button>
+          <button
+            onClick={fetchOrders}
+            className="btn-ghost"
+            style={{ padding: '8px 14px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Running totals. Deliberately unfiltered — see the API's summary

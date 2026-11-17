@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
-import { apiAdjustInventory, apiGetInventoryMovements, apiCreateInventoryItem } from '@/lib/api'
+import { apiGetInventory, apiAdjustInventory, apiGetInventoryMovements, apiCreateInventoryItem } from '@/lib/api'
+import { downloadCsv } from '@/lib/csv'
 import { dispatchNotification } from '@/lib/notifications'
 import { useIsCompact } from '@/hooks/useMediaQuery'
 import EmptyState, { EMPTY_ICONS } from '@/components/ui/EmptyState'
@@ -27,6 +28,108 @@ function getItemStatus(item: InventoryItem): 'ok' | 'low' | 'critical' {
   if (qty <= 0.6 * min) return 'critical'
   if (qty <= min) return 'low'
   return 'ok'
+}
+
+/**
+ * Computes Reorder Point (ROP) and Suggested Reorder Quantity for an item
+ * (uses server-enriched fields when present, or calculates client-side).
+ * Formula: ROP = (Avg Daily Usage × Lead Time in Days) + Safety Stock
+ */
+function getItemRopMetrics(item: InventoryItem) {
+  const stockQty = Number(item.stock_qty) || 0
+  const minLevel = Number(item.min_stock_level) || 0
+  const leadTimeDays =
+    typeof item.lead_time_days === 'number' && item.lead_time_days > 0
+      ? item.lead_time_days
+      : item.category === 'Proteins' || item.category === 'Dairy' || item.category === 'Produce'
+      ? 2
+      : 3
+  const avgDailyUsage =
+    typeof item.avg_daily_usage === 'number' && item.avg_daily_usage > 0
+      ? item.avg_daily_usage
+      : Math.round(Math.max(minLevel / 7, 0.5) * 100) / 100
+  const safetyStock = minLevel * 0.5
+  const reorderPoint =
+    typeof item.reorder_point === 'number'
+      ? item.reorder_point
+      : Math.round(((avgDailyUsage * leadTimeDays) + safetyStock) * 100) / 100
+  const needsReorder = stockQty <= reorderPoint || stockQty <= minLevel
+  const targetStock = Math.max(reorderPoint + minLevel, minLevel * 2)
+  const suggestedReorderQty =
+    typeof item.suggested_reorder_qty === 'number'
+      ? item.suggested_reorder_qty
+      : needsReorder
+      ? Math.max(Math.ceil((targetStock - stockQty) * 10) / 10, Math.ceil(minLevel))
+      : 0
+
+  return { leadTimeDays, avgDailyUsage, reorderPoint, suggestedReorderQty }
+}
+
+/**
+ * Evaluates batch expiration status for perishable items.
+ */
+function getExpiryInfo(item: InventoryItem): {
+  status: 'expired' | 'expiring_soon' | 'fresh' | 'non_perishable'
+  daysLeft: number | null
+  label: string
+  dateDisplay: string
+  bg: string
+  color: string
+} {
+  if (item.category === 'Packaging' && !item.expiration_date) {
+    return {
+      status: 'non_perishable',
+      daysLeft: null,
+      label: 'Non-perishable',
+      dateDisplay: '—',
+      bg: '#f3f4f6',
+      color: '#6b7280',
+    }
+  }
+  if (!item.expiration_date) {
+    return {
+      status: 'non_perishable',
+      daysLeft: null,
+      label: 'No expiry set',
+      dateDisplay: '—',
+      bg: '#f3f4f6',
+      color: '#6b7280',
+    }
+  }
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const exp = new Date(item.expiration_date + 'T00:00:00')
+  const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86_400_000)
+  const dateDisplay = exp.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+
+  if (diffDays <= 0) {
+    return {
+      status: 'expired',
+      daysLeft: diffDays,
+      label: diffDays === 0 ? 'Expires today' : `Expired (${Math.abs(diffDays)}d ago)`,
+      dateDisplay,
+      bg: '#fce8e8',
+      color: '#b91c1c',
+    }
+  }
+  if (diffDays <= 7) {
+    return {
+      status: 'expiring_soon',
+      daysLeft: diffDays,
+      label: `Expiring in ${diffDays}d`,
+      dateDisplay,
+      bg: '#fff7e6',
+      color: '#b45309',
+    }
+  }
+  return {
+    status: 'fresh',
+    daysLeft: diffDays,
+    label: `${diffDays}d shelf life`,
+    dateDisplay,
+    bg: '#e8f5e9',
+    color: '#15803d',
+  }
 }
 
 interface AdjustModal {
@@ -82,10 +185,21 @@ function InventoryCard({
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
         <Field label={`In Stock (${item.unit})`} value={Number(item.stock_qty).toLocaleString()} mono color={qtyColor} />
-        <Field label={`Min Level (${item.unit})`} value={Number(item.min_stock_level).toLocaleString()} mono />
+        <Field label={`Min / ROP (${item.unit})`} value={`${Number(item.min_stock_level).toLocaleString()} · ROP ${getItemRopMetrics(item).reorderPoint}`} mono />
         <Field label="Unit Cost" value={`\u20B1${Number(item.unit_cost).toLocaleString()}`} mono />
-        <Field label="Supplier" value={item.supplier ?? '-'} />
+        <Field label="Batch Expiry" value={`${getExpiryInfo(item).dateDisplay} (${getExpiryInfo(item).label})`} color={getExpiryInfo(item).color} />
       </div>
+      {getItemRopMetrics(item).suggestedReorderQty > 0 && (
+        <div
+          style={{
+            marginBottom: 10, padding: '6px 10px', borderRadius: 6,
+            background: 'rgba(234,88,12,0.09)', border: '1px solid rgba(234,88,12,0.25)',
+            fontSize: 11.5, fontFamily: 'IBM Plex Mono', color: 'var(--primary)', fontWeight: 700,
+          }}
+        >
+          Suggested Reorder: +{getItemRopMetrics(item).suggestedReorderQty} {item.unit}
+        </div>
+      )}
 
       <button
         type="button"
@@ -173,6 +287,8 @@ export default function Inventory() {
   const [adjustModal, setAdjustModal] = useState<AdjustModal | null>(null)
   const [adjustQty, setAdjustQty] = useState('')
   const [adjustNotes, setAdjustNotes] = useState('')
+  const [adjustExpDate, setAdjustExpDate] = useState('')
+  const [adjustLeadTime, setAdjustLeadTime] = useState('')
   const [adjustLoading, setAdjustLoading] = useState(false)
   const [adjustError, setAdjustError] = useState<string | null>(null)
 
@@ -195,6 +311,8 @@ export default function Inventory() {
   const [newItemMin, setNewItemMin] = useState('')
   const [newItemCost, setNewItemCost] = useState('')
   const [newItemSupplier, setNewItemSupplier] = useState('')
+  const [newItemExpDate, setNewItemExpDate] = useState('')
+  const [newItemLeadTime, setNewItemLeadTime] = useState('2')
   const [addLoading, setAddLoading] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
 
@@ -213,13 +331,21 @@ export default function Inventory() {
   }, [adjustModal, showAddModal])
 
   const fetchInventory = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('inventory')
-      .select('*')
-      .order('name')
-    if (error) { console.error(error); return }
-    setItems((data ?? []) as InventoryItem[])
-    setLoading(false)
+    try {
+      const data = await apiGetInventory()
+      setItems(data)
+      setLoading(false)
+      return
+    } catch {
+      // Fallback to direct Supabase query if API is unreachable
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('*')
+        .order('name')
+      if (error) { console.error(error); return }
+      setItems((data ?? []) as InventoryItem[])
+      setLoading(false)
+    }
   }, [])
 
   const fetchMovements = useCallback(async (pageIndex = 0) => {
@@ -267,6 +393,19 @@ export default function Inventory() {
   const okCount   = items.filter(i => getItemStatus(i) === 'ok').length
   const lowCount  = items.filter(i => getItemStatus(i) === 'low').length
   const critCount = items.filter(i => getItemStatus(i) === 'critical').length
+  const expiringCount = items.filter(i => {
+    const exp = getExpiryInfo(i).status
+    return exp === 'expired' || exp === 'expiring_soon'
+  }).length
+
+  function openAdjustModal(item: InventoryItem, prefillQty?: string) {
+    const rop = getItemRopMetrics(item)
+    setAdjustModal({ item, type: 'restock' })
+    setAdjustQty(prefillQty ?? (rop.suggestedReorderQty > 0 ? String(rop.suggestedReorderQty) : ''))
+    setAdjustNotes('')
+    setAdjustExpDate(item.expiration_date ?? '')
+    setAdjustLeadTime(String(rop.leadTimeDays))
+  }
 
   const filtered = items
     .filter(i => cat === 'All' || i.category === cat)
@@ -291,6 +430,8 @@ export default function Inventory() {
       qty_change: adjustModal.type === 'waste' ? -Math.abs(qtyChange) : Math.abs(qtyChange),
       movement_type: adjustModal.type,
       notes: adjustNotes,
+      expiration_date: adjustExpDate.trim() || null,
+      lead_time_days: adjustLeadTime ? parseInt(adjustLeadTime, 10) : undefined,
     }
 
     try {
@@ -332,6 +473,8 @@ export default function Inventory() {
         min_stock_level: newItemMin ? parseFloat(newItemMin) : 0,
         unit_cost: newItemCost ? parseFloat(newItemCost) : 0,
         supplier: newItemSupplier.trim() || undefined,
+        expiration_date: newItemExpDate.trim() || null,
+        lead_time_days: newItemLeadTime ? parseInt(newItemLeadTime, 10) : 2,
       })
       setShowAddModal(false)
       setNewItemName('')
@@ -339,6 +482,8 @@ export default function Inventory() {
       setNewItemMin('')
       setNewItemCost('')
       setNewItemSupplier('')
+      setNewItemExpDate('')
+      setNewItemLeadTime('2')
       await fetchInventory()
 
       // Broadcast new item notification
@@ -419,6 +564,77 @@ export default function Inventory() {
     }
   }
 
+  function handleExportStockCsv() {
+    setShowExportMenu(false)
+    const today = new Date().toISOString().split('T')[0]
+    const headers = [
+      'Item Name',
+      'Category',
+      'Unit',
+      'In Stock',
+      'Min Stock Level',
+      'Avg Daily Usage',
+      'Lead Time (Days)',
+      'Reorder Point (ROP)',
+      'Suggested Reorder Qty',
+      'Unit Cost (PHP)',
+      'Supplier',
+      'Batch Expiration Date',
+      'Shelf-Life Status',
+      'Stock Status',
+    ]
+    const rows = filtered.map(item => {
+      const rop = getItemRopMetrics(item)
+      const exp = getExpiryInfo(item)
+      const status = getItemStatus(item)
+      return [
+        item.name,
+        item.category,
+        item.unit,
+        Number(item.stock_qty),
+        Number(item.min_stock_level),
+        rop.avgDailyUsage,
+        rop.leadTimeDays,
+        rop.reorderPoint,
+        rop.suggestedReorderQty,
+        Number(item.unit_cost).toFixed(2),
+        item.supplier ?? '',
+        item.expiration_date ?? 'N/A',
+        exp.label,
+        status.toUpperCase(),
+      ]
+    })
+    downloadCsv(`wings-zone-inventory-stock-rop-${today}.csv`, headers, rows)
+  }
+
+  function handleExportMovementsCsv() {
+    setShowExportMenu(false)
+    const today = new Date().toISOString().split('T')[0]
+    const headers = [
+      'Timestamp',
+      'Item Name',
+      'Unit',
+      'Movement Type',
+      'Qty Change',
+      'Qty Before',
+      'Qty After',
+      'Performed By',
+      'Notes',
+    ]
+    const rows = movements.map(m => [
+      new Date(m.created_at).toLocaleString('en-PH'),
+      m.inventory?.name ?? 'Unknown',
+      m.inventory?.unit ?? '',
+      m.movement_type.toUpperCase(),
+      m.qty_change,
+      Number(m.qty_before).toFixed(2),
+      Number(m.qty_after).toFixed(2),
+      m.staff?.full_name ?? 'System',
+      m.notes ?? '',
+    ])
+    downloadCsv(`wings-zone-inventory-movements-${today}.csv`, headers, rows)
+  }
+
   return (
     <div className="page">
       {/* Header */}
@@ -473,11 +689,43 @@ export default function Inventory() {
                   position: 'absolute', right: 0, top: 'calc(100% + 6px)',
                   background: 'var(--card)', border: '1px solid var(--border)',
                   borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                  zIndex: 200, minWidth: 200, overflow: 'hidden',
+                  zIndex: 200, minWidth: 245, overflow: 'hidden',
                 }}
               >
                 <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
-                  <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground)' }}>Export Movement Audit</p>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground)' }}>CSV / Excel Downloads</p>
+                  <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2 }}>Spreadsheet-ready (.csv)</p>
+                </div>
+                <button
+                  type="button"
+                  id="btn-export-stock-csv"
+                  onClick={handleExportStockCsv}
+                  style={{
+                    width: '100%', padding: '10px 14px', background: 'transparent',
+                    border: 'none', textAlign: 'left', fontSize: 13, cursor: 'pointer',
+                    color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: 8,
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--muted)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                >
+                  📊 Stock, ROP &amp; Expiry (.csv)
+                </button>
+                <button
+                  type="button"
+                  id="btn-export-movements-csv"
+                  onClick={handleExportMovementsCsv}
+                  style={{
+                    width: '100%', padding: '10px 14px', background: 'transparent',
+                    border: 'none', borderBottom: '1px solid var(--border)', textAlign: 'left', fontSize: 13, cursor: 'pointer',
+                    color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: 8,
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--muted)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                >
+                  📋 Movement Audit Log (.csv)
+                </button>
+                <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground)' }}>Printable Movement Report</p>
                   <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2 }}>Opens a printable report</p>
                 </div>
                 {[{ label: '📅 Last 7 Days (Week)', value: 'week' as const }, { label: '📆 Last 30 Days (Month)', value: 'month' as const }].map(opt => (
@@ -540,7 +788,7 @@ export default function Inventory() {
       {activeTab === 'stock' ? (
         <>
           {/* Alert strip */}
-          {(lowCount > 0 || critCount > 0) && (
+          {(lowCount > 0 || critCount > 0 || expiringCount > 0) && (
             <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
               {critCount > 0 && (
                 <div
@@ -591,6 +839,24 @@ export default function Inventory() {
                   </span>
                   <span style={{ fontSize: 11, background: '#b45309', color: '#fff', padding: '2px 8px', borderRadius: 4, marginLeft: 6, fontWeight: 600 }}>
                     {statusFilter === 'low' ? 'Active Filter ✕' : 'Filter Low'}
+                  </span>
+                </div>
+              )}
+              {expiringCount > 0 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '10px 16px',
+                    borderRadius: 8,
+                    background: '#eff6ff',
+                    border: '1px solid #93c5fd',
+                  }}
+                >
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#1d4ed8', display: 'inline-block' }} />
+                  <span style={{ fontSize: 13, color: '#1e40af', fontWeight: 600 }}>
+                    {expiringCount} perishable batch{expiringCount > 1 ? 'es' : ''} expiring within 7 days
                   </span>
                 </div>
               )}
@@ -715,7 +981,7 @@ export default function Inventory() {
                 <InventoryCard
                   key={item.id}
                   item={item}
-                  onAdjust={() => { setAdjustModal({ item, type: 'restock' }); setAdjustQty(''); setAdjustNotes('') }}
+                  onAdjust={() => openAdjustModal(item)}
                 />
               ))}
               {filtered.length === 0 && (
@@ -727,8 +993,8 @@ export default function Inventory() {
           ) : (
             <div className="card" style={{ overflow: 'hidden' }}>
               <div className="scroll-x">
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 80px 105px 105px 115px 150px 90px 110px', gap: 0, padding: '12px 22px', borderBottom: '1px solid var(--border)', minWidth: 920 }}>
-                {['Item Name', 'Unit', 'In Stock', 'Min Level', 'Unit Cost', 'Supplier', 'Status', 'Actions'].map(h => (
+              <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 65px 95px 155px 100px 140px 130px 90px 100px', gap: 0, padding: '12px 22px', borderBottom: '1px solid var(--border)', minWidth: 1060 }}>
+                {['Item Name', 'Unit', 'In Stock', 'Min / ROP & Reorder', 'Unit Cost', 'Batch Expiry', 'Supplier', 'Status', 'Actions'].map(h => (
                   <span key={h} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
                 ))}
               </div>
@@ -736,13 +1002,15 @@ export default function Inventory() {
                 const status = getItemStatus(item)
                 const s = STATUS_STYLES[status] || STATUS_STYLES.ok
                 const qtyColor = status === 'ok' ? 'var(--success, #15803d)' : status === 'low' ? '#b45309' : '#b91c1c'
+                const rop = getItemRopMetrics(item)
+                const exp = getExpiryInfo(item)
                 return (
                   <div
                     key={item.id}
                     style={{
-                      display: 'grid', gridTemplateColumns: '2fr 80px 105px 105px 115px 150px 90px 110px', gap: 0,
+                      display: 'grid', gridTemplateColumns: '1.8fr 65px 95px 155px 100px 140px 130px 90px 100px', gap: 0,
                       padding: '14px 22px', borderBottom: i < filtered.length - 1 ? '1px solid var(--muted)' : 'none',
-                      alignItems: 'center', transition: 'background 0.1s', minWidth: 920,
+                      alignItems: 'center', transition: 'background 0.1s', minWidth: 1060,
                     }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--muted)'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
@@ -753,14 +1021,44 @@ export default function Inventory() {
                     </div>
                     <span style={{ fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}>{item.unit}</span>
                     <span style={{ fontSize: 14, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: qtyColor }}>{Number(item.stock_qty).toLocaleString()}</span>
-                    <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>{Number(item.min_stock_level).toLocaleString()}</span>
+                    <div>
+                      <div style={{ fontSize: 12.5, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)' }}>
+                        Min {Number(item.min_stock_level).toLocaleString()} · <span title={`Avg Daily Usage: ${rop.avgDailyUsage} ${item.unit}/day × ${rop.leadTimeDays}d lead time + safety stock`}>ROP {rop.reorderPoint}</span>
+                      </div>
+                      {rop.suggestedReorderQty > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => openAdjustModal(item, String(rop.suggestedReorderQty))}
+                          title="Click to restock the suggested reorder quantity"
+                          style={{
+                            marginTop: 4, padding: '2px 7px', borderRadius: 6, fontSize: 11,
+                            fontFamily: 'IBM Plex Mono', fontWeight: 700, cursor: 'pointer',
+                            background: 'rgba(234,88,12,0.12)', color: 'var(--primary)',
+                            border: '1px solid rgba(234,88,12,0.3)',
+                          }}
+                        >
+                          Reorder +{rop.suggestedReorderQty} {item.unit}
+                        </button>
+                      )}
+                    </div>
                     <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)' }}>&#8369;{Number(item.unit_cost).toLocaleString()}</span>
-                    <span style={{ fontSize: 12, color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.supplier ?? '-'}</span>
+                    <div>
+                      <div style={{ fontSize: 12, fontFamily: 'IBM Plex Mono', fontWeight: 600, color: 'var(--foreground)' }}>{exp.dateDisplay}</div>
+                      <span
+                        style={{
+                          display: 'inline-block', marginTop: 3, fontSize: 10.5, padding: '1px 7px',
+                          borderRadius: 10, fontWeight: 600, background: exp.bg, color: exp.color,
+                        }}
+                      >
+                        {exp.label}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>{item.supplier ?? '-'}</span>
                     <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20, fontWeight: 700, background: s.bg, color: s.color, textAlign: 'center', display: 'inline-block' }}>{s.label}</span>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button
                         id={`inv-restock-${item.id}`}
-                        onClick={() => { setAdjustModal({ item, type: 'restock' }); setAdjustQty(''); setAdjustNotes('') }}
+                        onClick={() => openAdjustModal(item)}
                         style={{ fontSize: 12, padding: '5px 11px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--primary)', cursor: 'pointer', fontWeight: 600 }}
                       >
                         Adjust
@@ -949,9 +1247,36 @@ export default function Inventory() {
                 </select>
               </div>
               <div>
-                <label htmlFor="adj-qty" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>Quantity ({adjustModal.item.unit})</label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <label htmlFor="adj-qty" style={{ fontSize: 13, fontWeight: 600, color: 'var(--foreground)' }}>Quantity ({adjustModal.item.unit})</label>
+                  {adjustModal.type === 'restock' && getItemRopMetrics(adjustModal.item).suggestedReorderQty > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setAdjustQty(String(getItemRopMetrics(adjustModal.item).suggestedReorderQty))}
+                      style={{
+                        fontSize: 11, padding: '2px 8px', borderRadius: 6,
+                        background: 'rgba(234,88,12,0.12)', color: 'var(--primary)',
+                        border: '1px solid rgba(234,88,12,0.3)', cursor: 'pointer', fontWeight: 700,
+                      }}
+                    >
+                      Use ROP Suggestion (+{getItemRopMetrics(adjustModal.item).suggestedReorderQty} {adjustModal.item.unit})
+                    </button>
+                  )}
+                </div>
                 <input id="adj-qty" autoFocus className="input" type="number" step="0.001" min="0.001" required placeholder="0.00" value={adjustQty} onChange={e => setAdjustQty(e.target.value)} style={{ padding: '11px 14px', fontSize: 14 }} />
               </div>
+              {adjustModal.type === 'restock' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label htmlFor="adj-exp" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 5 }}>Batch Expiry Date</label>
+                    <input id="adj-exp" className="input" type="date" value={adjustExpDate} onChange={e => setAdjustExpDate(e.target.value)} style={{ padding: '9px 11px', fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <label htmlFor="adj-lead" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 5 }}>Supplier Lead Time (Days)</label>
+                    <input id="adj-lead" className="input" type="number" min="1" max="60" value={adjustLeadTime} onChange={e => setAdjustLeadTime(e.target.value)} style={{ padding: '9px 11px', fontSize: 13 }} />
+                  </div>
+                </div>
+              )}
               <div>
                 <label htmlFor="adj-notes" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>Notes (optional)</label>
                 <input id="adj-notes" className="input" type="text" placeholder="e.g. Delivery from supplier" value={adjustNotes} onChange={e => setAdjustNotes(e.target.value)} style={{ padding: '11px 14px', fontSize: 14 }} />
@@ -1067,6 +1392,17 @@ export default function Inventory() {
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Supplier</label>
                   <input className="input" value={newItemSupplier} onChange={e => setNewItemSupplier(e.target.value)} placeholder="e.g. Metro Poultry Supply" style={{ width: '100%', padding: '9px 12px', fontSize: 13 }} />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Batch Expiration Date</label>
+                  <input className="input" type="date" value={newItemExpDate} onChange={e => setNewItemExpDate(e.target.value)} style={{ width: '100%', padding: '9px 12px', fontSize: 13 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Lead Time (Days for ROP)</label>
+                  <input className="input" type="number" min="1" max="60" value={newItemLeadTime} onChange={e => setNewItemLeadTime(e.target.value)} placeholder="2" style={{ width: '100%', padding: '9px 12px', fontSize: 13 }} />
                 </div>
               </div>
 
