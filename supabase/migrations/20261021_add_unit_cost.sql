@@ -102,7 +102,7 @@ BEGIN
         VALUES (
             (v_ded->>'inventory_id')::uuid,
             v_order_id,
-            'deduction'::public.inventory_movement_type,
+            'deduction'::public.movement_type,
             -v_deduct_qty,
             v_current_qty,
             v_new_qty,

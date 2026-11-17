@@ -2,12 +2,12 @@ import { Router, type Response } from 'express'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
-import { getProductCost, setOrderItemCosts } from '../lib/productMetadata'
+import { getProductCost, setOrderItemCosts, setOrderPaymentMethod } from '../lib/productMetadata'
 
 const router = Router()
 
 /** Payment methods the checkout accepts. Anything else is rejected outright. */
-const PAYMENT_METHODS = ['cash', 'gcash', 'card'] as const
+const PAYMENT_METHODS = ['cash', 'gcash', 'maya', 'card'] as const
 type PaymentMethod = (typeof PAYMENT_METHODS)[number]
 
 /** Upper bound on a single line's quantity — guards against fat-finger entry. */
@@ -240,9 +240,15 @@ router.post(
     // Preferred path: a single Postgres function executed as one transaction.
     // Fallback path: sequential writes with compensating cleanup, for
     // deployments where the migration has not been applied yet.
+    // Map 'maya' to 'gcash' for the PostgreSQL payment_method enum column
+    // (which only defines 'cash' | 'gcash' | 'card' in the base schema) while
+    // persisting the exact 'maya' label in local order metadata.
+    const dbPaymentMethod: 'cash' | 'gcash' | 'card' =
+      paymentMethod === 'maya' ? 'gcash' : paymentMethod
+
     const rpcResult = await supabaseAdmin.rpc('create_order', {
       p_cashier_id:     staffProfile.id,
-      p_payment_method: paymentMethod,
+      p_payment_method: dbPaymentMethod,
       p_subtotal:       subtotal,
       p_vat_amount:     vat_amount,
       p_total_amount:   total_amount,
@@ -303,6 +309,8 @@ router.post(
         deductions_applied: number
       }
 
+      setOrderPaymentMethod(row.id, paymentMethod)
+
       // Persist order item costs locally for guaranteed historical tracking
       try {
         const { data: dbItems } = await supabaseAdmin
@@ -353,7 +361,7 @@ router.post(
       .insert({
         cashier_id:     staffProfile.id,
         status:         'completed',
-        payment_method: paymentMethod,
+        payment_method: dbPaymentMethod,
         subtotal,
         vat_amount,
         total_amount,
@@ -367,6 +375,8 @@ router.post(
       res.status(500).json({ message: 'Failed to create order.' })
       return
     }
+
+    setOrderPaymentMethod(order.id, paymentMethod)
 
     /**
      * Undo everything written so far. Used when a later step fails, so a

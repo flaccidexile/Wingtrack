@@ -156,3 +156,52 @@ export function getAllOrderItemCosts(): Record<string, number> {
   return { ...ensureOrderItemCostsLoaded() }
 }
 
+// ── Order Payment Method Persistence (Distinguishes GCash vs Maya) ──
+const ORDER_PAYMENT_METHODS_FILE = path.join(DATA_DIR, 'order_payment_methods.json')
+let orderPaymentMethodCache: Record<string, string> | null = null
+
+function ensureOrderPaymentMethodsLoaded(): Record<string, string> {
+  if (orderPaymentMethodCache) return orderPaymentMethodCache
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true })
+    }
+    if (fs.existsSync(ORDER_PAYMENT_METHODS_FILE)) {
+      const raw = fs.readFileSync(ORDER_PAYMENT_METHODS_FILE, 'utf-8')
+      orderPaymentMethodCache = JSON.parse(raw)
+      return orderPaymentMethodCache || {}
+    }
+  } catch (err) {
+    console.error('[productMetadata] Failed to load order payment method cache:', err)
+  }
+  orderPaymentMethodCache = {}
+  return orderPaymentMethodCache
+}
+
+function persistOrderPaymentMethods(): void {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true })
+    }
+    fs.writeFileSync(ORDER_PAYMENT_METHODS_FILE, JSON.stringify(orderPaymentMethodCache || {}, null, 2), 'utf-8')
+  } catch (err) {
+    console.error('[productMetadata] Failed to persist order payment method cache:', err)
+  }
+}
+
+export function getOrderPaymentMethod(orderId: string): string | null {
+  const map = ensureOrderPaymentMethodsLoaded()
+  return typeof map[orderId] === 'string' ? map[orderId] : null
+}
+
+export function setOrderPaymentMethod(orderId: string, method: string): void {
+  const map = ensureOrderPaymentMethodsLoaded()
+  map[orderId] = method
+  persistOrderPaymentMethods()
+}
+
+export function getAllOrderPaymentMethods(): Record<string, string> {
+  return { ...ensureOrderPaymentMethodsLoaded() }
+}
+
+

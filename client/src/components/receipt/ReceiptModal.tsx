@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { Order } from '@/types'
 
@@ -6,9 +7,86 @@ interface ReceiptModalProps {
   onClose: () => void
 }
 
+/**
+ * Receipt styles, shared by the on-screen preview and the print frame so the
+ * printout looks exactly like what the cashier sees. Sized for an 80mm
+ * thermal roll, which also prints cleanly on A4/Letter as a narrow slip.
+ */
+const RECEIPT_CSS = `
+  .rcpt { width: 72mm; max-width: 100%; margin: 0 auto; font-family: 'Courier New', Courier, monospace; font-size: 12px; line-height: 1.35; color: #000; background: #fff; }
+  .rcpt * { box-sizing: border-box; }
+  .rcpt p { margin: 0; }
+  .rcpt .c { text-align: center; }
+  .rcpt .logo { display: block; width: 48px; height: 48px; margin: 0 auto 6px; border-radius: 50%; object-fit: cover; }
+  .rcpt .store { font-size: 17px; font-weight: 900; letter-spacing: 0.06em; }
+  .rcpt .muted { font-size: 11px; }
+  .rcpt .rule { border: 0; border-top: 1px dashed #000; margin: 8px 0; }
+  .rcpt .rule-solid { border: 0; border-top: 1px solid #000; margin: 6px 0; }
+  .rcpt .row { display: flex; justify-content: space-between; gap: 8px; }
+  .rcpt .row > span:last-child { text-align: right; white-space: nowrap; }
+  .rcpt .item { margin-bottom: 5px; }
+  .rcpt .item-name { font-weight: 700; word-break: break-word; }
+  .rcpt .item-sub { padding-left: 10px; }
+  .rcpt .total { font-size: 15px; font-weight: 900; }
+  .rcpt .void { margin: 6px 0; padding: 3px 0; border: 1px solid #000; font-weight: 900; text-align: center; }
+  .rcpt .upper { text-transform: uppercase; }
+`
+
+const peso = (n: number) => `₱${n.toFixed(2)}`
+
 export default function ReceiptModal({ order, onClose }: ReceiptModalProps) {
+  const receiptRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * Prints only the receipt, in an isolated hidden iframe.
+   *
+   * Printing the main window (with "hide everything else" CSS) was unreliable:
+   * the modal's fixed/scrolling containers clipped the receipt and only the
+   * logo came out. A dedicated document avoids all of that.
+   */
   function handlePrint() {
-    window.print()
+    const node = receiptRef.current
+    if (!node) return
+
+    const iframe = document.createElement('iframe')
+    iframe.setAttribute('aria-hidden', 'true')
+    Object.assign(iframe.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' })
+    document.body.appendChild(iframe)
+
+    const doc = iframe.contentDocument
+    const win = iframe.contentWindow
+    if (!doc || !win) { iframe.remove(); return }
+
+    doc.open()
+    doc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <base href="${window.location.origin}/" />
+  <title>Receipt #${order.order_number}</title>
+  <style>
+    @page { size: 80mm auto; margin: 0; }
+    html, body { margin: 0; padding: 0; background: #fff; }
+    body { padding: 4mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    ${RECEIPT_CSS}
+  </style>
+</head>
+<body>${node.outerHTML}</body>
+</html>`)
+    doc.close()
+
+    let printed = false
+    const doPrint = () => {
+      if (printed) return
+      printed = true
+      win.focus()
+      win.print()
+      // Remove the frame once the print dialog has been dismissed.
+      setTimeout(() => iframe.remove(), 1000)
+    }
+    // Wait for the logo to load so it is not missing from the printout.
+    win.onload = doPrint
+    setTimeout(doPrint, 1500)
   }
 
   const dateStr = new Date(order.created_at).toLocaleString('en-PH', {
@@ -21,15 +99,8 @@ export default function ReceiptModal({ order, onClose }: ReceiptModalProps) {
   })
 
   const items = order.order_items ?? []
-  const subtotal = Number(order.subtotal ?? order.total_amount) || 0
-  const totalCost = items.reduce((sum, item) => {
-    const cost = Number(item.unit_cost ?? 0)
-    const qty = Number(item.quantity ?? 1)
-    return sum + (cost * qty)
-  }, 0)
   const isVoid = order.status === 'void'
-  const netProfit = isVoid ? 0 : subtotal - totalCost
-  const marginPct = isVoid || subtotal <= 0 ? 0 : (netProfit / subtotal) * 100
+  const itemCount = items.reduce((s, i) => s + Number(i.quantity ?? 0), 0)
 
   return createPortal(
     <div
@@ -50,206 +121,78 @@ export default function ReceiptModal({ order, onClose }: ReceiptModalProps) {
       }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden !important;
-          }
-          #printable-receipt, #printable-receipt * {
-            visibility: visible !important;
-          }
-          #printable-receipt {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
+      <style>{RECEIPT_CSS}</style>
       <div
         className="card fade-in"
         style={{
           width: '100%',
-          maxWidth: 480,
+          maxWidth: 380,
           maxHeight: '92vh',
           overflowY: 'auto',
           background: '#ffffff',
-          color: '#1a1a1a',
-          padding: '24px 22px',
+          color: '#000',
+          padding: '22px 18px',
           boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
           borderRadius: 12,
         }}
       >
         {/* Printable Receipt Body */}
-        <div id="printable-receipt" style={{ fontFamily: 'Courier New, monospace' }}>
-          <div style={{ textAlign: 'center', marginBottom: 16, borderBottom: '1px dashed #999', paddingBottom: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
-              <img
-                src="/logo.png"
-                alt="Wingtrack"
-                style={{ width: 52, height: 52, borderRadius: '50%', objectFit: 'cover' }}
-              />
-            </div>
-            <h2 style={{ fontSize: 20, fontWeight: 900, letterSpacing: '0.05em', margin: 0, color: '#1a1a1a' }}>WINGTRACK</h2>
-            <p style={{ fontSize: 11, color: '#666', margin: '4px 0 0 0' }}>Integrated POS & Inventory System</p>
-            <p style={{ fontSize: 11, color: '#666', margin: '2px 0 0 0' }}>Order #{order.order_number}</p>
-            <p style={{ fontSize: 11, color: '#666', margin: '2px 0 0 0' }}>{dateStr}</p>
-            {isVoid && (
-              <div style={{ marginTop: 8, padding: '4px 8px', background: '#fee2e2', color: '#991b1b', fontWeight: 'bold', fontSize: 13, borderRadius: 4, display: 'inline-block' }}>
-                *** VOIDED TRANSACTION ***
-              </div>
-            )}
+        <div ref={receiptRef} className="rcpt">
+          <div className="c">
+            <img className="logo" src="/logo.png" alt="Wing's Zone" />
+            <p className="store">WING'S ZONE</p>
+            <p className="muted">Powered by WINGTRACK</p>
           </div>
 
-          <div style={{ fontSize: 12, marginBottom: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', marginBottom: 6, fontSize: 11, fontWeight: 'bold', borderBottom: '1px solid #eee', paddingBottom: 4 }}>
-              <span>ITEM</span>
-              <span>QTY × PRICE</span>
-              <span>TOTAL</span>
-            </div>
+          <hr className="rule" />
 
-            {items.map((item, idx) => (
-              <div key={item.id ?? idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ flex: 1, paddingRight: 8 }}>{item.product_name}</span>
-                <span style={{ color: '#555', marginRight: 12 }}>{item.quantity} × ₱{Number(item.unit_price).toFixed(2)}</span>
-                <span style={{ fontWeight: 'bold' }}>₱{Number(item.line_total ?? item.unit_price * item.quantity).toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
+          <div className="row"><span>Order #</span><span>{order.order_number}</span></div>
+          <div className="row"><span>Date</span><span>{dateStr}</span></div>
+          <div className="row"><span>Payment</span><span className="upper">{order.payment_method}</span></div>
+          {isVoid && <div className="void">*** VOIDED ***</div>}
 
-          <div style={{ borderTop: '1px dashed #999', paddingTop: 10, fontSize: 12, marginTop: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ color: '#666' }}>Subtotal:</span>
-              <span>₱{Number(order.subtotal).toFixed(2)}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ color: '#666' }}>VAT (12%):</span>
-              <span>₱{Number(order.vat_amount).toFixed(2)}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: 15, marginTop: 6, borderTop: '1px solid #111', paddingTop: 6 }}>
-              <span>TOTAL:</span>
-              <span>₱{Number(order.total_amount).toFixed(2)}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11, color: '#555' }}>
-              <span>Payment Method:</span>
-              <span style={{ textTransform: 'uppercase', fontWeight: 600 }}>{order.payment_method}</span>
-            </div>
-            {order.notes && (
-              <div style={{ marginTop: 6, fontSize: 11, color: '#666', fontStyle: 'italic' }}>
-                Note: {order.notes}
-              </div>
-            )}
-          </div>
+          <hr className="rule" />
 
-          <div style={{ textAlign: 'center', marginTop: 18, borderTop: '1px dashed #999', paddingTop: 12, fontSize: 11, color: '#777' }}>
-            <p style={{ margin: 0 }}>Thank you for ordering at Wingtrack!</p>
-            <p style={{ margin: '2px 0 0 0' }}>Please come again.</p>
-          </div>
-        </div>
-
-        {/* Cost Breakdown & Profit Margin Analysis Panel (Management Details View) */}
-        <div
-          className="no-print"
-          style={{
-            marginTop: 18,
-            padding: '14px 16px',
-            borderRadius: 10,
-            background: isVoid ? '#fef2f2' : 'rgba(234, 88, 12, 0.05)',
-            border: isVoid ? '1px solid #fecaca' : '1px solid rgba(234, 88, 12, 0.2)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#111827', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Cost & Profit Margin Breakdown
-            </span>
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: 12,
-                background: isVoid ? '#fee2e2' : (netProfit >= 0 ? '#e8f5e9' : '#fee2e2'),
-                color: isVoid ? '#991b1b' : (netProfit >= 0 ? '#15803d' : '#991b1b'),
-              }}
-            >
-              {isVoid ? 'VOIDED' : `${marginPct.toFixed(1)}% MARGIN`}
-            </span>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12, textAlign: 'center' }}>
-            <div style={{ padding: '8px', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-              <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase' }}>Revenue</div>
-              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Courier New, monospace', color: '#111827' }}>
-                ₱{subtotal.toFixed(2)}
-              </div>
-            </div>
-            <div style={{ padding: '8px', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-              <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase' }}>Total Cost</div>
-              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Courier New, monospace', color: '#6b7280' }}>
-                ₱{totalCost.toFixed(2)}
-              </div>
-            </div>
-            <div style={{ padding: '8px', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-              <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase' }}>Net Profit</div>
-              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Courier New, monospace', color: isVoid ? '#9ca3af' : (netProfit >= 0 ? '#15803d' : '#b91c1c') }}>
-                {isVoid ? '₱0.00' : `${netProfit >= 0 ? '+' : ''}₱${netProfit.toFixed(2)}`}
-              </div>
-            </div>
-          </div>
-
-          {/* Itemized Cost Breakdown Table */}
-          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 8 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 55px 65px 65px', gap: 6, fontSize: 10.5, fontWeight: 700, color: '#6b7280', marginBottom: 6 }}>
-              <span>ITEM</span>
-              <span style={{ textAlign: 'right' }}>COST/U</span>
-              <span style={{ textAlign: 'right' }}>TOT COST</span>
-              <span style={{ textAlign: 'right' }}>PROFIT</span>
-            </div>
-            {items.map((item, idx) => {
-              const uCost = Number(item.unit_cost ?? 0)
-              const uPrice = Number(item.unit_price ?? 0)
-              const lineCost = uCost * Number(item.quantity ?? 1)
-              const lineRev = Number(item.line_total ?? uPrice * Number(item.quantity ?? 1))
-              const itemProfit = lineRev - lineCost
-
-              return (
-                <div
-                  key={item.id ?? idx}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 1fr) 55px 65px 65px',
-                    gap: 6,
-                    fontSize: 11,
-                    fontFamily: 'Courier New, monospace',
-                    padding: '3px 0',
-                    borderBottom: idx < items.length - 1 ? '1px dashed #f3f4f6' : 'none',
-                  }}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#1f2937' }}>
-                    {item.quantity}× {item.product_name}
-                  </span>
-                  <span style={{ textAlign: 'right', color: '#4b5563' }}>
-                    ₱{uCost.toFixed(2)}
-                  </span>
-                  <span style={{ textAlign: 'right', color: '#4b5563' }}>
-                    ₱{lineCost.toFixed(2)}
-                  </span>
-                  <span style={{ textAlign: 'right', fontWeight: 700, color: itemProfit >= 0 ? '#15803d' : '#b91c1c' }}>
-                    {itemProfit >= 0 ? '+' : ''}₱{itemProfit.toFixed(2)}
-                  </span>
+          {items.map((item, idx) => {
+            const qty = Number(item.quantity ?? 1)
+            const price = Number(item.unit_price ?? 0)
+            const line = Number(item.line_total ?? price * qty)
+            return (
+              <div key={item.id ?? idx} className="item">
+                <p className="item-name">{item.product_name}</p>
+                <div className="row item-sub">
+                  <span>{qty} x {peso(price)}</span>
+                  <span>{peso(line)}</span>
                 </div>
-              )
-            })}
+              </div>
+            )
+          })}
+
+          <hr className="rule" />
+
+          <div className="row"><span>Items</span><span>{itemCount}</span></div>
+          <div className="row"><span>Subtotal</span><span>{peso(Number(order.subtotal ?? 0))}</span></div>
+          <div className="row"><span>VAT (12%)</span><span>{peso(Number(order.vat_amount ?? 0))}</span></div>
+          <hr className="rule-solid" />
+          <div className="row total"><span>TOTAL</span><span>{peso(Number(order.total_amount ?? 0))}</span></div>
+
+          {order.notes && (
+            <>
+              <hr className="rule" />
+              <p className="muted">Note: {order.notes}</p>
+            </>
+          )}
+
+          <hr className="rule" />
+
+          <div className="c muted">
+            <p>Thank you for ordering at Wing's Zone!</p>
+            <p>Please come again.</p>
           </div>
         </div>
 
         {/* Modal Buttons */}
-        <div className="no-print" style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
           <button
             onClick={handlePrint}
             style={{

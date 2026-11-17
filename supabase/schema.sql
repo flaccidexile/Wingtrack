@@ -171,7 +171,9 @@ INSERT INTO public.product_categories (name, sort_order) VALUES
     ('Silog', 3),
     ('Shake', 4),
     ('Burger', 5),
-    ('Fries & Pure Cheesestick', 6)
+    ('Fries & Pure Cheesestick', 6),
+    ('Milktea', 7),
+    ('Coffee', 8)
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO public.products (name, category_id, price) VALUES
@@ -213,7 +215,19 @@ INSERT INTO public.products (name, category_id, price) VALUES
     ('Pure Mozzarella Cheesesticks (6pcs)',   (SELECT id FROM public.product_categories WHERE name='Fries & Pure Cheesestick'), 129.00),
     ('Crispy Golden Fries',                   (SELECT id FROM public.product_categories WHERE name='Fries & Pure Cheesestick'), 79.00),
     ('Loaded Cheese Fries',                   (SELECT id FROM public.product_categories WHERE name='Fries & Pure Cheesestick'), 99.00),
-    ('Cheesestick & Fries Combo',             (SELECT id FROM public.product_categories WHERE name='Fries & Pure Cheesestick'), 169.00)
+    ('Cheesestick & Fries Combo',             (SELECT id FROM public.product_categories WHERE name='Fries & Pure Cheesestick'), 169.00),
+
+    -- Milktea
+    ('Classic Pearl Milktea',                 (SELECT id FROM public.product_categories WHERE name='Milktea'), 99.00),
+    ('Wintermelon Milktea',                   (SELECT id FROM public.product_categories WHERE name='Milktea'), 109.00),
+    ('Okinawa Milktea',                       (SELECT id FROM public.product_categories WHERE name='Milktea'), 109.00),
+    ('Taro Milktea',                          (SELECT id FROM public.product_categories WHERE name='Milktea'), 109.00),
+
+    -- Coffee
+    ('Hot Brewed Coffee',                     (SELECT id FROM public.product_categories WHERE name='Coffee'), 69.00),
+    ('Iced Americano',                        (SELECT id FROM public.product_categories WHERE name='Coffee'), 89.00),
+    ('Iced Caramel Macchiato',                (SELECT id FROM public.product_categories WHERE name='Coffee'), 119.00),
+    ('Iced Spanish Latte',                    (SELECT id FROM public.product_categories WHERE name='Coffee'), 119.00)
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO public.inventory (name, category, unit, stock_qty, min_stock_level, unit_cost, supplier) VALUES
@@ -234,6 +248,15 @@ INSERT INTO public.inventory (name, category, unit, stock_qty, min_stock_level, 
     ('Fresh Eggs (Trays)',        'Produce',   'trays',   12,     5,   230.00,  'FreshFarm Supply'),
     ('Mango Fruit Puree',         'Beverages', 'kg',       9,     5,   160.00,  'FruitSource PH'),
     ('Chocolate / Shake Syrup',   'Beverages', 'bottles',  8,     4,   140.00,  'Flavor House PH'),
+    ('Black Tea Leaves',          'Beverages', 'kg',       5,     2,   450.00,  'TeaHouse Supply'),
+    ('Milktea Powder Base',       'Beverages', 'kg',       8,     3,   380.00,  'TeaHouse Supply'),
+    ('Flavor Syrups (Milktea)',   'Beverages', 'bottles', 12,     5,   220.00,  'TeaHouse Supply'),
+    ('Tapioca Pearls',            'Beverages', 'kg',      10,     4,   150.00,  'TeaHouse Supply'),
+    ('Coffee Beans (Ground)',     'Beverages', 'kg',       6,     2,   900.00,  'BrewMasters PH'),
+    ('Fresh Milk',                'Dairy',     'liters',  20,     8,    95.00,  'Dairy Delights'),
+    ('Condensed Milk',            'Dairy',     'cans',    24,    10,    65.00,  'Metro Grocery'),
+    ('Caramel Syrup',             'Beverages', 'bottles',  6,     3,   240.00,  'Flavor House PH'),
+    ('Plastic Straws',            'Packaging', 'pcs',    600,   200,     0.80,  'PackPro'),
     ('Disposable Cups',           'Packaging', 'pcs',    520,   200,     2.50,  'PackPro'),
     ('Take-out Boxes',            'Packaging', 'pcs',    180,   100,     8.00,  'PackPro'),
     ('Napkins (Packs)',           'Packaging', 'packs',   28,    20,    35.00,  'PackPro')
@@ -290,7 +313,49 @@ FROM (VALUES
     ('Fresh Mango Shake',                     'Mango Fruit Puree',       0.15),
     ('Fresh Mango Shake',                     'Disposable Cups',         1),
 
-    ('House Blend Iced Tea',                  'Disposable Cups',         1)
+    ('House Blend Iced Tea',                  'Disposable Cups',         1),
+
+    -- Milktea
+    ('Classic Pearl Milktea',                 'Black Tea Leaves',        0.01),
+    ('Classic Pearl Milktea',                 'Milktea Powder Base',     0.04),
+    ('Classic Pearl Milktea',                 'Tapioca Pearls',          0.05),
+    ('Classic Pearl Milktea',                 'Disposable Cups',         1),
+    ('Classic Pearl Milktea',                 'Plastic Straws',          1),
+    ('Wintermelon Milktea',                   'Black Tea Leaves',        0.01),
+    ('Wintermelon Milktea',                   'Milktea Powder Base',     0.04),
+    ('Wintermelon Milktea',                   'Flavor Syrups (Milktea)', 0.03),
+    ('Wintermelon Milktea',                   'Tapioca Pearls',          0.05),
+    ('Wintermelon Milktea',                   'Disposable Cups',         1),
+    ('Wintermelon Milktea',                   'Plastic Straws',          1),
+    ('Okinawa Milktea',                       'Black Tea Leaves',        0.01),
+    ('Okinawa Milktea',                       'Milktea Powder Base',     0.04),
+    ('Okinawa Milktea',                       'Flavor Syrups (Milktea)', 0.03),
+    ('Okinawa Milktea',                       'Tapioca Pearls',          0.05),
+    ('Okinawa Milktea',                       'Disposable Cups',         1),
+    ('Okinawa Milktea',                       'Plastic Straws',          1),
+    ('Taro Milktea',                          'Black Tea Leaves',        0.01),
+    ('Taro Milktea',                          'Milktea Powder Base',     0.04),
+    ('Taro Milktea',                          'Flavor Syrups (Milktea)', 0.03),
+    ('Taro Milktea',                          'Tapioca Pearls',          0.05),
+    ('Taro Milktea',                          'Disposable Cups',         1),
+    ('Taro Milktea',                          'Plastic Straws',          1),
+
+    -- Coffee
+    ('Hot Brewed Coffee',                     'Coffee Beans (Ground)',   0.018),
+    ('Hot Brewed Coffee',                     'Disposable Cups',         1),
+    ('Iced Americano',                        'Coffee Beans (Ground)',   0.018),
+    ('Iced Americano',                        'Disposable Cups',         1),
+    ('Iced Americano',                        'Plastic Straws',          1),
+    ('Iced Caramel Macchiato',                'Coffee Beans (Ground)',   0.018),
+    ('Iced Caramel Macchiato',                'Fresh Milk',              0.2),
+    ('Iced Caramel Macchiato',                'Caramel Syrup',           0.03),
+    ('Iced Caramel Macchiato',                'Disposable Cups',         1),
+    ('Iced Caramel Macchiato',                'Plastic Straws',          1),
+    ('Iced Spanish Latte',                    'Coffee Beans (Ground)',   0.018),
+    ('Iced Spanish Latte',                    'Fresh Milk',              0.2),
+    ('Iced Spanish Latte',                    'Condensed Milk',          0.1),
+    ('Iced Spanish Latte',                    'Disposable Cups',         1),
+    ('Iced Spanish Latte',                    'Plastic Straws',          1)
 ) AS v(product_name, inventory_name, qty)
 JOIN public.products p ON p.name = v.product_name
 JOIN public.inventory i ON i.name = v.inventory_name

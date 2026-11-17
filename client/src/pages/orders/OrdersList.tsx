@@ -384,13 +384,14 @@ export default function OrdersList() {
       {/* Header */}
       <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
+          <p className="overline" style={{ marginBottom: 6, textDecoration: 'none' }}>Wing&apos;s Zone · Order History</p>
           <h1 className="page-title" style={{ fontSize: 26 }}>
             {isCashier ? 'My Transactions' : 'Transactions'}
           </h1>
           <p className="page-subtitle">
             {isCashier
-              ? 'Your previous sales and customer orders — every order you have rung up'
-              : 'All store customer orders and transaction audits'}
+              ? "Your previous sales and customer orders at Wing's Zone — every order you have rung up"
+              : "All Wing's Zone customer orders and transaction audits"}
           </p>
         </div>
         <button

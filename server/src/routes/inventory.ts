@@ -12,15 +12,42 @@ type MovementType = (typeof MOVEMENT_TYPES)[number]
 /** Upper bound for a single manual adjustment, to catch fat-finger entries. */
 const MAX_ADJUSTMENT = 1_000_000
 
+/**
+ * Page size for the audit trail.
+ *
+ * Every ingredient deduction writes a row here, so this table grows with sales
+ * volume, not with the size of the menu. The previous implementation returned a
+ * bare `.limit(100)` with no offset: the trail was readable only as the newest
+ * 100 movements, and anything older was unreachable from the UI even though it
+ * was still on disk. That is a paging defect, not an archiving one — nothing is
+ * ever deleted from an audit log, so the fix is to walk it, not to prune it.
+ */
+const DEFAULT_MOVEMENTS_PAGE_SIZE = 100
+const MAX_MOVEMENTS_PAGE_SIZE = 500
+
+/** Upper bound on rows a single inventory read may return. */
+const MAX_INVENTORY_ROWS = 1000
+
 // GET /api/inventory — Admin + Inventory Personnel
+//
+// The ingredient catalogue, not a log: it is bounded by the number of raw
+// materials the kitchen stocks (dozens, not millions), so it is returned in one
+// read to keep the Inventory screen and its client-side search simple. The
+// `limit` is a guard rail against runaway growth, not a paging control — it
+// sits high enough that no realistic catalogue is ever truncated.
 router.get('/', requireAuth, requireRole('admin', 'inventory_personnel'), async (_req, res: Response) => {
   const { data, error } = await supabaseAdmin
     .from('inventory')
     .select('*')
     .order('name')
+    .limit(MAX_INVENTORY_ROWS)
 
-  if (error) { res.status(500).json({ message: error.message }); return }
-  res.json(data)
+  if (error) {
+    console.error('Fetch inventory failed:', error)
+    res.status(500).json({ message: 'Failed to fetch inventory.' })
+    return
+  }
+  res.json(data ?? [])
 })
 
 // PATCH /api/inventory/:id/adjust — Manual stock adjustment
@@ -138,23 +165,61 @@ router.patch(
 )
 
 // GET /api/inventory/movements — Admin + Inventory Personnel: audit trail
+//
+// Paged. Returns `{ movements, total, limit, offset }` so the client can show
+// "showing X of Y" and walk back through the whole trail instead of only the
+// newest page. Optional `inventory_id` narrows the trail to one ingredient,
+// which is what an investigation into a single stock discrepancy needs.
 router.get(
   '/movements',
   requireAuth,
   requireRole('admin', 'inventory_personnel'),
-  async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { data, error } = await supabaseAdmin
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    // Same clamping discipline as /api/orders: a nonsense window falls back to
+    // the default rather than reaching PostgREST.
+    const rawLimit = Number(req.query.limit)
+    const rawOffset = Number(req.query.offset)
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.min(Math.floor(rawLimit), MAX_MOVEMENTS_PAGE_SIZE)
+      : DEFAULT_MOVEMENTS_PAGE_SIZE
+    const offset = Number.isFinite(rawOffset) && rawOffset > 0
+      ? Math.floor(rawOffset)
+      : 0
+
+    const inventoryId = typeof req.query.inventory_id === 'string' && req.query.inventory_id.trim() !== ''
+      ? req.query.inventory_id.trim()
+      : null
+
+    let query = supabaseAdmin
       .from('inventory_movements')
-      .select('*, inventory:inventory_id(name, unit), staff:performed_by(full_name)')
+      .select(
+        '*, inventory:inventory_id(name, unit), staff:performed_by(full_name)',
+        { count: 'exact' },
+      )
       .order('created_at', { ascending: false })
-      .limit(100)
+      // `id` breaks ties on created_at so a burst of rows written in the same
+      // millisecond cannot shuffle between pages and be shown twice.
+      .order('id', { ascending: true })
+      .range(offset, offset + limit - 1)
+
+    if (inventoryId) {
+      query = query.eq('inventory_id', inventoryId)
+    }
+
+    const { data, error, count } = await query
 
     if (error) {
-      res.status(500).json({ message: error.message })
+      console.error('Fetch inventory movements failed:', error)
+      res.status(500).json({ message: 'Failed to fetch inventory movements.' })
       return
     }
 
-    res.json(data ?? [])
+    res.json({
+      movements: data ?? [],
+      total: count ?? (data?.length ?? 0),
+      limit,
+      offset,
+    })
   }
 )
 

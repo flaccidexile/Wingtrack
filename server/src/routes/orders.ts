@@ -2,19 +2,25 @@ import { Router, type Response } from 'express'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
-import { getAllOrderItemCosts, getAllProductCosts } from '../lib/productMetadata'
+import { getAllOrderItemCosts, getAllProductCosts, getAllOrderPaymentMethods } from '../lib/productMetadata'
 
 const router = Router()
 
 /**
- * Enriches order items with their unit_cost from the database or metadata fallback.
+ * Enriches order items with their unit_cost and exact payment_method
+ * (e.g., distinguishing 'maya' from 'gcash') from the database or metadata fallback.
  */
 function enrichOrderItems(
   order: any,
   itemCostsMap: Record<string, number>,
-  productCostsMap: Record<string, number>
+  productCostsMap: Record<string, number>,
+  paymentMethodsMap: Record<string, string>
 ) {
-  if (!order || !Array.isArray(order.order_items)) return order
+  if (!order) return order
+  const exactPaymentMethod = paymentMethodsMap[order.id] || order.payment_method
+  if (!Array.isArray(order.order_items)) {
+    return { ...order, payment_method: exactPaymentMethod }
+  }
   const enrichedItems = order.order_items.map((item: any) => {
     let cost = item.unit_cost != null ? Number(item.unit_cost) : null
     if (cost === null || Number.isNaN(cost)) {
@@ -27,6 +33,7 @@ function enrichOrderItems(
   })
   return {
     ...order,
+    payment_method: exactPaymentMethod,
     order_items: enrichedItems,
   }
 }
@@ -213,7 +220,8 @@ router.get(
 
       const itemCostsMap = getAllOrderItemCosts()
       const productCostsMap = getAllProductCosts()
-      const enrichedOrders = (orders ?? []).map((o: any) => enrichOrderItems(o, itemCostsMap, productCostsMap))
+      const paymentMethodsMap = getAllOrderPaymentMethods()
+      const enrichedOrders = (orders ?? []).map((o: any) => enrichOrderItems(o, itemCostsMap, productCostsMap, paymentMethodsMap))
 
       res.json({
         orders: enrichedOrders,
@@ -251,7 +259,8 @@ router.get(
 
       const itemCostsMap = getAllOrderItemCosts()
       const productCostsMap = getAllProductCosts()
-      res.json(enrichOrderItems(order, itemCostsMap, productCostsMap))
+      const paymentMethodsMap = getAllOrderPaymentMethods()
+      res.json(enrichOrderItems(order, itemCostsMap, productCostsMap, paymentMethodsMap))
     } catch (err) {
       res.status(500).json({ message: 'Internal server error.' })
     }

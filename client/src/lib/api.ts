@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import type {
   CheckoutPayload,
   InventoryAdjustmentPayload,
+  InventoryMovement,
   Order,
   OrderSummary,
   Product,
@@ -372,19 +373,55 @@ export async function apiVoidOrder(orderId: string, reason?: string) {
   return res.json()
 }
 
+/** A paged slice of the inventory audit trail. */
+export interface InventoryMovementsPage {
+  movements: InventoryMovement[]
+  /** Total rows matching the filter — for "showing X of Y". */
+  total: number
+  limit: number
+  offset: number
+}
+
 /**
  * GET /api/inventory/movements (Admin or Inventory Personnel)
+ *
+ * Paged: every ingredient deduction writes a row here, so the trail grows with
+ * sales volume. Requesting page N is a `range()` on the server, not a fresh
+ * 100-row read with the rest truncated.
+ *
+ * Tolerates a bare-array response from an older server so a stale deployment
+ * degrades to "one page, no total" rather than breaking the tab.
  */
-export async function apiGetInventoryMovements() {
+export async function apiGetInventoryMovements(params?: {
+  limit?: number
+  offset?: number
+  inventory_id?: string
+}): Promise<InventoryMovementsPage> {
   const headers = await getAuthHeader()
-  const res = await fetch(`${API_BASE}/inventory/movements`, {
+  const qs = new URLSearchParams()
+  if (params?.limit != null) qs.set('limit', String(params.limit))
+  if (params?.offset != null) qs.set('offset', String(params.offset))
+  if (params?.inventory_id) qs.set('inventory_id', params.inventory_id)
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+
+  const res = await fetch(`${API_BASE}/inventory/movements${suffix}`, {
     method: 'GET',
     headers,
   })
   if (!res.ok) {
     throw await toApiError(res, 'Failed to fetch inventory movements')
   }
-  return res.json()
+
+  const json = await res.json()
+  if (Array.isArray(json)) {
+    return { movements: json as InventoryMovement[], total: json.length, limit: json.length, offset: 0 }
+  }
+  return {
+    movements: (json.movements ?? []) as InventoryMovement[],
+    total: json.total ?? 0,
+    limit: json.limit ?? 100,
+    offset: json.offset ?? 0,
+  }
 }
 
 /**

@@ -4,6 +4,7 @@ import {
   ResponsiveContainer, BarChart, Bar,
 } from 'recharts'
 import { supabase } from '@/lib/supabase'
+import { apiGetOrders } from '@/lib/api'
 import { useChartWidth, tickInterval } from '@/hooks/useChartWidth'
 import EmptyState, { EMPTY_ICONS } from '@/components/ui/EmptyState'
 import NotificationCenter from '@/components/ui/NotificationCenter'
@@ -210,7 +211,7 @@ export default function Dashboard() {
       until = new Date(customTo + 'T23:59:59')
     }
 
-    const [ordersRes, inventoryRes] = await Promise.all([
+    const [ordersRes, inventoryRes, apiOrdersRes] = await Promise.all([
       supabase
         .from('orders')
         .select('*, order_items(*)')
@@ -222,9 +223,16 @@ export default function Dashboard() {
         .from('inventory')
         .select('stock_qty, min_stock_level')
         .in('status', ['low', 'critical']),
+      apiGetOrders({ limit: 25 }).catch(() => null),
     ])
 
-    const orders: Order[] = ordersRes.data ?? []
+    const apiMethodMap = new Map<string, Order['payment_method']>(
+      (apiOrdersRes?.orders ?? []).map(o => [o.id, o.payment_method])
+    )
+    const orders: Order[] = (ordersRes.data ?? []).map((o: Order) => ({
+      ...o,
+      payment_method: apiMethodMap.get(o.id) ?? o.payment_method,
+    }))
     setLowStockCount((inventoryRes.data ?? []).length)
 
     // Build chronological stats. Both label widths are stored so the chart can
@@ -330,12 +338,12 @@ export default function Dashboard() {
       {/* Header */}
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <p className="overline" style={{ marginBottom: 7, textDecoration: 'none' }}>Overview</p>
+          <p className="overline" style={{ marginBottom: 7, textDecoration: 'none' }}>Wing&apos;s Zone · Overview</p>
           <h1 className="page-title">
             {greeting}, Manager
           </h1>
           <p className="page-subtitle">
-            {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} · Wingtrack
+            {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} · Wing&apos;s Zone (WINGTRACK POS &amp; Inventory)
           </p>
         </div>
 
@@ -614,7 +622,9 @@ export default function Dashboard() {
                   {recentOrders.map(o => (
                     <div key={o.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.8fr) minmax(0, 0.85fr) minmax(0, 1.25fr) minmax(0, 0.85fr)', gap: 6, padding: '10px 0', borderBottom: '1px solid var(--muted)', alignItems: 'center' }}>
                       <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{o.order_number}</span>
-                      <span style={{ fontSize: 12, color: 'var(--muted-foreground)', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.payment_method}</span>
+                      <span style={{ fontSize: 12, color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {o.payment_method === 'gcash' ? 'GCash' : o.payment_method === 'maya' ? 'Maya' : o.payment_method === 'card' ? 'Card' : 'Cash'}
+                      </span>
                       <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>&#8369;{Number(o.total_amount).toLocaleString()}</span>
                       <span style={{ fontSize: 11, padding: '3px 7px', borderRadius: 20, background: o.status === 'void' ? '#fce8e8' : '#e8f5e9', color: o.status === 'void' ? '#c0392b' : '#2e7d32', fontWeight: 600, textAlign: 'center', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.status === 'void' ? 'Void' : 'Paid'}</span>
                     </div>

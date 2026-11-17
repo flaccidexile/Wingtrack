@@ -805,6 +805,7 @@ export default function MenuManager() {
         }}
       >
         <div>
+          <p className="overline" style={{ marginBottom: 6, textDecoration: 'none' }}>Wing&apos;s Zone · Menu Catalog</p>
           <h1
             style={{
               fontFamily: 'Inter',
@@ -817,7 +818,7 @@ export default function MenuManager() {
             Menu Items
           </h1>
           <p style={{ fontSize: 15, color: 'var(--muted-foreground)' }}>
-            Add new food items, update prices, configure raw ingredient consumption, and toggle POS availability.
+            Manage Wing&apos;s Zone food items, beverages, pricing, raw ingredient recipes, and POS availability.
           </p>
         </div>
 

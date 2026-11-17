@@ -9,6 +9,14 @@ interface LoginPageProps {
 
 type LoginTab = 'email' | 'otp'
 
+/**
+ * Public self-service sign-up (and Google OAuth) is off by default: Wing's Zone
+ * staff accounts are provisioned by an administrator in Staff Manager. Set
+ * VITE_ALLOW_PUBLIC_SIGNUP=true in client/.env.local (and ALLOW_PUBLIC_SIGNUP=true
+ * in server/.env) to bring the sign-up link and Google button back.
+ */
+const ALLOW_PUBLIC_SIGNUP = import.meta.env.VITE_ALLOW_PUBLIC_SIGNUP === 'true'
+
 /* ── Card glyphs ─────────────────────────────────────────────
  * Defined once here rather than inline at each use, because the mail glyph
  * appears in the segmented control AND as the field's leading icon, and the
@@ -557,8 +565,8 @@ export default function LoginPage({ onSwitchToSignUp, onForgotPassword }: LoginP
           </>
         )}
 
-        {/* ── Google — password sign-in only ─────────────── */}
-        {tab === 'email' && (
+        {/* ── Google — password sign-in only (hidden while sign-up is admin-only) ── */}
+        {ALLOW_PUBLIC_SIGNUP && tab === 'email' && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
@@ -588,8 +596,8 @@ export default function LoginPage({ onSwitchToSignUp, onForgotPassword }: LoginP
           </>
         )}
 
-        {/* Switch to Sign Up */}
-        {onSwitchToSignUp && (
+        {/* Switch to Sign Up — only when public sign-up is enabled */}
+        {ALLOW_PUBLIC_SIGNUP && onSwitchToSignUp ? (
           <div style={{ textAlign: 'center', marginTop: 2 }}>
             <span style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Don't have an account? </span>
             <button
@@ -604,6 +612,10 @@ export default function LoginPage({ onSwitchToSignUp, onForgotPassword }: LoginP
               Sign up here
             </button>
           </div>
+        ) : (
+          <p style={{ textAlign: 'center', marginTop: 2, fontSize: 13, color: 'var(--muted-foreground)' }}>
+            No account yet? Staff accounts are created by your administrator.
+          </p>
         )}
 
       </form>

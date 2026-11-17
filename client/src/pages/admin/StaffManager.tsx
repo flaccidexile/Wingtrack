@@ -498,7 +498,7 @@ export default function StaffManager() {
       <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 className="page-title" style={{ fontSize: 26 }}>Staff Manager</h1>
-          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Provision, manage and monitor Wingtrack staff accounts</p>
+          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Provision, manage and monitor Wing's Zone staff accounts</p>
         </div>
         <button
           id="btn-add-staff"

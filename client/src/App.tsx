@@ -70,10 +70,10 @@ function AppContent() {
               <line x1="12" y1="20" x2="12.01" y2="20"/>
             </svg>
           </div>
-          <h2 style={{ fontFamily: 'Inter', fontSize: 22, fontWeight: 700, marginBottom: 10, color: 'var(--foreground)' }}>Access Denied</h2>
+          <h2 style={{ fontFamily: 'Inter', fontSize: 22, fontWeight: 700, marginBottom: 10, color: 'var(--foreground)' }}>Connection Required</h2>
           <p style={{ fontSize: 14, color: '#ef4444', fontWeight: 600, marginBottom: 8 }}>Internet is not connected</p>
-          <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 24, lineHeight: 1.5 }}>
-            You cannot access WINGTRACK while offline. Please check your network connection.
+          <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 24, lineHeight: 1.55 }}>
+            WINGTRACK requires an active internet connection to sync with the cloud database. Please use Wing&apos;s Zone&apos;s manual procedures until connectivity is restored, then encode any offline transactions and stock changes into the system.
           </p>
           {offlineNotice && (
             <p
@@ -224,7 +224,7 @@ function AppContent() {
   // ── Unauthenticated pages ─────────────────────────────────
   if (authMode === 'forgot') return <ForgotPasswordPage onBack={() => setAuthMode('login')} />
 
-  if (authMode === 'signup') {
+  if (authMode === 'signup' && import.meta.env.VITE_ALLOW_PUBLIC_SIGNUP === 'true') {
     return (
       <SignUpPage
         onSwitchToLogin={() => setAuthMode('login')}

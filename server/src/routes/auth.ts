@@ -34,6 +34,28 @@ function isSelfSignupRole(value: unknown): value is SelfSignupRole {
   return typeof value === 'string' && (SELF_SIGNUP_ROLES as readonly string[]).includes(value)
 }
 
+/**
+ * Whether the public self-service sign-up flow is enabled.
+ *
+ * Off by default: Wing's Zone staff accounts are provisioned exclusively by an
+ * administrator (POST /api/staff), matching the RBAC design in the manuscript
+ * and the `staff_profiles` comment in schema.sql. Set ALLOW_PUBLIC_SIGNUP=true
+ * in server/.env to re-enable the public /register-* endpoints.
+ */
+const ALLOW_PUBLIC_SIGNUP = process.env.ALLOW_PUBLIC_SIGNUP === 'true'
+
+const SIGNUP_DISABLED_MESSAGE =
+  'Public sign-up is disabled. Staff accounts are created by an administrator — please contact your manager.'
+
+/** Rejects self-registration requests while public sign-up is disabled. */
+function requireSelfSignupEnabled(_req: Request, res: Response, next: () => void): void {
+  if (!ALLOW_PUBLIC_SIGNUP) {
+    res.status(403).json({ message: SIGNUP_DISABLED_MESSAGE })
+    return
+  }
+  next()
+}
+
 /** How long one address must wait between reset-link requests. */
 const RESET_COOLDOWN_MS = 60_000
 
@@ -152,7 +174,7 @@ router.post('/check-registered', async (req: Request, res: Response): Promise<vo
  * OTP via Supabase Auth admin, emails it using custom SMTP if configured, or
  * makes it available for development testing.
  */
-router.post('/register-otp', async (req: Request, res: Response): Promise<void> => {
+router.post('/register-otp', requireSelfSignupEnabled, async (req: Request, res: Response): Promise<void> => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
   const password = typeof req.body?.password === 'string' ? req.body.password : ''
   const fullName = typeof req.body?.full_name === 'string' ? req.body.full_name.trim() : ''
@@ -259,7 +281,7 @@ router.post('/register-otp', async (req: Request, res: Response): Promise<void> 
 /**
  * POST /api/auth/resend-registration-otp — Public.
  */
-router.post('/resend-registration-otp', async (req: Request, res: Response): Promise<void> => {
+router.post('/resend-registration-otp', requireSelfSignupEnabled, async (req: Request, res: Response): Promise<void> => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
   if (!email || !email.includes('@')) {
     res.status(400).json({ message: 'A valid email address is required.' })
@@ -339,7 +361,7 @@ router.post('/resend-registration-otp', async (req: Request, res: Response): Pro
  * Validates the 6-digit registration OTP, confirms the Supabase Auth user,
  * and provisions the staff_profiles row with their chosen role.
  */
-router.post('/verify-registration-otp', async (req: Request, res: Response): Promise<void> => {
+router.post('/verify-registration-otp', requireSelfSignupEnabled, async (req: Request, res: Response): Promise<void> => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
   const token = typeof req.body?.token === 'string' ? req.body.token.trim() : ''
   const fullName = typeof req.body?.full_name === 'string' ? req.body.full_name.trim() : ''
@@ -759,7 +781,14 @@ router.post('/provision-self', requireAuth, async (req: AuthenticatedRequest, re
       return
     }
 
-    // 3. Fresh account — create the profile. Role is clamped; anything
+    // 3. Fresh account — create the profile. Only allowed while public
+    //    sign-up is enabled; otherwise accounts must be admin-provisioned.
+    if (!ALLOW_PUBLIC_SIGNUP) {
+      res.status(403).json({ message: SIGNUP_DISABLED_MESSAGE })
+      return
+    }
+
+    // Role is clamped; anything
     //    unrecognised (including a hand-crafted "admin") falls back to cashier.
     const requestedRole = body.role
     const role: SelfSignupRole = isSelfSignupRole(requestedRole) ? requestedRole : 'cashier'

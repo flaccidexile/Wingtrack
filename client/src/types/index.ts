@@ -80,7 +80,7 @@ export interface Order {
   cashier_id: string
   cashier?: StaffProfile
   status: 'open' | 'completed' | 'void'
-  payment_method: 'cash' | 'gcash' | 'card'
+  payment_method: 'cash' | 'gcash' | 'maya' | 'card'
   subtotal: number
   vat_amount: number
   total_amount: number
@@ -121,7 +121,7 @@ export interface CartItem extends Product {
 // API payload shapes
 export interface CheckoutPayload {
   items: { product_id: string; quantity: number }[]
-  payment_method: 'cash' | 'gcash' | 'card'
+  payment_method: 'cash' | 'gcash' | 'maya' | 'card'
   notes?: string
 }
 

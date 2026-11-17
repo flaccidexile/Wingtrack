@@ -94,7 +94,7 @@ export default function AuthShell({ children }: AuthShellProps) {
             The whole shop,<br /><span>on one screen.</span>
           </h2>
           <p className="auth-brand__tagline">
-            Point of sale, stock, and daily takings for Wings Zone — the same
+            Point of sale, stock, and daily takings for Wing's Zone — the same
             numbers your counter sees, from anywhere.
           </p>
           <ul className="auth-brand__features">
@@ -109,7 +109,7 @@ export default function AuthShell({ children }: AuthShellProps) {
 
         <p className="auth-brand__foot">
           <span className="auth-brand__footrule" aria-hidden="true" />
-          Wingtrack · Staff Portal
+          WINGTRACK · Wing's Zone Staff Portal
         </p>
       </aside>
 

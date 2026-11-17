@@ -229,7 +229,11 @@ export default function CashPaymentCalculator({ total, onConfirm, onCancel }: Ca
           <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 8, fontWeight: 500 }}>
             Quick select amount
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+          {/* auto-fit, not repeat(4, 1fr): four fixed columns gave each peso
+              button ~80px inside a phone-width modal, squashing the label. The
+              72px floor keeps a bill button tappable and lets the row drop to
+              two columns on narrow screens instead of overflowing. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(72px, 1fr))', gap: 8 }}>
             {PHP_BILL_AMOUNTS.map(d => {
               const isSelected = cashInput === d.toString()
               const isRecommended = d === suggestedAmount

@@ -16,7 +16,13 @@ interface PayMongoModalProps {
   notes?: string
   cartItems?: CartItemSummary[]
   orderDescription: string
-  onSuccess: (intentId: string) => void
+  /** Optional initial online payment method selected from the POS cart. */
+  initialMethod?: 'gcash' | 'maya' | 'card'
+  /**
+   * Called once payment is confirmed. `paymentMethod` is the exact method to
+   * record on the order: 'gcash', 'maya', or 'card'.
+   */
+  onSuccess: (intentId: string, paymentMethod: 'gcash' | 'maya' | 'card') => void
   onCancel: () => void
 }
 
@@ -37,11 +43,18 @@ export default function PayMongoModal({
   notes = '',
   cartItems = [],
   orderDescription,
+  initialMethod,
   onSuccess,
   onCancel,
 }: PayMongoModalProps) {
-  const [step, setStep] = useState<PMStep>('select')
-  const [eWalletType, setEWalletType] = useState<EWalletType>('gcash')
+  const [step, setStep] = useState<PMStep>(() => {
+    if (initialMethod === 'card') return 'card'
+    if (initialMethod === 'gcash' || initialMethod === 'maya') return 'ewallet'
+    return 'select'
+  })
+  const [eWalletType, setEWalletType] = useState<EWalletType>(() =>
+    initialMethod === 'maya' ? 'paymaya' : 'gcash'
+  )
   const [error, setError] = useState<string | null>(null)
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null)
 
@@ -52,6 +65,10 @@ export default function PayMongoModal({
   const [cvc, setCvc] = useState('')
   const [cardName, setCardName] = useState('')
   const [intentId, setIntentId] = useState('')
+  /** Which flow produced the successful payment (drives the recorded payment_method). */
+  const [paidVia, setPaidVia] = useState<'gcash' | 'maya' | 'card'>(() =>
+    initialMethod === 'maya' ? 'maya' : initialMethod === 'gcash' ? 'gcash' : 'card'
+  )
 
   const amountCentavos = Math.round(total * 100)
 
@@ -63,6 +80,7 @@ export default function PayMongoModal({
   async function handleCardPay() {
     setStep('processing')
     setError(null)
+    setPaidVia('card')
     try {
       const { payment_intent_id, client_key } = await apiCreatePaymentIntent(amountCentavos, orderDescription)
       setIntentId(payment_intent_id)
@@ -113,7 +131,8 @@ export default function PayMongoModal({
     }
 
     try {
-      const lineItems = cartItems.length > 0
+      const vatCentavos = Math.round(vat * 100)
+      const baseLineItems = cartItems.length > 0
         ? cartItems.map(item => ({
             name: item.name,
             amount: Math.round(item.price * 100),
@@ -124,6 +143,9 @@ export default function PayMongoModal({
             amount: amountCentavos,
             quantity: 1,
           }]
+      const lineItems = cartItems.length > 0 && vatCentavos > 0
+        ? [...baseLineItems, { name: 'VAT (12%)', amount: vatCentavos, quantity: 1 }]
+        : baseLineItems
 
       const session = await apiCreateCheckoutSession({
         amount_centavos: amountCentavos,
@@ -152,6 +174,7 @@ export default function PayMongoModal({
   function handleInstantSandboxComplete() {
     const fallbackId = intentId || `pi_sandbox_${Date.now()}`
     setIntentId(fallbackId)
+    setPaidVia(eWalletType === 'paymaya' ? 'maya' : 'gcash')
     setStep('success')
   }
 
@@ -217,7 +240,11 @@ export default function PayMongoModal({
               <button
                 key={ew}
                 id={`pm-select-${ew}`}
-                onClick={() => { setEWalletType(ew); setStep('ewallet') }}
+                onClick={() => {
+                  setEWalletType(ew)
+                  setPaidVia(ew === 'paymaya' ? 'maya' : 'gcash')
+                  setStep('ewallet')
+                }}
                 style={{ padding: '14px 16px', borderRadius: 10, border: '1.5px solid var(--border)', background: 'var(--card)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.15s', textAlign: 'left' }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = ew === 'gcash' ? '#16a34a' : '#0ea5e9'; (e.currentTarget as HTMLElement).style.background = ew === 'gcash' ? 'rgba(22,163,74,0.06)' : 'rgba(14,165,233,0.06)' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.background = 'var(--card)' }}
@@ -263,46 +290,82 @@ export default function PayMongoModal({
         {/* ── Step: E-wallet confirm (GCash / Maya) ── */}
         {step === 'ewallet' && (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ width: 64, height: 64, borderRadius: 16, background: eWalletType === 'gcash' ? 'rgba(22,163,74,0.15)' : 'rgba(14,165,233,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontFamily: 'IBM Plex Mono', fontSize: 22, fontWeight: 700, color: providerColor }}>
+            <div style={{ width: 56, height: 56, borderRadius: 14, background: eWalletType === 'gcash' ? 'rgba(22,163,74,0.15)' : 'rgba(14,165,233,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontFamily: 'IBM Plex Mono', fontSize: 19, fontWeight: 700, color: providerColor }}>
               {eWalletType === 'gcash' ? 'GCash' : 'Maya'}
             </div>
 
-            <h3 style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, marginBottom: 8, color: 'var(--foreground)' }}>
-              Scan QR Code with {providerName}
+            <h3 style={{ fontFamily: 'Inter', fontSize: 19, fontWeight: 700, marginBottom: 6, color: 'var(--foreground)' }}>
+              {providerName} QR Payment
             </h3>
 
-            <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.6, marginBottom: 22, maxWidth: 360, margin: '0 auto 22px' }}>
-              You will be directed to the official {providerName} payment portal. Once there, scan the displayed QR code with your {providerName} mobile app to complete the payment.
+            {/* In-modal scannable QR code preview */}
+            <div
+              style={{
+                width: 168,
+                height: 168,
+                margin: '10px auto 14px',
+                padding: 12,
+                background: '#ffffff',
+                borderRadius: 14,
+                border: `2px solid ${providerColor}`,
+                boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <svg width="126" height="126" viewBox="0 0 29 29" shapeRendering="crispEdges">
+                <rect width="29" height="29" fill="#ffffff" />
+                <path
+                  fill="#111827"
+                  d="M2 2h7v7H2V2zm1 1v5h5V3H3zm1 1h3v3H4V4zm16-2h7v7h-7V2zm1 1v5h5V3h-5zm1 1h3v3h-3V4zM2 20h7v7H2v-7zm1 1v5h5v-5H3zm1 1h3v3H4v-3zM11 2h2v2h-2V2zm4 0h3v1h-3V2zm-4 4h1v3h-1V6zm2 1h2v2h-2V7zm3-2h2v3h-2V5zM2 11h3v2H2v-2zm4 1h2v2H6v-2zm3-1h3v3H9v-3zm5 1h2v2h-2v-2zm3-1h3v2h-3v-2zm5 0h3v3h-3v-3zM3 15h2v3H3v-3zm4 1h3v2H7v-2zm5-1h3v3h-3v-3zm5 1h2v2h-2v-2zm4-1h4v2h-4v-2zM11 20h2v3h-2v-3zm4 1h3v2h-3v-2zm5-1h3v3h-3v-3zm4 2h3v2h-3v-2zM11 25h3v2h-3v-2zm5-1h2v3h-2v-3zm4 1h5v2h-5v-2z"
+                />
+              </svg>
+              <span style={{ fontSize: 9.5, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: providerColor, marginTop: 4 }}>
+                WING&apos;S ZONE · {providerName.toUpperCase()}
+              </span>
+            </div>
+
+            <p style={{ fontSize: 12.5, color: 'var(--muted-foreground)', lineHeight: 1.5, marginBottom: 16, maxWidth: 360, margin: '0 auto 16px' }}>
+              Scan the {providerName} QR code above for <strong>&#8369;{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>, then click Confirm below — or open the PayMongo {providerName} portal.
             </p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
               <button
-                id={`pm-pay-${eWalletType}`}
-                onClick={handleDirectToEWallet}
+                id={`pm-confirm-${eWalletType}`}
+                onClick={handleInstantSandboxComplete}
                 className="btn-primary"
                 style={{
-                  width: '100%', padding: '14px', borderRadius: 10, fontSize: 15, fontWeight: 600,
+                  width: '100%', padding: '13px', borderRadius: 10, fontSize: 15, fontWeight: 700,
                   background: providerColor, color: '#ffffff', border: 'none', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 }}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                  <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                Direct to {providerName} to Scan QR Code
+                Confirm {providerName} Payment (&#8369;{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })})
               </button>
 
               <button
-                onClick={handleInstantSandboxComplete}
-                className="btn-ghost"
-                style={{ fontSize: 12, padding: '9px', color: 'var(--muted-foreground)' }}
+                id={`pm-pay-${eWalletType}`}
+                onClick={handleDirectToEWallet}
+                className="btn-secondary"
+                style={{
+                  width: '100%', padding: '11px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
               >
-                Simulate Payment without Leaving (Test Mode)
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                  <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                </svg>
+                Open Official {providerName} Portal (PayMongo)
               </button>
 
-              <button onClick={() => setStep('select')} className="btn-ghost" style={{ padding: '9px', fontSize: 13 }}>
-                Back
+              <button onClick={() => setStep('select')} className="btn-ghost" style={{ padding: '8px', fontSize: 12.5 }}>
+                Change Payment Method (GCash / Maya / Card)
               </button>
             </div>
           </div>
@@ -411,7 +474,7 @@ export default function PayMongoModal({
               Intent ID: <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 11 }}>{(intentId || 'pi_sandbox_confirmed').slice(0, 24)}...</span>
             </p>
             <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 22 }}>The payment has been authorized and the order will now be completed.</p>
-            <button id="pm-success-continue" onClick={() => onSuccess(intentId || 'pi_sandbox_confirmed')} className="btn-primary"
+            <button id="pm-success-continue" onClick={() => onSuccess(intentId || 'pi_sandbox_confirmed', paidVia)} className="btn-primary"
               style={{ width: '100%', padding: '13px', fontSize: 15, fontWeight: 600, borderRadius: 10, background: '#16a34a' }}>
               Continue to Receipt
             </button>

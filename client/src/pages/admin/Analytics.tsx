@@ -144,8 +144,9 @@ export default function Analytics() {
       {/* Header */}
       <div style={{ marginBottom: 26, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="page-title" style={{ fontSize: 26 }}>Sales Analytics</h1>
-          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Performance overview for Wingtrack</p>
+          <p className="overline" style={{ marginBottom: 6, textDecoration: 'none' }}>Wing&apos;s Zone · Analytics</p>
+          <h1 className="page-title" style={{ fontSize: 26 }}>Wing&apos;s Zone — Sales Analytics</h1>
+          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Performance overview for Wing&apos;s Zone · Powered by WINGTRACK</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {PERIODS.map(p => (
@@ -165,7 +166,10 @@ export default function Analytics() {
       ) : (
         <>
           {/* Summary KPIs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 26 }}>
+          {/* Summary KPIs. Was `repeat(4, 1fr)`, which forced four columns on a
+              390px phone — each card ~78px wide, with a 28px number inside it.
+              auto-fit + a 180px floor drops to two columns, then one. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 26 }}>
             {[
               { label: 'Total Revenue',   val: `\u20B1${(totalRev/1000).toFixed(0)}k`, note: period,              color: '#9b5e28' },
               { label: 'Total Orders',    val: totalOrd.toLocaleString(),              note: 'Completed',         color: '#c47a2e' },

@@ -381,8 +381,9 @@ export default function Settings() {
   return (
     <div className="page">
       <div style={{ marginBottom: 24 }}>
+        <p className="overline" style={{ marginBottom: 6, textDecoration: 'none' }}>Wing&apos;s Zone · Account</p>
         <h1 className="page-title" style={{ fontSize: 26 }}>Settings</h1>
-        <p className="page-subtitle">Manage your account and profile details</p>
+        <p className="page-subtitle">Manage your Wing&apos;s Zone staff account and profile details</p>
       </div>
 
       {/* ── My Profile ──────────────────────────────────────── */}

@@ -52,7 +52,12 @@ const DRAWER_BREAKPOINT = 1024
 
 export default function AppShell() {
   const { role } = useAuth()
-  const [page, setPage] = useState<Page>(role ? DEFAULT_PAGE[role] : 'dashboard')
+  const [page, setPage] = useState<Page>(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('paymongo=')) {
+      return 'pos'
+    }
+    return role ? DEFAULT_PAGE[role] : 'dashboard'
+  })
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [isNarrow, setIsNarrow] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < DRAWER_BREAKPOINT,
@@ -165,7 +170,7 @@ export default function AppShell() {
             >
               <img
                 src="/logo.png"
-                alt="Wingtrack Logo"
+                alt="Wing's Zone Logo"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             </div>

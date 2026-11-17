@@ -372,18 +372,18 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
               >
                 <img
                   src="/logo.png"
-                  alt="Wingtrack Logo"
+                  alt="Wing's Zone Logo"
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontFamily: 'Inter', fontSize: 21, fontWeight: 800, color: 'var(--sidebar-foreground)', letterSpacing: '-0.03em' }}>
-                    WINGTRACK
+                  <span style={{ fontFamily: 'Inter', fontSize: 19, fontWeight: 800, color: 'var(--sidebar-foreground)', letterSpacing: '-0.02em' }}>
+                    WING&apos;S ZONE
                   </span>
                 </div>
-                <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--sidebar-active)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
-                  POS &amp; INVENTORY
+                <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 9.5, color: 'var(--sidebar-active)', letterSpacing: '0.09em', textTransform: 'uppercase', fontWeight: 600 }}>
+                  WINGTRACK POS &amp; INVENTORY
                 </span>
               </div>
             </div>

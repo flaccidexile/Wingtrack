@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { apiAdjustInventory, apiGetInventoryMovements, apiCreateInventoryItem } from '@/lib/api'
@@ -8,6 +8,9 @@ import EmptyState, { EMPTY_ICONS } from '@/components/ui/EmptyState'
 import type { InventoryItem, InventoryAdjustmentPayload, InventoryMovement } from '@/types'
 
 const CATS = ['All', 'Proteins', 'Sauces', 'Sides', 'Produce', 'Cooking', 'Spices', 'Staples', 'Packaging']
+
+/** Rows per page of the audit trail. Matches the server's default window. */
+const MOVEMENTS_PAGE_SIZE = 100
 
 const STATUS_STYLES: Record<string, { label: string; bg: string; color: string }> = {
   ok:       { label: 'In Stock', bg: '#e8f5e9', color: '#15803d' },
@@ -175,8 +178,13 @@ export default function Inventory() {
 
   // Movements audit log state
   const [movements, setMovements] = useState<InventoryMovement[]>([])
+  const [movementsTotal, setMovementsTotal] = useState(0)
+  const [movementsPage, setMovementsPage] = useState(0)
   const [movementsLoading, setMovementsLoading] = useState(false)
   const [movementsError, setMovementsError] = useState<string | null>(null)
+  /** Read by the realtime handler, which must not close over a stale page. */
+  const movementsPageRef = useRef(0)
+  useEffect(() => { movementsPageRef.current = movementsPage }, [movementsPage])
 
   // Add Item modal state
   const [showAddModal, setShowAddModal] = useState(false)
@@ -214,12 +222,17 @@ export default function Inventory() {
     setLoading(false)
   }, [])
 
-  const fetchMovements = useCallback(async () => {
+  const fetchMovements = useCallback(async (pageIndex = 0) => {
     setMovementsLoading(true)
     setMovementsError(null)
     try {
-      const data = await apiGetInventoryMovements()
-      setMovements(data)
+      const page = await apiGetInventoryMovements({
+        limit: MOVEMENTS_PAGE_SIZE,
+        offset: pageIndex * MOVEMENTS_PAGE_SIZE,
+      })
+      setMovements(page.movements)
+      setMovementsTotal(page.total)
+      setMovementsPage(pageIndex)
     } catch (err: unknown) {
       setMovementsError(err instanceof Error ? err.message : 'Failed to load movements')
     } finally {
@@ -233,7 +246,7 @@ export default function Inventory() {
 
   useEffect(() => {
     if (activeTab === 'movements') {
-      fetchMovements()
+      fetchMovements(0)
     }
   }, [activeTab, fetchMovements])
 
@@ -243,7 +256,9 @@ export default function Inventory() {
       .channel('inventory-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => {
         fetchInventory()
-        if (activeTab === 'movements') fetchMovements()
+        // Refresh whichever page the operator is actually looking at, rather
+        // than silently jumping them back to page 1 of the audit trail.
+        if (activeTab === 'movements') fetchMovements(movementsPageRef.current)
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
@@ -287,7 +302,7 @@ export default function Inventory() {
       setAdjustQty('')
       setAdjustNotes('')
       await fetchInventory()
-      if (activeTab === 'movements') await fetchMovements()
+      if (activeTab === 'movements') await fetchMovements(movementsPage)
 
       // Broadcast inventory notification to Dashboard & all windows
       dispatchNotification({
@@ -386,7 +401,7 @@ export default function Inventory() {
   </style>
 </head>
 <body>
-  <h1>WINGTRACK — Inventory Movement Report</h1>
+  <h1>Wing's Zone — Inventory Movement Report</h1>
   <p class="meta">Period: ${periodLabel} &nbsp;|&nbsp; Generated: ${now.toLocaleString('en-PH')} &nbsp;|&nbsp; ${filtered.length} record(s)</p>
   <table>
     <thead><tr><th>Timestamp</th><th>Item</th><th>Type</th><th>Change</th><th>Before → After</th><th>Staff</th><th>Notes</th></tr></thead>
@@ -409,11 +424,12 @@ export default function Inventory() {
       {/* Header */}
       <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
+          <p className="overline" style={{ marginBottom: 6, textDecoration: 'none' }}>Wing&apos;s Zone · Stock Control</p>
           <h1 className="page-title" style={{ fontSize: 26 }}>
             Inventory Management
           </h1>
           <p className="page-subtitle">
-            {items.length} raw ingredients & packaging items · Real-time stock tracking
+            {items.length} Wing&apos;s Zone raw ingredients &amp; packaging items · Real-time stock tracking
           </p>
         </div>
 
@@ -843,6 +859,54 @@ export default function Inventory() {
                 </div>
               )}
               </div>
+
+              {/* Pager. The trail is append-heavy and never pruned, so it is
+                  walked a page at a time rather than truncated at 100 rows. */}
+              {movementsTotal > MOVEMENTS_PAGE_SIZE && (
+                <div
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 12, flexWrap: 'wrap', padding: '12px 20px',
+                    borderTop: '1px solid var(--border)',
+                  }}
+                >
+                  <span style={{ fontSize: 12, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}>
+                    Showing {movementsPage * MOVEMENTS_PAGE_SIZE + 1}
+                    –{Math.min((movementsPage + 1) * MOVEMENTS_PAGE_SIZE, movementsTotal)} of{' '}
+                    {movementsTotal.toLocaleString()}
+                  </span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      id="movements-prev"
+                      onClick={() => fetchMovements(movementsPage - 1)}
+                      disabled={movementsPage === 0 || movementsLoading}
+                      style={{
+                        fontSize: 12, padding: '6px 14px', borderRadius: 6, fontWeight: 600,
+                        border: '1px solid var(--border)', background: 'var(--card)',
+                        color: movementsPage === 0 ? 'var(--muted-foreground)' : 'var(--foreground)',
+                        cursor: movementsPage === 0 || movementsLoading ? 'not-allowed' : 'pointer',
+                        opacity: movementsPage === 0 ? 0.5 : 1,
+                      }}
+                    >
+                      Previous
+                    </button>
+                    <button
+                      id="movements-next"
+                      onClick={() => fetchMovements(movementsPage + 1)}
+                      disabled={(movementsPage + 1) * MOVEMENTS_PAGE_SIZE >= movementsTotal || movementsLoading}
+                      style={{
+                        fontSize: 12, padding: '6px 14px', borderRadius: 6, fontWeight: 600,
+                        border: '1px solid var(--border)', background: 'var(--card)',
+                        color: (movementsPage + 1) * MOVEMENTS_PAGE_SIZE >= movementsTotal ? 'var(--muted-foreground)' : 'var(--foreground)',
+                        cursor: (movementsPage + 1) * MOVEMENTS_PAGE_SIZE >= movementsTotal || movementsLoading ? 'not-allowed' : 'pointer',
+                        opacity: (movementsPage + 1) * MOVEMENTS_PAGE_SIZE >= movementsTotal ? 0.5 : 1,
+                      }}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -891,6 +955,24 @@ export default function Inventory() {
               <div>
                 <label htmlFor="adj-notes" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>Notes (optional)</label>
                 <input id="adj-notes" className="input" type="text" placeholder="e.g. Delivery from supplier" value={adjustNotes} onChange={e => setAdjustNotes(e.target.value)} style={{ padding: '11px 14px', fontSize: 14 }} />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  {['Post-offline manual count', 'Initial record encoding', 'Supplier delivery', 'Spoilage / kitchen waste'].map(preset => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setAdjustNotes(preset)}
+                      style={{
+                        fontSize: 11, padding: '4px 9px', borderRadius: 999,
+                        border: '1px solid var(--border)',
+                        background: adjustNotes === preset ? 'rgba(234,88,12,0.12)' : 'var(--muted)',
+                        color: adjustNotes === preset ? 'var(--primary)' : 'var(--muted-foreground)',
+                        cursor: 'pointer', fontWeight: 500,
+                      }}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
               </div>
               {adjustModal.type === 'restock' && (
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: 'rgba(21,128,61,0.07)', border: '1px solid rgba(21,128,61,0.2)', borderRadius: 8 }}>
