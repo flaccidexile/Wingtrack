@@ -251,10 +251,10 @@ function MenuCard({
         </span>
         <div style={{ textAlign: 'right' }}>
           <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 700, fontSize: 16, color: 'var(--foreground)' }}>
-            &#8369;{Number(prod.price).toFixed(2)}
+            ₱{Number(prod.price).toFixed(2)}
           </span>
           <div style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}>
-            Cost: &#8369;{Number(prod.unit_cost || 0).toFixed(2)}
+            Cost: ₱{Number(prod.unit_cost || 0).toFixed(2)}
           </div>
         </div>
       </div>
@@ -265,7 +265,7 @@ function MenuCard({
           Profit Margin
         </span>
         <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'IBM Plex Mono', color: margin.color }}>
-          {margin.label} ({margin.profit >= 0 ? '+' : ''}&#8369;{margin.profit.toFixed(2)}/unit)
+          {margin.label} ({margin.profit >= 0 ? '+' : ''}₱{margin.profit.toFixed(2)}/unit)
         </span>
       </div>
 
@@ -1120,12 +1120,12 @@ export default function MenuManager() {
 
                       {/* Price */}
                       <td style={{ padding: '16px 20px', fontFamily: 'IBM Plex Mono', fontWeight: 700, fontSize: 14, color: 'var(--foreground)' }}>
-                        &#8369;{Number(prod.price).toFixed(2)}
+                        ₱{Number(prod.price).toFixed(2)}
                       </td>
 
                       {/* Unit Cost */}
                       <td style={{ padding: '16px 20px', fontFamily: 'IBM Plex Mono', fontWeight: 600, fontSize: 14, color: 'var(--muted-foreground)' }}>
-                        &#8369;{Number(prod.unit_cost || 0).toFixed(2)}
+                        ₱{Number(prod.unit_cost || 0).toFixed(2)}
                       </td>
 
                       {/* Margin */}
@@ -1450,7 +1450,7 @@ export default function MenuManager() {
                   </label>
                   <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: 12, top: 10, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', fontWeight: 600 }}>
-                      &#8369;
+                      ₱
                     </span>
                     <input
                       className="input"
@@ -1482,7 +1482,7 @@ export default function MenuManager() {
                   </label>
                   <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: 12, top: 10, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', fontWeight: 600 }}>
-                      &#8369;
+                      ₱
                     </span>
                     <input
                       className="input"
@@ -1549,7 +1549,7 @@ export default function MenuManager() {
                               {margin.label}
                             </span>
                             <span style={{ fontSize: 11.5, color: margin.color, opacity: 0.9 }}>
-                              ({margin.profit >= 0 ? '+' : ''}&#8369;{margin.profit.toFixed(2)}/unit profit)
+                              ({margin.profit >= 0 ? '+' : ''}₱{margin.profit.toFixed(2)}/unit profit)
                             </span>
                           </div>
                         ) : (
@@ -1576,7 +1576,7 @@ export default function MenuManager() {
                             Selling Price
                           </p>
                           <p style={{ fontSize: 13, fontWeight: 700, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)' }}>
-                            &#8369;{p.toFixed(2)}
+                            ₱{p.toFixed(2)}
                           </p>
                         </div>
                         <div>
@@ -1675,10 +1675,11 @@ export default function MenuManager() {
                               <div
                                 key={idx}
                                 style={{
-                                  background: 'rgba(0,0,0,0.02)',
-                                  padding: '8px 10px',
-                                  borderRadius: 6,
+                                  background: 'var(--card)',
+                                  padding: '10px 12px',
+                                  borderRadius: 8,
                                   border: '1px solid var(--border)',
+                                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                                 }}
                               >
                                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -1686,7 +1687,7 @@ export default function MenuManager() {
                                     className="input"
                                     value={row.inventory_id}
                                     onChange={e => updateRecipeRow(idx, 'inventory_id', e.target.value)}
-                                    style={{ flex: 2, padding: '7px 10px', fontSize: 13 }}
+                                    style={{ flex: 2.2, padding: '8px 10px', fontSize: 13, fontWeight: 500 }}
                                   >
                                     {inventoryList.map(inv => (
                                       <option key={inv.id} value={inv.id}>
@@ -1704,9 +1705,9 @@ export default function MenuManager() {
                                       placeholder="Qty"
                                       value={row.qty_per_unit}
                                       onChange={e => updateRecipeRow(idx, 'qty_per_unit', e.target.value)}
-                                      style={{ width: '100%', padding: '7px 10px', fontSize: 13, fontFamily: 'IBM Plex Mono' }}
+                                      style={{ width: '100%', padding: '8px 10px', fontSize: 13, fontFamily: 'IBM Plex Mono', fontWeight: 600 }}
                                     />
-                                    <span style={{ fontSize: 12, color: 'var(--muted-foreground)', minWidth: 30 }}>
+                                    <span style={{ fontSize: 12, color: 'var(--muted-foreground)', minWidth: 36, fontWeight: 500 }}>
                                       {selectedItem?.unit ?? ''}
                                     </span>
                                   </div>
@@ -1720,28 +1721,51 @@ export default function MenuManager() {
                                       color: '#b91c1c',
                                       cursor: 'pointer',
                                       fontSize: 16,
-                                      padding: '4px 8px',
+                                      padding: '4px 6px',
+                                      lineHeight: 1,
                                     }}
                                     title="Remove ingredient"
                                   >
-                                    &times;
+                                    ✕
                                   </button>
                                 </div>
 
-                                {/* Per-ingredient cost hint */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, paddingTop: 5, borderTop: '1px dashed var(--border)' }}>
-                                  <span style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}>
-                                    {invCost > 0
-                                      ? `&#8369;${invCost.toFixed(2)} / ${selectedItem?.unit ?? 'unit'} (inventory cost)`
-                                      : <span style={{ fontStyle: 'italic' }}>No unit cost set in inventory</span>}
+                                {/* Per-ingredient cost breakdown bar */}
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    marginTop: 8,
+                                    padding: '6px 10px',
+                                    borderRadius: 6,
+                                    background: 'var(--muted)',
+                                    fontSize: 12,
+                                  }}
+                                >
+                                  <span style={{ color: 'var(--muted-foreground)' }}>
+                                    {invCost > 0 ? (
+                                      <>
+                                        Unit Cost:{' '}
+                                        <strong style={{ color: 'var(--foreground)', fontFamily: 'IBM Plex Mono' }}>
+                                          ₱{invCost.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </strong>{' '}
+                                        per {selectedItem?.unit ?? 'unit'}
+                                      </>
+                                    ) : (
+                                      <span style={{ fontStyle: 'italic' }}>No unit cost set in inventory</span>
+                                    )}
                                   </span>
-                                  <span style={{
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    fontFamily: 'IBM Plex Mono',
-                                    color: lineCost > 0 ? 'var(--foreground)' : 'var(--muted-foreground)',
-                                  }}>
-                                    {lineCost > 0 ? `= &#8369;${lineCost.toFixed(2)}` : '—'}
+                                  <span
+                                    style={{
+                                      fontWeight: 700,
+                                      fontFamily: 'IBM Plex Mono',
+                                      color: lineCost > 0 ? 'var(--foreground)' : 'var(--muted-foreground)',
+                                    }}
+                                  >
+                                    {lineCost > 0
+                                      ? `Line Cost: ₱${lineCost.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                      : '—'}
                                   </span>
                                 </div>
                               </div>
@@ -1768,7 +1792,7 @@ export default function MenuManager() {
                                 </span>
                               </div>
                               <span style={{ fontSize: 13, fontWeight: 800, fontFamily: 'IBM Plex Mono', color: '#0369a1' }}>
-                                &#8369;{recipeCostTotal.toFixed(2)}
+                                ₱{recipeCostTotal.toFixed(2)}
                               </span>
                             </div>
                           )}
@@ -1795,7 +1819,7 @@ export default function MenuManager() {
                                   onClick={() => { setFormCost(recipeCostTotal.toFixed(2)); setCostManuallySet(false) }}
                                   style={{ fontSize: 11, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
                                 >
-                                  Use recipe cost (&#8369;{recipeCostTotal.toFixed(2)})
+                                  Use recipe cost (₱{recipeCostTotal.toFixed(2)})
                                 </button>
                               ) : (
                                 <button

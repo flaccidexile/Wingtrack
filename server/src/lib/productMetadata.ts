@@ -264,5 +264,58 @@ export function getAllInventoryMeta(): Record<string, InventoryItemMeta> {
   return { ...ensureInventoryMetaLoaded() }
 }
 
+// ── Order Extra Metadata (Order Type, Table #, SC/PWD Discount, Payment Ref) ──
+export interface OrderExtraMeta {
+  order_type?: 'dine_in' | 'take_out' | 'delivery'
+  table_number?: string | null
+  discount_type?: 'none' | 'senior' | 'pwd'
+  discount_id?: string | null
+  discount_amount?: number
+  payment_reference?: string | null
+}
+
+const ORDER_META_FILE = path.join(DATA_DIR, 'order_metadata.json')
+let orderMetaCache: Record<string, OrderExtraMeta> | null = null
+
+function ensureOrderMetaLoaded(): Record<string, OrderExtraMeta> {
+  if (orderMetaCache) return orderMetaCache
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true })
+    }
+    if (fs.existsSync(ORDER_META_FILE)) {
+      const raw = fs.readFileSync(ORDER_META_FILE, 'utf-8')
+      orderMetaCache = JSON.parse(raw)
+      return orderMetaCache || {}
+    }
+  } catch (err) {
+    console.error('[productMetadata] Failed to load order metadata cache:', err)
+  }
+  orderMetaCache = {}
+  return orderMetaCache
+}
+
+function persistOrderMeta(): void {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true })
+    }
+    fs.writeFileSync(ORDER_META_FILE, JSON.stringify(orderMetaCache || {}, null, 2), 'utf-8')
+  } catch (err) {
+    console.error('[productMetadata] Failed to persist order metadata cache:', err)
+  }
+}
+
+export function setOrderExtraMeta(orderId: string, meta: OrderExtraMeta): void {
+  const map = ensureOrderMetaLoaded()
+  map[orderId] = { ...meta }
+  persistOrderMeta()
+}
+
+export function getAllOrderExtraMeta(): Record<string, OrderExtraMeta> {
+  return { ...ensureOrderMetaLoaded() }
+}
+
+
 
 

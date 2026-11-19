@@ -993,9 +993,31 @@ export default function Inventory() {
           ) : (
             <div className="card" style={{ overflow: 'hidden' }}>
               <div className="scroll-x">
-              <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 65px 95px 155px 100px 140px 130px 90px 100px', gap: 0, padding: '12px 22px', borderBottom: '1px solid var(--border)', minWidth: 1060 }}>
-                {['Item Name', 'Unit', 'In Stock', 'Min / ROP & Reorder', 'Unit Cost', 'Batch Expiry', 'Supplier', 'Status', 'Actions'].map(h => (
-                  <span key={h} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(170px, 1.35fr) minmax(60px, 0.55fr) minmax(80px, 0.65fr) minmax(150px, 1.15fr) minmax(85px, 0.65fr) minmax(125px, 0.95fr) minmax(125px, 0.95fr) minmax(90px, 0.65fr) minmax(80px, 0.55fr)',
+                  gap: 16,
+                  padding: '13px 24px',
+                  borderBottom: '1px solid var(--border)',
+                  minWidth: 1080,
+                  alignItems: 'center',
+                }}
+              >
+                {['Item Name', 'Unit', 'In Stock', 'Min / ROP', 'Unit Cost', 'Batch Expiry', 'Supplier', 'Status', 'Actions'].map((h, idx) => (
+                  <span
+                    key={h}
+                    style={{
+                      fontSize: 11,
+                      fontFamily: 'IBM Plex Mono',
+                      color: 'var(--muted-foreground)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      textAlign: idx === 7 ? 'center' : idx === 8 ? 'right' : 'left',
+                    }}
+                  >
+                    {h}
+                  </span>
                 ))}
               </div>
               {filtered.map((item, i) => {
@@ -1008,15 +1030,20 @@ export default function Inventory() {
                   <div
                     key={item.id}
                     style={{
-                      display: 'grid', gridTemplateColumns: '1.8fr 65px 95px 155px 100px 140px 130px 90px 100px', gap: 0,
-                      padding: '14px 22px', borderBottom: i < filtered.length - 1 ? '1px solid var(--muted)' : 'none',
-                      alignItems: 'center', transition: 'background 0.1s', minWidth: 1060,
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(170px, 1.35fr) minmax(60px, 0.55fr) minmax(80px, 0.65fr) minmax(150px, 1.15fr) minmax(85px, 0.65fr) minmax(125px, 0.95fr) minmax(125px, 0.95fr) minmax(90px, 0.65fr) minmax(80px, 0.55fr)',
+                      gap: 16,
+                      padding: '14px 24px',
+                      borderBottom: i < filtered.length - 1 ? '1px solid var(--muted)' : 'none',
+                      alignItems: 'center',
+                      transition: 'background 0.1s',
+                      minWidth: 1080,
                     }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--muted)'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
                   >
-                    <div>
-                      <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)' }}>{item.name}</p>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
                       <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2 }}>{item.category}</p>
                     </div>
                     <span style={{ fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}>{item.unit}</span>
@@ -1041,7 +1068,7 @@ export default function Inventory() {
                         </button>
                       )}
                     </div>
-                    <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)' }}>&#8369;{Number(item.unit_cost).toLocaleString()}</span>
+                    <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)' }}>₱{Number(item.unit_cost).toLocaleString()}</span>
                     <div>
                       <div style={{ fontSize: 12, fontFamily: 'IBM Plex Mono', fontWeight: 600, color: 'var(--foreground)' }}>{exp.dateDisplay}</div>
                       <span
@@ -1053,13 +1080,15 @@ export default function Inventory() {
                         {exp.label}
                       </span>
                     </div>
-                    <span style={{ fontSize: 12, color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>{item.supplier ?? '-'}</span>
-                    <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20, fontWeight: 700, background: s.bg, color: s.color, textAlign: 'center', display: 'inline-block' }}>{s.label}</span>
-                    <div style={{ display: 'flex', gap: 6 }}>
+                    <span style={{ fontSize: 12, color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.supplier ?? '-'}</span>
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <span style={{ fontSize: 12, padding: '4px 12px', borderRadius: 20, fontWeight: 700, background: s.bg, color: s.color, textAlign: 'center', whiteSpace: 'nowrap' }}>{s.label}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                       <button
                         id={`inv-restock-${item.id}`}
                         onClick={() => openAdjustModal(item)}
-                        style={{ fontSize: 12, padding: '5px 11px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--primary)', cursor: 'pointer', fontWeight: 600 }}
+                        style={{ fontSize: 12, padding: '6px 14px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--primary)', cursor: 'pointer', fontWeight: 600 }}
                       >
                         Adjust
                       </button>
@@ -1103,7 +1132,7 @@ export default function Inventory() {
           ) : (
             <div className="card" style={{ overflow: 'hidden' }}>
               <div className="scroll-x">
-              <div style={{ display: 'grid', gridTemplateColumns: '150px 200px 110px 100px 140px 140px 1fr', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)', minWidth: 940 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(135px, 1fr) minmax(160px, 1.3fr) minmax(95px, 0.75fr) minmax(95px, 0.75fr) minmax(125px, 0.95fr) minmax(120px, 0.9fr) minmax(160px, 1.4fr)', gap: 16, padding: '13px 24px', borderBottom: '1px solid var(--border)', minWidth: 960, alignItems: 'center' }}>
                 {['Timestamp', 'Item', 'Type', 'Change', 'Before → After', 'Staff', 'Notes'].map(h => (
                   <span key={h} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
                 ))}
@@ -1124,9 +1153,9 @@ export default function Inventory() {
                   <div
                     key={m.id}
                     style={{
-                      display: 'grid', gridTemplateColumns: '150px 200px 110px 100px 140px 140px 1fr', gap: 0,
-                      padding: '12px 20px', borderBottom: i < movements.length - 1 ? '1px solid var(--muted)' : 'none',
-                      alignItems: 'center', fontSize: 13, minWidth: 940,
+                      display: 'grid', gridTemplateColumns: 'minmax(135px, 1fr) minmax(160px, 1.3fr) minmax(95px, 0.75fr) minmax(95px, 0.75fr) minmax(125px, 0.95fr) minmax(120px, 0.9fr) minmax(160px, 1.4fr)', gap: 16,
+                      padding: '13px 24px', borderBottom: i < movements.length - 1 ? '1px solid var(--muted)' : 'none',
+                      alignItems: 'center', fontSize: 13, minWidth: 960,
                     }}
                   >
                     <span style={{ fontSize: 12, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>{dateStr}</span>

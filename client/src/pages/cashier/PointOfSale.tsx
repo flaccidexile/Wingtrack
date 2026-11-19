@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { apiCheckout } from '@/lib/api'
 import { dispatchNotification } from '@/lib/notifications'
 import { useAuth } from '@/hooks/useAuth'
-import type { Product, ProductCategory, CartItem, Order } from '@/types'
+import type { Product, ProductCategory, CartItem, Order, OrderType, DiscountType } from '@/types'
 import ReceiptModal from '@/components/receipt/ReceiptModal'
 import CashPaymentCalculator from '@/components/cashier/CashPaymentCalculator'
 import PayMongoModal from '@/components/cashier/PayMongoModal'
@@ -75,6 +75,10 @@ export default function PointOfSale() {
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
   const [method, setMethod] = useState<'cash' | 'gcash' | 'maya' | 'card'>('cash')
+  const [orderType, setOrderType] = useState<OrderType>('dine_in')
+  const [tableNumber, setTableNumber] = useState('')
+  const [discountType, setDiscountType] = useState<DiscountType>('none')
+  const [discountId, setDiscountId] = useState('')
   const [notes, setNotes] = useState('')
   const [isManualEntry, setIsManualEntry] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
@@ -159,6 +163,11 @@ export default function PointOfSale() {
               items: saved.cart.map((c: CartItem) => ({ product_id: c.id, quantity: c.qty })),
               payment_method: chosenMethod,
               notes: saved.notes || '',
+              order_type: saved.order_type || 'dine_in',
+              table_number: saved.table_number || null,
+              discount_type: saved.discount_type || 'none',
+              discount_id: saved.discount_id || null,
+              payment_reference: saved.payment_reference || null,
             }).then(result => {
               setOrderNum(result.order_number)
               setCompletedOrder({
@@ -171,6 +180,12 @@ export default function PointOfSale() {
                 vat_amount: saved.vat,
                 total_amount: saved.total,
                 notes: saved.notes || '',
+                order_type: saved.order_type || 'dine_in',
+                table_number: saved.table_number || null,
+                discount_type: saved.discount_type || 'none',
+                discount_id: saved.discount_id || null,
+                discount_amount: saved.discount_amount || 0,
+                payment_reference: saved.payment_reference || null,
                 created_at: new Date().toISOString(),
                 order_items: saved.cart.map((c: CartItem) => ({
                   id: c.id,
@@ -238,8 +253,10 @@ export default function PointOfSale() {
   }
 
   const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0)
-  const vat      = Math.round(subtotal * 0.12 * 100) / 100
-  const total    = Math.round((subtotal + vat) * 100) / 100
+  const isScPwd = discountType === 'senior' || discountType === 'pwd'
+  const discountAmount = isScPwd ? Math.round(subtotal * 0.20 * 100) / 100 : 0
+  const vat      = isScPwd ? 0 : Math.round(subtotal * 0.12 * 100) / 100
+  const total    = Math.round((isScPwd ? subtotal - discountAmount : subtotal + vat) * 100) / 100
   /** Total units in the cart (not the number of distinct lines). */
   const cartCount = cart.reduce((s, c) => s + c.qty, 0)
 
@@ -255,7 +272,12 @@ export default function PointOfSale() {
 
   // Called after cash calc confirmation, or after PayMongo confirms an online payment.
   // `onlineMethod` is the actual online method used ('gcash', 'maya', or 'card').
-  async function executeCheckout(cashReceived?: number, changeGiven?: number, onlineMethod?: 'gcash' | 'maya' | 'card') {
+  async function executeCheckout(
+    cashReceived?: number,
+    changeGiven?: number,
+    onlineMethod?: 'gcash' | 'maya' | 'card',
+    paymentReference?: string
+  ) {
     if (cart.length === 0 || !profile) return
     setShowCashCalc(false)
     setCheckoutLoading(true)
@@ -266,6 +288,9 @@ export default function PointOfSale() {
     const finalNotes = isManualEntry
       ? (trimmedNotes ? `[Manual / Post-Offline Entry] ${trimmedNotes}` : '[Manual / Post-Offline Entry]')
       : trimmedNotes
+    const finalTable = orderType === 'dine_in' && tableNumber.trim() ? tableNumber.trim() : null
+    const finalDiscountId = isScPwd && discountId.trim() ? discountId.trim() : null
+    const finalPaymentRef = paymentReference?.trim() || null
 
     // Store cash info for the success modal
     if (cashReceived !== undefined && changeGiven !== undefined) {
@@ -282,6 +307,11 @@ export default function PointOfSale() {
         items: currentCart.map(c => ({ product_id: c.id, quantity: c.qty })),
         payment_method: paymentMethod,
         notes: finalNotes,
+        order_type: orderType,
+        table_number: finalTable,
+        discount_type: discountType,
+        discount_id: finalDiscountId,
+        payment_reference: finalPaymentRef,
       })
       setOrderNum(result.order_number)
       setCompletedOrder({
@@ -294,6 +324,12 @@ export default function PointOfSale() {
         vat_amount: vat,
         total_amount: total,
         notes: finalNotes,
+        order_type: orderType,
+        table_number: finalTable,
+        discount_type: discountType,
+        discount_id: finalDiscountId,
+        discount_amount: discountAmount,
+        payment_reference: finalPaymentRef,
         created_at: new Date().toISOString(),
         order_items: currentCart.map(c => ({
           id: c.id,
@@ -315,6 +351,9 @@ export default function PointOfSale() {
       setCart([])
       setNotes('')
       setIsManualEntry(false)
+      setDiscountType('none')
+      setDiscountId('')
+      setTableNumber('')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Checkout failed')
     } finally {
@@ -437,7 +476,7 @@ export default function PointOfSale() {
                     <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 10, fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{catName}</p>
                     <p style={{ fontSize: 17, fontWeight: 600, color: 'var(--foreground)', lineHeight: 1.3, marginBottom: 14, flex: 1 }}>{item.name}</p>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 18, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: 'var(--primary)' }}>&#8369;{Number(item.price).toFixed(2)}</span>
+                      <span style={{ fontSize: 18, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: 'var(--primary)' }}>₱{Number(item.price).toFixed(2)}</span>
                       {inCart && <span style={{ fontSize: 13, background: 'var(--primary)', color: 'var(--primary-foreground)', borderRadius: 12, padding: '4px 12px', fontWeight: 700 }}>x{inCart.qty}</span>}
                     </div>
                   </div>
@@ -485,7 +524,7 @@ export default function PointOfSale() {
             <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--sidebar-foreground)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
-                <p style={{ fontSize: 14, fontFamily: 'IBM Plex Mono', color: 'var(--sidebar-active)', marginTop: 3, fontWeight: 500 }}>&#8369;{(item.price * item.qty).toLocaleString()}</p>
+                <p style={{ fontSize: 14, fontFamily: 'IBM Plex Mono', color: 'var(--sidebar-active)', marginTop: 3, fontWeight: 500 }}>₱{(item.price * item.qty).toLocaleString()}</p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <button id={`cart-dec-${item.id}`} onClick={() => updateQty(item.id, -1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.05)', color: 'var(--sidebar-foreground)', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
@@ -519,17 +558,110 @@ export default function PointOfSale() {
             </div>
           )}
 
+          {/* Order Type (Dine-In, Take-Out, Delivery) & Table # */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: orderType === 'dine_in' ? 6 : 0 }}>
+              {([
+                { key: 'dine_in',  label: 'Dine-In' },
+                { key: 'take_out', label: 'Take-Out' },
+                { key: 'delivery', label: 'Delivery' },
+              ] as const).map(ot => (
+                <button
+                  key={ot.key}
+                  id={`pos-type-${ot.key}`}
+                  type="button"
+                  onClick={() => setOrderType(ot.key)}
+                  style={{
+                    padding: '6px 4px', borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+                    border: `1px solid ${orderType === ot.key ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.14)'}`,
+                    background: orderType === ot.key ? 'rgba(240,155,58,0.18)' : 'rgba(255,255,255,0.03)',
+                    color: orderType === ot.key ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
+                  }}
+                >
+                  {ot.label}
+                </button>
+              ))}
+            </div>
+            {orderType === 'dine_in' && (
+              <select
+                id="pos-table-select"
+                value={tableNumber}
+                onChange={e => setTableNumber(e.target.value)}
+                style={{
+                  width: '100%', padding: '6px 10px', borderRadius: 6, fontSize: 12,
+                  border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.06)',
+                  color: 'var(--sidebar-foreground)', outline: 'none',
+                }}
+              >
+                <option value="" style={{ color: '#111' }}>Table # (Optional — Counter / Walk-In)</option>
+                {Array.from({ length: 12 }, (_, i) => `Table ${i + 1}`).map(t => (
+                  <option key={t} value={t} style={{ color: '#111' }}>{t}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Statutory Discount (None / Senior Citizen 20% / PWD 20%) */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: isScPwd ? 6 : 0 }}>
+              {([
+                { key: 'none',   label: 'Regular' },
+                { key: 'senior', label: 'Senior (20%)' },
+                { key: 'pwd',    label: 'PWD (20%)' },
+              ] as const).map(dc => (
+                <button
+                  key={dc.key}
+                  id={`pos-disc-${dc.key}`}
+                  type="button"
+                  onClick={() => setDiscountType(dc.key)}
+                  style={{
+                    padding: '6px 4px', borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+                    border: `1px solid ${discountType === dc.key ? '#22c55e' : 'rgba(255,255,255,0.14)'}`,
+                    background: discountType === dc.key ? 'rgba(34,197,94,0.16)' : 'rgba(255,255,255,0.03)',
+                    color: discountType === dc.key ? '#4ade80' : 'var(--sidebar-muted)',
+                  }}
+                >
+                  {dc.label}
+                </button>
+              ))}
+            </div>
+            {isScPwd && (
+              <input
+                id="pos-discount-id"
+                type="text"
+                placeholder={discountType === 'senior' ? 'Senior Citizen ID # (optional)...' : 'PWD ID # (optional)...'}
+                value={discountId}
+                onChange={e => setDiscountId(e.target.value)}
+                style={{
+                  width: '100%', padding: '6px 10px', borderRadius: 6, fontSize: 12,
+                  border: '1px solid rgba(34,197,94,0.35)', background: 'rgba(34,197,94,0.08)',
+                  color: 'var(--sidebar-foreground)', outline: 'none', fontFamily: 'IBM Plex Mono',
+                }}
+              />
+            )}
+          </div>
+
           <div style={{ marginBottom: 12 }}>
-            {[['Subtotal', `\u20B1${subtotal.toLocaleString()}`], ['VAT (12%)', `\u20B1${vat.toLocaleString()}`]].map(([k, v]) => (
-              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                <span style={{ fontSize: 13, color: 'var(--sidebar-muted)' }}>{k}</span>
-                <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--sidebar-foreground)', fontWeight: 500 }}>{v}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+              <span style={{ fontSize: 13, color: 'var(--sidebar-muted)' }}>{isScPwd ? 'VAT-Exempt Sales' : 'VATable Sales'}</span>
+              <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--sidebar-foreground)', fontWeight: 500 }}>₱{subtotal.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+              <span style={{ fontSize: 13, color: 'var(--sidebar-muted)' }}>VAT (12%)</span>
+              <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--sidebar-foreground)', fontWeight: 500 }}>
+                {isScPwd ? '₱0.00 (Exempt)' : `₱${vat.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
+              </span>
+            </div>
+            {isScPwd && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ fontSize: 13, color: '#4ade80' }}>{discountType === 'senior' ? 'Senior Discount (20%)' : 'PWD Discount (20%)'}</span>
+                <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: '#4ade80', fontWeight: 600 }}>-₱{discountAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
               </div>
-            ))}
+            )}
             <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '10px 0' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--sidebar-foreground)', fontFamily: 'Inter' }}>Total</span>
-              <span style={{ fontSize: 19, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: 'var(--sidebar-active)' }}>&#8369;{total.toLocaleString()}</span>
+              <span style={{ fontSize: 19, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: 'var(--sidebar-active)' }}>₱{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
             </div>
           </div>
 
@@ -665,7 +797,7 @@ export default function PointOfSale() {
               {cartCount === 0 ? 'Cart empty' : `${cartCount} item${cartCount === 1 ? '' : 's'}`}
             </span>
             <span style={{ display: 'block', fontSize: 17, fontWeight: 700, color: 'var(--sidebar-active)', fontFamily: 'IBM Plex Mono', lineHeight: 1.25 }}>
-              &#8369;{total.toLocaleString()}
+              ₱{total.toLocaleString()}
             </span>
           </span>
         </button>
@@ -701,7 +833,7 @@ export default function PointOfSale() {
               <div>
                 <h2 style={{ fontFamily: 'Inter', fontSize: 19, fontWeight: 600, color: 'var(--sidebar-foreground)' }}>Current Order</h2>
                 <p style={{ fontSize: 12.5, color: 'var(--sidebar-muted)', marginTop: 2, fontFamily: 'IBM Plex Mono' }}>
-                  {cartCount} item{cartCount === 1 ? '' : 's'} · &#8369;{total.toLocaleString()}
+                  {cartCount} item{cartCount === 1 ? '' : 's'} · ₱{total.toLocaleString()}
                 </p>
               </div>
               <button
@@ -727,7 +859,7 @@ export default function PointOfSale() {
                 <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--sidebar-foreground)', lineHeight: 1.3 }}>{item.name}</p>
-                    <p style={{ fontSize: 14, fontFamily: 'IBM Plex Mono', color: 'var(--sidebar-active)', marginTop: 3, fontWeight: 500 }}>&#8369;{(item.price * item.qty).toLocaleString()}</p>
+                    <p style={{ fontSize: 14, fontFamily: 'IBM Plex Mono', color: 'var(--sidebar-active)', marginTop: 3, fontWeight: 500 }}>₱{(item.price * item.qty).toLocaleString()}</p>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <button type="button" onClick={() => updateQty(item.id, -1)} aria-label={`Decrease ${item.name}`} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.05)', color: 'var(--sidebar-foreground)', fontSize: 17, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
@@ -752,17 +884,71 @@ export default function PointOfSale() {
                 </div>
               )}
 
-              <div style={{ marginBottom: 12 }}>
-                {[['Subtotal', `\u20B1${subtotal.toLocaleString()}`], ['VAT (12%)', `\u20B1${vat.toLocaleString()}`]].map(([k, v]) => (
-                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                    <span style={{ fontSize: 13, color: 'var(--sidebar-muted)' }}>{k}</span>
-                    <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--sidebar-foreground)', fontWeight: 500 }}>{v}</span>
-                  </div>
+              {/* Mobile Order Type & Discount */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 8 }}>
+                {([
+                  { key: 'dine_in',  label: 'Dine-In' },
+                  { key: 'take_out', label: 'Take-Out' },
+                  { key: 'delivery', label: 'Delivery' },
+                ] as const).map(ot => (
+                  <button
+                    key={ot.key}
+                    type="button"
+                    onClick={() => setOrderType(ot.key)}
+                    style={{
+                      padding: '7px 4px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      border: `1px solid ${orderType === ot.key ? 'var(--sidebar-active)' : 'rgba(255,255,255,0.14)'}`,
+                      background: orderType === ot.key ? 'rgba(240,155,58,0.18)' : 'rgba(255,255,255,0.03)',
+                      color: orderType === ot.key ? 'var(--sidebar-active)' : 'var(--sidebar-muted)',
+                    }}
+                  >
+                    {ot.label}
+                  </button>
                 ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
+                {([
+                  { key: 'none',   label: 'Regular' },
+                  { key: 'senior', label: 'Senior 20%' },
+                  { key: 'pwd',    label: 'PWD 20%' },
+                ] as const).map(dc => (
+                  <button
+                    key={dc.key}
+                    type="button"
+                    onClick={() => setDiscountType(dc.key)}
+                    style={{
+                      padding: '7px 4px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      border: `1px solid ${discountType === dc.key ? '#22c55e' : 'rgba(255,255,255,0.14)'}`,
+                      background: discountType === dc.key ? 'rgba(34,197,94,0.16)' : 'rgba(255,255,255,0.03)',
+                      color: discountType === dc.key ? '#4ade80' : 'var(--sidebar-muted)',
+                    }}
+                  >
+                    {dc.label}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <span style={{ fontSize: 13, color: 'var(--sidebar-muted)' }}>{isScPwd ? 'VAT-Exempt Sales' : 'VATable Sales'}</span>
+                  <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--sidebar-foreground)', fontWeight: 500 }}>₱{subtotal.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <span style={{ fontSize: 13, color: 'var(--sidebar-muted)' }}>VAT (12%)</span>
+                  <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--sidebar-foreground)', fontWeight: 500 }}>
+                    {isScPwd ? '₱0.00 (Exempt)' : `₱${vat.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
+                  </span>
+                </div>
+                {isScPwd && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{ fontSize: 13, color: '#4ade80' }}>{discountType === 'senior' ? 'Senior Discount (20%)' : 'PWD Discount (20%)'}</span>
+                    <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: '#4ade80', fontWeight: 600 }}>-₱{discountAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
                 <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '10px 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--sidebar-foreground)', fontFamily: 'Inter' }}>Total</span>
-                  <span style={{ fontSize: 19, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: 'var(--sidebar-active)' }}>&#8369;{total.toLocaleString()}</span>
+                  <span style={{ fontSize: 19, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: 'var(--sidebar-active)' }}>₱{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
 
@@ -941,9 +1127,16 @@ export default function PointOfSale() {
           cartItems={cart.map(c => ({ id: c.id, name: c.name, price: c.price, qty: c.qty }))}
           orderDescription={`Wing's Zone Order — ${cart.length} item${cart.length !== 1 ? 's' : ''}`}
           initialMethod={method === 'cash' ? undefined : method}
-          onSuccess={(_intentId, paymentMethod) => {
+          orderMeta={{
+            order_type: orderType,
+            table_number: orderType === 'dine_in' && tableNumber.trim() ? tableNumber.trim() : null,
+            discount_type: discountType,
+            discount_id: isScPwd && discountId.trim() ? discountId.trim() : null,
+            discount_amount: discountAmount,
+          }}
+          onSuccess={(_intentId, paymentMethod, paymentReference) => {
             setShowPayMongo(false)
-            executeCheckout(undefined, undefined, paymentMethod)
+            executeCheckout(undefined, undefined, paymentMethod, paymentReference)
           }}
           onCancel={() => setShowPayMongo(false)}
         />

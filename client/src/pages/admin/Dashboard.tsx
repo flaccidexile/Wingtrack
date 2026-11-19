@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { apiGetOrders } from '@/lib/api'
+import { getOrderProfit } from '@/pages/orders/OrdersList'
 import { useChartWidth, tickInterval } from '@/hooks/useChartWidth'
 import EmptyState, { EMPTY_ICONS } from '@/components/ui/EmptyState'
 import NotificationCenter from '@/components/ui/NotificationCenter'
@@ -34,6 +35,7 @@ function KpiIcon({ path }: { path: React.ReactNode }) {
 
 const KPI_ICONS = {
   revenue: <><text x="12" y="17" textAnchor="middle" fontSize="16" fontWeight="700" stroke="none" fill="currentColor">₱</text></>,
+  profit:  <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></>,
   orders:  <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></>,
   avg:     <><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></>,
   stock:   <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12" y2="17.01" /></>,
@@ -93,7 +95,7 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
       <div style={{ background: 'var(--sidebar)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 14px' }}>
         <p style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 4 }}>{label}</p>
         <p style={{ fontFamily: 'Inter', fontSize: 16, fontWeight: 700, color: 'var(--sidebar-active)' }}>
-          &#8369;{payload[0].value.toLocaleString()}
+          ₱{payload[0].value.toLocaleString()}
         </p>
         {payload[1] && <p style={{ fontSize: 11, color: 'var(--sidebar-foreground)' }}>{payload[1].value} orders</p>}
       </div>
@@ -117,6 +119,8 @@ export default function Dashboard() {
   const [topItems, setTopItems] = useState<TopItem[]>([])
   const [recentOrders, setRecentOrders] = useState<Order[]>([])
   const [lowStockCount, setLowStockCount] = useState(0)
+  const [periodNetProfit, setPeriodNetProfit] = useState(0)
+  const [periodMarginPct, setPeriodMarginPct] = useState(0)
   const [loading, setLoading] = useState(true)
 
   // Measure each chart's actual rendered width so tick density adapts to it
@@ -223,17 +227,39 @@ export default function Dashboard() {
         .from('inventory')
         .select('stock_qty, min_stock_level')
         .in('status', ['low', 'critical']),
-      apiGetOrders({ limit: 25 }).catch(() => null),
+      apiGetOrders({
+        limit: 500,
+        status: 'completed',
+        from: since.toISOString(),
+        to: until.toISOString(),
+      }).catch(() => null),
     ])
 
-    const apiMethodMap = new Map<string, Order['payment_method']>(
-      (apiOrdersRes?.orders ?? []).map(o => [o.id, o.payment_method])
+    const apiOrderMap = new Map<string, Order>(
+      (apiOrdersRes?.orders ?? []).map(o => [o.id, o])
     )
-    const orders: Order[] = (ordersRes.data ?? []).map((o: Order) => ({
-      ...o,
-      payment_method: apiMethodMap.get(o.id) ?? o.payment_method,
-    }))
+    const orders: Order[] = (ordersRes.data ?? []).map((o: Order) => {
+      const enriched = apiOrderMap.get(o.id)
+      return {
+        ...o,
+        payment_method: enriched?.payment_method ?? o.payment_method,
+        order_items: enriched?.order_items ?? o.order_items,
+      }
+    })
     setLowStockCount((inventoryRes.data ?? []).length)
+
+    // Compute period Net Profit & Profit Margin (%) across all completed orders in the window
+    let sumSubtotal = 0
+    let sumCost = 0
+    for (const o of orders) {
+      const p = getOrderProfit(o)
+      sumSubtotal += p.subtotal
+      sumCost += p.totalCost
+    }
+    const netProfit = Math.round((sumSubtotal - sumCost) * 100) / 100
+    const marginPct = sumSubtotal > 0 ? Math.round(((netProfit / sumSubtotal) * 100) * 10) / 10 : 0
+    setPeriodNetProfit(netProfit)
+    setPeriodMarginPct(marginPct)
 
     // Build chronological stats. Both label widths are stored so the chart can
     // switch to the compact form when the container is too narrow.
@@ -485,7 +511,7 @@ export default function Dashboard() {
       ) : (
         <>
           {/* KPIs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 28 }}>
             <KpiCard
               label="Total Revenue"
               value={`\u20B1${totalRevenue.toLocaleString('en-PH', { minimumFractionDigits: 0 })}`}
@@ -493,6 +519,14 @@ export default function Dashboard() {
               color="#ea580c"
               trend="up"
               icon={KPI_ICONS.revenue}
+            />
+            <KpiCard
+              label="Net Profit & Margin"
+              value={`${periodNetProfit >= 0 ? '' : '-'}₱${Math.abs(periodNetProfit).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              sub={`${periodMarginPct.toFixed(1)}% profit margin`}
+              color={periodNetProfit < 0 ? '#b91c1c' : periodMarginPct < 20 ? '#b45309' : '#15803d'}
+              trend={periodNetProfit < 0 ? 'down' : periodMarginPct < 20 ? 'warn' : 'up'}
+              icon={KPI_ICONS.profit}
             />
             <KpiCard
               label="Total Orders"
@@ -531,7 +565,7 @@ export default function Dashboard() {
                   <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 3 }}>{periodLabel}</p>
                 </div>
                 <span style={{ fontFamily: 'Inter', fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>
-                  &#8369;{totalRevenue.toLocaleString()}
+                  ₱{totalRevenue.toLocaleString()}
                 </span>
               </div>
               <div ref={revRef} style={{ width: '100%', minWidth: 0 }}>
@@ -625,7 +659,7 @@ export default function Dashboard() {
                       <span style={{ fontSize: 12, color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {o.payment_method === 'gcash' ? 'GCash' : o.payment_method === 'maya' ? 'Maya' : o.payment_method === 'card' ? 'Card' : 'Cash'}
                       </span>
-                      <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>&#8369;{Number(o.total_amount).toLocaleString()}</span>
+                      <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>₱{Number(o.total_amount).toLocaleString()}</span>
                       <span style={{ fontSize: 11, padding: '3px 7px', borderRadius: 20, background: o.status === 'void' ? '#fce8e8' : '#e8f5e9', color: o.status === 'void' ? '#c0392b' : '#2e7d32', fontWeight: 600, textAlign: 'center', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.status === 'void' ? 'Void' : 'Paid'}</span>
                     </div>
                   ))}
@@ -636,7 +670,7 @@ export default function Dashboard() {
             {/* Orders per day bar */}
             <div className="card" style={{ padding: '24px 26px' }}>
               <h3 style={{ fontFamily: 'Inter', fontSize: 17, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Orders by Day</h3>
-              <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 18 }}>{totalOrders} total · &#8369;{totalRevenue.toLocaleString()}</p>
+              <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 18 }}>{totalOrders} total · ₱{totalRevenue.toLocaleString()}</p>
               <div ref={ordRef} style={{ width: '100%', minWidth: 0 }}>
               <ResponsiveContainer width="100%" height={ordHeight}>
                 <BarChart data={chartData} barSize={barSize} margin={{ bottom: 20 }}>

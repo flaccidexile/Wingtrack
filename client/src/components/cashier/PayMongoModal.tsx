@@ -18,11 +18,19 @@ interface PayMongoModalProps {
   orderDescription: string
   /** Optional initial online payment method selected from the POS cart. */
   initialMethod?: 'gcash' | 'maya' | 'card'
+  /** Optional order metadata persisted if redirected through PayMongo portal. */
+  orderMeta?: {
+    order_type?: 'dine_in' | 'take_out' | 'delivery'
+    table_number?: string | null
+    discount_type?: 'none' | 'senior' | 'pwd'
+    discount_id?: string | null
+    discount_amount?: number
+  }
   /**
    * Called once payment is confirmed. `paymentMethod` is the exact method to
    * record on the order: 'gcash', 'maya', or 'card'.
    */
-  onSuccess: (intentId: string, paymentMethod: 'gcash' | 'maya' | 'card') => void
+  onSuccess: (intentId: string, paymentMethod: 'gcash' | 'maya' | 'card', paymentReference?: string) => void
   onCancel: () => void
 }
 
@@ -44,6 +52,7 @@ export default function PayMongoModal({
   cartItems = [],
   orderDescription,
   initialMethod,
+  orderMeta,
   onSuccess,
   onCancel,
 }: PayMongoModalProps) {
@@ -65,6 +74,7 @@ export default function PayMongoModal({
   const [cvc, setCvc] = useState('')
   const [cardName, setCardName] = useState('')
   const [intentId, setIntentId] = useState('')
+  const [paymentRef, setPaymentRef] = useState('')
   /** Which flow produced the successful payment (drives the recorded payment_method). */
   const [paidVia, setPaidVia] = useState<'gcash' | 'maya' | 'card'>(() =>
     initialMethod === 'maya' ? 'maya' : initialMethod === 'gcash' ? 'gcash' : 'card'
@@ -122,6 +132,8 @@ export default function PayMongoModal({
       total,
       notes,
       method: eWalletType,
+      payment_reference: paymentRef.trim() || null,
+      ...orderMeta,
       timestamp: Date.now(),
     }
     try {
@@ -226,7 +238,7 @@ export default function PayMongoModal({
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 4 }}>Total to Pay</p>
           <p style={{ fontFamily: 'Inter', fontSize: 32, fontWeight: 700, color: 'var(--foreground)' }}>
-            &#8369;{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+            ₱{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
           </p>
           <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 3 }}>{orderDescription}</p>
         </div>
@@ -327,9 +339,24 @@ export default function PayMongoModal({
               </span>
             </div>
 
-            <p style={{ fontSize: 12.5, color: 'var(--muted-foreground)', lineHeight: 1.5, marginBottom: 16, maxWidth: 360, margin: '0 auto 16px' }}>
-              Scan the {providerName} QR code above for <strong>&#8369;{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>, then click Confirm below — or open the PayMongo {providerName} portal.
+            <p style={{ fontSize: 12.5, color: 'var(--muted-foreground)', lineHeight: 1.5, marginBottom: 12, maxWidth: 360, margin: '0 auto 12px' }}>
+              Scan the {providerName} QR code above for <strong>₱{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>, enter the reference number below (optional), then confirm.
             </p>
+
+            <div style={{ textAlign: 'left', marginBottom: 14 }}>
+              <label htmlFor="pm-ewallet-ref" style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>
+                {providerName} Reference No. (Optional — printed on receipt)
+              </label>
+              <input
+                id="pm-ewallet-ref"
+                className="input"
+                type="text"
+                placeholder={`e.g. ${eWalletType === 'gcash' ? 'GC-901248' : 'MY-442190'} (last 6 digits)`}
+                value={paymentRef}
+                onChange={e => setPaymentRef(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', fontSize: 13, fontFamily: 'IBM Plex Mono' }}
+              />
+            </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
               <button
@@ -345,7 +372,7 @@ export default function PayMongoModal({
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                Confirm {providerName} Payment (&#8369;{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })})
+                Confirm {providerName} Payment (₱{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })})
               </button>
 
               <button
@@ -446,7 +473,7 @@ export default function PayMongoModal({
               <button onClick={() => setStep('select')} className="btn-ghost" style={{ flex: 1, padding: '12px' }}>Back</button>
               <button id="pm-pay-card" onClick={handleCardPay} className="btn-primary" disabled={!cardReady}
                 style={{ flex: 2, padding: '12px', borderRadius: 10, background: '#2563eb' }}>
-                Pay &#8369;{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                Pay ₱{total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
               </button>
             </div>
           </div>
@@ -474,8 +501,18 @@ export default function PayMongoModal({
               Intent ID: <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 11 }}>{(intentId || 'pi_sandbox_confirmed').slice(0, 24)}...</span>
             </p>
             <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 22 }}>The payment has been authorized and the order will now be completed.</p>
-            <button id="pm-success-continue" onClick={() => onSuccess(intentId || 'pi_sandbox_confirmed', paidVia)} className="btn-primary"
-              style={{ width: '100%', padding: '13px', fontSize: 15, fontWeight: 600, borderRadius: 10, background: '#16a34a' }}>
+            <button
+              id="pm-success-continue"
+              onClick={() => {
+                const ref =
+                  paidVia === 'card'
+                    ? (cardNumber.replace(/\s/g, '').length >= 4 ? `Card •••• ${cardNumber.replace(/\s/g, '').slice(-4)}` : intentId || undefined)
+                    : (paymentRef.trim() || undefined)
+                onSuccess(intentId || 'pi_sandbox_confirmed', paidVia, ref)
+              }}
+              className="btn-primary"
+              style={{ width: '100%', padding: '13px', fontSize: 15, fontWeight: 600, borderRadius: 10, background: '#16a34a' }}
+            >
               Continue to Receipt
             </button>
           </div>

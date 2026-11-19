@@ -2,7 +2,13 @@ import { Router, type Response } from 'express'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
-import { getAllOrderItemCosts, getAllProductCosts, getAllOrderPaymentMethods } from '../lib/productMetadata'
+import {
+  getAllOrderItemCosts,
+  getAllProductCosts,
+  getAllOrderPaymentMethods,
+  getAllOrderExtraMeta,
+  type OrderExtraMeta,
+} from '../lib/productMetadata'
 
 const router = Router()
 
@@ -14,17 +20,29 @@ function enrichOrderItems(
   order: any,
   itemCostsMap: Record<string, number>,
   productCostsMap: Record<string, number>,
-  paymentMethodsMap: Record<string, string>
+  paymentMethodsMap: Record<string, string>,
+  recipeCostsMap: Record<string, number> = {},
+  extraMetaMap: Record<string, OrderExtraMeta> = {}
 ) {
   if (!order) return order
   const exactPaymentMethod = paymentMethodsMap[order.id] || order.payment_method
+  const extra = extraMetaMap[order.id] ?? {}
   if (!Array.isArray(order.order_items)) {
-    return { ...order, payment_method: exactPaymentMethod }
+    return { ...order, payment_method: exactPaymentMethod, ...extra }
   }
   const enrichedItems = order.order_items.map((item: any) => {
-    let cost = item.unit_cost != null ? Number(item.unit_cost) : null
-    if (cost === null || Number.isNaN(cost)) {
-      cost = itemCostsMap[item.id] ?? productCostsMap[item.product_id] ?? 0
+    let cost = item.unit_cost != null && Number(item.unit_cost) > 0 ? Number(item.unit_cost) : null
+    if (cost === null || Number.isNaN(cost) || cost === 0) {
+      const fromItem = itemCostsMap[item.id]
+      const fromProd = productCostsMap[item.product_id]
+      const fromRecipe = recipeCostsMap[item.product_id]
+      cost = (fromItem && fromItem > 0)
+        ? fromItem
+        : (fromProd && fromProd > 0)
+          ? fromProd
+          : (fromRecipe && fromRecipe > 0)
+            ? fromRecipe
+            : 0
     }
     return {
       ...item,
@@ -34,8 +52,22 @@ function enrichOrderItems(
   return {
     ...order,
     payment_method: exactPaymentMethod,
+    ...extra,
     order_items: enrichedItems,
   }
+}
+
+async function getRecipeCostsMap(): Promise<Record<string, number>> {
+  const { data } = await supabaseAdmin
+    .from('product_recipes')
+    .select('product_id, qty_per_unit, inventory:inventory(unit_cost)')
+  const map: Record<string, number> = {}
+  for (const r of (data ?? []) as any[]) {
+    const pid = r.product_id as string
+    const lineCost = (Number(r.qty_per_unit) || 0) * (Number(r.inventory?.unit_cost) || 0)
+    map[pid] = Math.round(((map[pid] ?? 0) + lineCost) * 100) / 100
+  }
+  return map
 }
 
 /** Default and maximum number of orders returned in one page. */
@@ -221,7 +253,9 @@ router.get(
       const itemCostsMap = getAllOrderItemCosts()
       const productCostsMap = getAllProductCosts()
       const paymentMethodsMap = getAllOrderPaymentMethods()
-      const enrichedOrders = (orders ?? []).map((o: any) => enrichOrderItems(o, itemCostsMap, productCostsMap, paymentMethodsMap))
+      const recipeCostsMap = await getRecipeCostsMap()
+      const extraMetaMap = getAllOrderExtraMeta()
+      const enrichedOrders = (orders ?? []).map((o: any) => enrichOrderItems(o, itemCostsMap, productCostsMap, paymentMethodsMap, recipeCostsMap, extraMetaMap))
 
       res.json({
         orders: enrichedOrders,
@@ -260,7 +294,9 @@ router.get(
       const itemCostsMap = getAllOrderItemCosts()
       const productCostsMap = getAllProductCosts()
       const paymentMethodsMap = getAllOrderPaymentMethods()
-      res.json(enrichOrderItems(order, itemCostsMap, productCostsMap, paymentMethodsMap))
+      const recipeCostsMap = await getRecipeCostsMap()
+      const extraMetaMap = getAllOrderExtraMeta()
+      res.json(enrichOrderItems(order, itemCostsMap, productCostsMap, paymentMethodsMap, recipeCostsMap, extraMetaMap))
     } catch (err) {
       res.status(500).json({ message: 'Internal server error.' })
     }

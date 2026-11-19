@@ -2,13 +2,22 @@ import { Router, type Response } from 'express'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { supabaseAdmin } from '../lib/supabase'
-import { getProductCost, setOrderItemCosts, setOrderPaymentMethod } from '../lib/productMetadata'
+import { getProductCost, setOrderItemCosts, setOrderPaymentMethod, setOrderExtraMeta } from '../lib/productMetadata'
 
 const router = Router()
 
 /** Payment methods the checkout accepts. Anything else is rejected outright. */
 const PAYMENT_METHODS = ['cash', 'gcash', 'maya', 'card'] as const
 type PaymentMethod = (typeof PAYMENT_METHODS)[number]
+
+const ORDER_TYPES = ['dine_in', 'take_out', 'delivery'] as const
+type OrderType = (typeof ORDER_TYPES)[number]
+
+const DISCOUNT_TYPES = ['none', 'senior', 'pwd'] as const
+type DiscountType = (typeof DISCOUNT_TYPES)[number]
+
+/** Statutory Senior Citizen / PWD discount rate (20% + VAT exemption). */
+const SC_PWD_DISCOUNT_RATE = 0.20
 
 /** Upper bound on a single line's quantity — guards against fat-finger entry. */
 const MAX_QUANTITY = 999
@@ -35,7 +44,17 @@ interface ValidatedLine {
  * verify their input at runtime.
  */
 function validateCheckoutBody(body: unknown):
-  | { ok: true; items: ValidatedLine[]; paymentMethod: PaymentMethod; notes: string | null }
+  | {
+    ok: true
+    items: ValidatedLine[]
+    paymentMethod: PaymentMethod
+    notes: string | null
+    orderType: OrderType
+    tableNumber: string | null
+    discountType: DiscountType
+    discountId: string | null
+    paymentReference: string | null
+  }
   | { ok: false; message: string } {
   const b = (body ?? {}) as Record<string, unknown>
 
@@ -84,7 +103,42 @@ function validateCheckoutBody(body: unknown):
     notes = b.notes.trim().slice(0, 500)
   }
 
-  return { ok: true, items, paymentMethod: paymentMethod as PaymentMethod, notes }
+  const orderType: OrderType =
+    typeof b.order_type === 'string' && (ORDER_TYPES as readonly string[]).includes(b.order_type)
+      ? (b.order_type as OrderType)
+      : 'dine_in'
+
+  const tableNumber =
+    orderType === 'dine_in' && typeof b.table_number === 'string' && b.table_number.trim() !== ''
+      ? b.table_number.trim().slice(0, 32)
+      : null
+
+  const discountType: DiscountType =
+    typeof b.discount_type === 'string' && (DISCOUNT_TYPES as readonly string[]).includes(b.discount_type)
+      ? (b.discount_type as DiscountType)
+      : 'none'
+
+  const discountId =
+    discountType !== 'none' && typeof b.discount_id === 'string' && b.discount_id.trim() !== ''
+      ? b.discount_id.trim().slice(0, 64)
+      : null
+
+  const paymentReference =
+    typeof b.payment_reference === 'string' && b.payment_reference.trim() !== ''
+      ? b.payment_reference.trim().slice(0, 80)
+      : null
+
+  return {
+    ok: true,
+    items,
+    paymentMethod: paymentMethod as PaymentMethod,
+    notes,
+    orderType,
+    tableNumber,
+    discountType,
+    discountId,
+    paymentReference,
+  }
 }
 
 // ────────────────────────────────────────────────────────────
@@ -106,7 +160,16 @@ router.post(
       res.status(400).json({ message: validation.message })
       return
     }
-    const { items, paymentMethod, notes } = validation
+    const {
+      items,
+      paymentMethod,
+      notes,
+      orderType,
+      tableNumber,
+      discountType,
+      discountId,
+      paymentReference,
+    } = validation
 
     // ── Step 1: Load product prices & unit costs ────────────
     const productIds = items.map(i => i.product_id)
@@ -147,18 +210,22 @@ router.post(
       const p = productMap.get(i.product_id)!
       const cost = p.unit_cost != null ? Number(p.unit_cost) : getProductCost(i.product_id)
       return {
-        product_id:   i.product_id,
+        product_id: i.product_id,
         product_name: p.name as string,
-        unit_price:   Number(p.price),
-        unit_cost:    Math.round(Number(cost || 0) * 100) / 100,
-        quantity:     i.quantity,
+        unit_price: Number(p.price),
+        unit_cost: Math.round(Number(cost || 0) * 100) / 100,
+        quantity: i.quantity,
       }
     })
 
     // Round once, after summing, so float drift cannot leak into stored money.
-    const subtotal     = Math.round(orderItems.reduce((s, i) => s + i.unit_price * i.quantity, 0) * 100) / 100
-    const vat_amount   = Math.round(subtotal * VAT_RATE * 100) / 100
-    const total_amount = Math.round((subtotal + vat_amount) * 100) / 100
+    // Under Philippine BIR rules (RA 9994 / RA 10754), Senior Citizen and PWD
+    // orders are VAT-exempt and receive a 20% statutory discount on subtotal.
+    const subtotal = Math.round(orderItems.reduce((s, i) => s + i.unit_price * i.quantity, 0) * 100) / 100
+    const isScPwd = discountType === 'senior' || discountType === 'pwd'
+    const discount_amount = isScPwd ? Math.round(subtotal * SC_PWD_DISCOUNT_RATE * 100) / 100 : 0
+    const vat_amount = isScPwd ? 0 : Math.round(subtotal * VAT_RATE * 100) / 100
+    const total_amount = Math.round((isScPwd ? subtotal - discount_amount : subtotal + vat_amount) * 100) / 100
 
     // ── Step 3: Fetch cashier staff_profile id ───────────────
     // maybeSingle() so a missing profile is a clean 403, not a PGRST116 500.
@@ -247,16 +314,16 @@ router.post(
       paymentMethod === 'maya' ? 'gcash' : paymentMethod
 
     const rpcResult = await supabaseAdmin.rpc('create_order', {
-      p_cashier_id:     staffProfile.id,
+      p_cashier_id: staffProfile.id,
       p_payment_method: dbPaymentMethod,
-      p_subtotal:       subtotal,
-      p_vat_amount:     vat_amount,
-      p_total_amount:   total_amount,
-      p_notes:          notes,
-      p_items:          orderItems,
-      p_deductions:     inventoryItems.map(inv => ({
+      p_subtotal: subtotal,
+      p_vat_amount: vat_amount,
+      p_total_amount: total_amount,
+      p_notes: notes,
+      p_items: orderItems,
+      p_deductions: inventoryItems.map(inv => ({
         inventory_id: inv.id,
-        qty:          deductionMap.get(inv.id) ?? 0,
+        qty: deductionMap.get(inv.id) ?? 0,
       })),
     })
 
@@ -310,6 +377,14 @@ router.post(
       }
 
       setOrderPaymentMethod(row.id, paymentMethod)
+      setOrderExtraMeta(row.id, {
+        order_type: orderType,
+        table_number: tableNumber,
+        discount_type: discountType,
+        discount_id: discountId,
+        discount_amount,
+        payment_reference: paymentReference,
+      })
 
       // Persist order item costs locally for guaranteed historical tracking
       try {
@@ -329,8 +404,8 @@ router.post(
       }
 
       res.status(201).json({
-        id:                 row.id,
-        order_number:       row.order_number,
+        id: row.id,
+        order_number: row.order_number,
         deductions_applied: row.deductions_applied ?? deductionMap.size,
       })
       return
@@ -343,7 +418,7 @@ router.post(
       console.error('create_order rejected the order:', rpcError)
       res.status(500).json({
         message: 'Failed to record the order. Nothing was saved.',
-        detail:  rpcError.message,
+        detail: rpcError.message,
       })
       return
     }
@@ -351,16 +426,16 @@ router.post(
     // ── Fallback path (RPC absent or unusable) ───────────────
     console.warn(
       '[checkout] create_order() unusable' +
-        (rpcError ? ` (${rpcError.code ?? 'unknown'}: ${rpcError.message})` : '') +
-        ' — using non-atomic fallback. Re-apply ' +
-        'supabase/migrations/20261010_create_order.sql for guaranteed atomicity.'
+      (rpcError ? ` (${rpcError.code ?? 'unknown'}: ${rpcError.message})` : '') +
+      ' — using non-atomic fallback. Re-apply ' +
+      'supabase/migrations/20261010_create_order.sql for guaranteed atomicity.'
     )
 
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
       .insert({
-        cashier_id:     staffProfile.id,
-        status:         'completed',
+        cashier_id: staffProfile.id,
+        status: 'completed',
         payment_method: dbPaymentMethod,
         subtotal,
         vat_amount,
@@ -377,6 +452,14 @@ router.post(
     }
 
     setOrderPaymentMethod(order.id, paymentMethod)
+    setOrderExtraMeta(order.id, {
+      order_type: orderType,
+      table_number: tableNumber,
+      discount_type: discountType,
+      discount_id: discountId,
+      discount_amount,
+      payment_reference: paymentReference,
+    })
 
     /**
      * Undo everything written so far. Used when a later step fails, so a
@@ -391,12 +474,12 @@ router.post(
     }
 
     const lineItemPayload = orderItems.map(i => ({
-      order_id:     order.id,
-      product_id:   i.product_id,
+      order_id: order.id,
+      product_id: i.product_id,
       product_name: i.product_name,
-      unit_price:   i.unit_price,
-      unit_cost:    i.unit_cost,
-      quantity:     i.quantity,
+      unit_price: i.unit_price,
+      unit_cost: i.unit_cost,
+      quantity: i.quantity,
     }))
 
     let { data: insertedItems, error: itemsError } = await supabaseAdmin
@@ -440,9 +523,9 @@ router.post(
     let deductionFailure: string | null = null
 
     for (const invItem of inventoryItems) {
-      const deductQty  = deductionMap.get(invItem.id) ?? 0
+      const deductQty = deductionMap.get(invItem.id) ?? 0
       const currentQty = Number(invItem.stock_qty)
-      const newQty     = Math.max(0, currentQty - deductQty) // floor at 0
+      const newQty = Math.max(0, currentQty - deductQty) // floor at 0
 
       const { error: updateError } = await supabaseAdmin
         .from('inventory')
@@ -457,14 +540,14 @@ router.post(
       restoredStock.push({ id: invItem.id, qty: currentQty })
 
       movementInserts.push({
-        inventory_id:  invItem.id,
-        order_id:      order.id,
+        inventory_id: invItem.id,
+        order_id: order.id,
         movement_type: 'deduction',
-        qty_change:    -deductQty,
-        qty_before:    currentQty,
-        qty_after:     newQty,
-        performed_by:  staffProfile.id,
-        notes:         `Auto-deducted for Order #${order.order_number}`,
+        qty_change: -deductQty,
+        qty_before: currentQty,
+        qty_after: newQty,
+        performed_by: staffProfile.id,
+        notes: `Auto-deducted for Order #${order.order_number}`,
       })
     }
 

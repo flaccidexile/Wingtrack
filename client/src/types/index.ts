@@ -84,6 +84,9 @@ export interface InventoryItem {
   suggested_reorder_qty?: number
 }
 
+export type OrderType = 'dine_in' | 'take_out' | 'delivery'
+export type DiscountType = 'none' | 'senior' | 'pwd'
+
 export interface Order {
   id: string
   order_number: number
@@ -97,6 +100,18 @@ export interface Order {
   notes?: string
   created_at: string
   order_items?: OrderItem[]
+  /** Fulfillment mode: Dine-In, Take-Out, or Delivery. */
+  order_type?: OrderType
+  /** Optional table number when order_type is dine_in (e.g. "Table 4"). */
+  table_number?: string | null
+  /** Optional Philippine statutory discount (Senior Citizen / PWD 20% + VAT-exempt). */
+  discount_type?: DiscountType
+  /** Optional Senior Citizen / PWD ID number for BIR receipt compliance. */
+  discount_id?: string | null
+  /** Computed discount amount in PHP. */
+  discount_amount?: number
+  /** Optional GCash / Maya / Card reference or approval number. */
+  payment_reference?: string | null
 }
 
 export interface OrderItem {
@@ -133,6 +148,11 @@ export interface CheckoutPayload {
   items: { product_id: string; quantity: number }[]
   payment_method: 'cash' | 'gcash' | 'maya' | 'card'
   notes?: string
+  order_type?: OrderType
+  table_number?: string | null
+  discount_type?: DiscountType
+  discount_id?: string | null
+  payment_reference?: string | null
 }
 
 export interface InventoryAdjustmentPayload {

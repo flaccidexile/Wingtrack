@@ -290,7 +290,7 @@ export default function Analytics() {
                   <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--foreground)' }}>{p.name}</span>
                 </div>
                 <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>{p.orders}</span>
-                <span style={{ fontSize: 14, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: 'var(--primary)' }}>&#8369;{(p.revenue/1000).toFixed(0)}k</span>
+                <span style={{ fontSize: 14, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: 'var(--primary)' }}>₱{(p.revenue/1000).toFixed(0)}k</span>
               </div>
             ))}
             {topProducts.length === 0 && (
