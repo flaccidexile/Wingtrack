@@ -1,0 +1,10 @@
+{
+  "4db252da-e618-403f-835e-ff19b4ce4f7c": {
+    "order_type": "dine_in",
+    "table_number": null,
+    "discount_type": "none",
+    "discount_id": null,
+    "discount_amount": 0,
+    "payment_reference": null
+  }
+}
