@@ -10,7 +10,7 @@ const router = Router()
 const PAYMENT_METHODS = ['cash', 'gcash', 'maya', 'card'] as const
 type PaymentMethod = (typeof PAYMENT_METHODS)[number]
 
-const ORDER_TYPES = ['dine_in', 'take_out', 'delivery'] as const
+const ORDER_TYPES = ['dine_in', 'take_out'] as const
 type OrderType = (typeof ORDER_TYPES)[number]
 
 const DISCOUNT_TYPES = ['none', 'senior', 'pwd'] as const

@@ -39,7 +39,6 @@ const PAYMENT_METHODS = [
 const ORDER_TYPES: Array<{ value: OrderType; label: string }> = [
   { value: 'dine_in', label: 'Dine-In' },
   { value: 'take_out', label: 'Take-Out' },
-  { value: 'delivery', label: 'Delivery' },
 ]
 
 const DISCOUNT_TYPES: Array<{ value: DiscountType; label: string }> = [

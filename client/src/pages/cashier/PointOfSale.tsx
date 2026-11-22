@@ -558,13 +558,12 @@ export default function PointOfSale() {
             </div>
           )}
 
-          {/* Order Type (Dine-In, Take-Out, Delivery) & Table # */}
+          {/* Order Type (Dine-In, Take-Out) & Table # */}
           <div style={{ marginBottom: 10 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: orderType === 'dine_in' ? 6 : 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: orderType === 'dine_in' ? 6 : 0 }}>
               {([
                 { key: 'dine_in',  label: 'Dine-In' },
                 { key: 'take_out', label: 'Take-Out' },
-                { key: 'delivery', label: 'Delivery' },
               ] as const).map(ot => (
                 <button
                   key={ot.key}
@@ -885,11 +884,10 @@ export default function PointOfSale() {
               )}
 
               {/* Mobile Order Type & Discount */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 8 }}>
                 {([
                   { key: 'dine_in',  label: 'Dine-In' },
                   { key: 'take_out', label: 'Take-Out' },
-                  { key: 'delivery', label: 'Delivery' },
                 ] as const).map(ot => (
                   <button
                     key={ot.key}
