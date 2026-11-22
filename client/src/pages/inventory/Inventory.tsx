@@ -299,7 +299,7 @@ export default function Inventory() {
   const [loading, setLoading] = useState(true)
   const [cat, setCat] = useState('All')
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'ok' | 'low' | 'critical'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'ok' | 'low' | 'critical' | 'needs_restock' | 'expiring'>('all')
 
   // Adjust modal state
   const [adjustModal, setAdjustModal] = useState<AdjustModal | null>(null)
@@ -417,10 +417,25 @@ export default function Inventory() {
   const okCount   = items.filter(i => getItemStatus(i) === 'ok').length
   const lowCount  = items.filter(i => getItemStatus(i) === 'low').length
   const critCount = items.filter(i => getItemStatus(i) === 'critical').length
-  const expiringCount = items.filter(i => {
-    const exp = getExpiryInfo(i).status
-    return exp === 'expired' || exp === 'expiring_soon'
-  }).length
+  const expiredCount = items.filter(i => getExpiryInfo(i).status === 'expired').length
+  const expiringSoonCount = items.filter(i => getExpiryInfo(i).status === 'expiring_soon').length
+  const expiringCount = expiredCount + expiringSoonCount
+  const healthyPct = items.length > 0 ? Math.round((okCount / items.length) * 100) : 100
+  const totalInventoryValue = items.reduce(
+    (sum, i) => sum + Math.max(0, Number(i.stock_qty) || 0) * Math.max(0, Number(i.unit_cost) || 0),
+    0,
+  )
+  const needsRestockItems = items
+    .filter(i => {
+      const st = getItemStatus(i)
+      return st === 'critical' || st === 'low' || getItemRopMetrics(i).suggestedReorderQty > 0
+    })
+    .sort((a, b) => {
+      const rank = (x: InventoryItem) => (getItemStatus(x) === 'critical' ? 0 : getItemStatus(x) === 'low' ? 1 : 2)
+      const diff = rank(a) - rank(b)
+      if (diff !== 0) return diff
+      return Number(a.stock_qty) - Number(b.stock_qty)
+    })
 
   function openAdjustModal(item: InventoryItem, prefillQty?: string) {
     const rop = getItemRopMetrics(item)
@@ -434,7 +449,18 @@ export default function Inventory() {
   const filtered = items
     .filter(i => cat === 'All' || i.category === cat)
     .filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
-    .filter(i => statusFilter === 'all' || getItemStatus(i) === statusFilter)
+    .filter(i => {
+      if (statusFilter === 'all') return true
+      if (statusFilter === 'needs_restock') {
+        const st = getItemStatus(i)
+        return st === 'critical' || st === 'low' || getItemRopMetrics(i).suggestedReorderQty > 0
+      }
+      if (statusFilter === 'expiring') {
+        const exp = getExpiryInfo(i).status
+        return exp === 'expired' || exp === 'expiring_soon'
+      }
+      return getItemStatus(i) === statusFilter
+    })
 
   async function handleAdjust(e: React.FormEvent) {
     e.preventDefault()
@@ -689,12 +715,12 @@ export default function Inventory() {
       {/* Header */}
       <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <p className="overline" style={{ marginBottom: 6, textDecoration: 'none' }}>Wing&apos;s Zone · Stock Control</p>
+          <p className="overline" style={{ marginBottom: 6, textDecoration: 'none' }}>Wing&apos;s Zone · Inventory Dashboard</p>
           <h1 className="page-title" style={{ fontSize: 26 }}>
-            Inventory Management
+            Inventory Dashboard
           </h1>
           <p className="page-subtitle">
-            {items.length} Wing&apos;s Zone raw ingredients &amp; packaging items · Real-time stock tracking
+            {items.length} Wing&apos;s Zone raw ingredients &amp; packaging items · Updated stock levels, restocking priorities &amp; shelf-life monitoring
           </p>
         </div>
 
@@ -799,6 +825,177 @@ export default function Inventory() {
           </div>
         </div>
       </div>
+
+      {/* Inventory Dashboard KPI Overview */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+          gap: 14,
+          marginBottom: 18,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => { setActiveTab('stock'); setStatusFilter('all') }}
+          className="card"
+          style={{
+            padding: '16px 18px', textAlign: 'left', cursor: 'pointer',
+            border: statusFilter === 'all' ? '1.5px solid var(--primary)' : '1px solid var(--border)',
+          }}
+        >
+          <p style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted-foreground)', margin: 0 }}>
+            Updated Stock Items
+          </p>
+          <p style={{ fontSize: 26, fontWeight: 700, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)', margin: '6px 0 4px' }}>
+            {items.length}
+          </p>
+          <p style={{ fontSize: 12, color: '#15803d', fontWeight: 600, margin: 0 }}>
+            {okCount} healthy · {healthyPct}% availability
+          </p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('stock')
+            setStatusFilter(statusFilter === 'needs_restock' ? 'all' : 'needs_restock')
+          }}
+          className="card"
+          style={{
+            padding: '16px 18px', textAlign: 'left', cursor: 'pointer',
+            border: statusFilter === 'needs_restock'
+              ? '1.5px solid #b91c1c'
+              : needsRestockItems.length > 0 ? '1px solid #fca5a5' : '1px solid var(--border)',
+            background: needsRestockItems.length > 0 ? 'rgba(254, 242, 242, 0.55)' : 'var(--card)',
+          }}
+        >
+          <p style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted-foreground)', margin: 0 }}>
+            Requires Restocking
+          </p>
+          <p style={{ fontSize: 26, fontWeight: 700, fontFamily: 'IBM Plex Mono', color: needsRestockItems.length > 0 ? '#b91c1c' : '#15803d', margin: '6px 0 4px' }}>
+            {needsRestockItems.length}
+          </p>
+          <p style={{ fontSize: 12, color: needsRestockItems.length > 0 ? '#b45309' : 'var(--muted-foreground)', fontWeight: 600, margin: 0 }}>
+            {critCount} critical · {lowCount} low stock
+          </p>
+        </button>
+
+        <div className="card" style={{ padding: '16px 18px' }}>
+          <p style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted-foreground)', margin: 0 }}>
+            Total Stock Value
+          </p>
+          <p style={{ fontSize: 24, fontWeight: 700, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)', margin: '6px 0 4px' }}>
+            ₱{totalInventoryValue.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--muted-foreground)', margin: 0 }}>
+            Current on-hand valuation
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('stock')
+            setStatusFilter(statusFilter === 'expiring' ? 'all' : 'expiring')
+          }}
+          className="card"
+          style={{
+            padding: '16px 18px', textAlign: 'left', cursor: 'pointer',
+            border: statusFilter === 'expiring'
+              ? '1.5px solid #b45309'
+              : expiringCount > 0 ? '1px solid #fcd34d' : '1px solid var(--border)',
+            background: expiringCount > 0 ? 'rgba(255, 247, 230, 0.6)' : 'var(--card)',
+          }}
+        >
+          <p style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted-foreground)', margin: 0 }}>
+            Shelf-Life Watch
+          </p>
+          <p style={{ fontSize: 26, fontWeight: 700, fontFamily: 'IBM Plex Mono', color: expiredCount > 0 ? '#b91c1c' : expiringCount > 0 ? '#b45309' : '#15803d', margin: '6px 0 4px' }}>
+            {expiringCount}
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--muted-foreground)', fontWeight: 500, margin: 0 }}>
+            {expiredCount} expired · {expiringSoonCount} expiring ≤7d
+          </p>
+        </button>
+      </div>
+
+      {/* Restocking Priority Panel — directly highlights products requiring restock */}
+      {!loading && needsRestockItems.length > 0 && (
+        <div
+          className="card"
+          style={{
+            padding: '16px 20px',
+            marginBottom: 18,
+            border: '1px solid rgba(234, 88, 12, 0.28)',
+            background: 'linear-gradient(180deg, rgba(255, 247, 237, 0.65) 0%, var(--card) 100%)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+            <div>
+              <h2 style={{ fontFamily: 'Inter', fontSize: 15, fontWeight: 700, color: 'var(--foreground)', margin: 0 }}>
+                Items Requiring Restocking ({needsRestockItems.length})
+              </h2>
+              <p style={{ fontSize: 12, color: 'var(--muted-foreground)', margin: '2px 0 0' }}>
+                Sorted by urgency (Critical → Low → Below Reorder Point). Click Restock to pre-fill the recommended ROP quantity.
+              </p>
+            </div>
+            {needsRestockItems.length > 4 && (
+              <button
+                type="button"
+                onClick={() => { setActiveTab('stock'); setStatusFilter('needs_restock') }}
+                style={{
+                  fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 6,
+                  border: '1px solid var(--border)', background: 'var(--card)',
+                  color: 'var(--primary)', cursor: 'pointer',
+                }}
+              >
+                View all {needsRestockItems.length} in table
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 10 }}>
+            {needsRestockItems.slice(0, 4).map(item => {
+              const st = getItemStatus(item)
+              const badge = STATUS_STYLES[st] ?? STATUS_STYLES.low
+              const rop = getItemRopMetrics(item)
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                    padding: '10px 12px', borderRadius: 8,
+                    background: 'var(--card)', border: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.name}
+                      </span>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 10, background: badge.bg, color: badge.color, flexShrink: 0 }}>
+                        {badge.label}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: 11.5, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', margin: '3px 0 0' }}>
+                      {Number(item.stock_qty).toLocaleString()} / ROP {rop.reorderPoint} {item.unit}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openAdjustModal(item)}
+                    className="btn-primary"
+                    style={{ padding: '6px 10px', fontSize: 11.5, flexShrink: 0, whiteSpace: 'nowrap' }}
+                  >
+                    + Restock
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Tabs: Stock vs Movement Audit */}
       <div style={{ display: 'flex', gap: 12, borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
@@ -928,7 +1125,7 @@ export default function Inventory() {
               <select
                 id="inv-status-dropdown"
                 value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value as 'all' | 'ok' | 'low' | 'critical')}
+                onChange={e => setStatusFilter(e.target.value as 'all' | 'ok' | 'low' | 'critical' | 'needs_restock' | 'expiring')}
                 style={{
                   padding: '9px 34px 9px 14px',
                   fontSize: 13,
@@ -941,15 +1138,17 @@ export default function Inventory() {
                   outline: 'none',
                   appearance: 'none',
                   WebkitAppearance: 'none',
-                  minWidth: 175,
+                  minWidth: 195,
                   boxShadow: statusFilter !== 'all' ? '0 0 0 3px rgba(234, 88, 12, 0.12)' : 'none',
                   transition: 'border-color 0.15s, box-shadow 0.15s',
                 }}
               >
                 <option value="all">All Stocks ({items.length})</option>
+                <option value="needs_restock">Needs Restock ({needsRestockItems.length})</option>
                 <option value="ok">In stock ({okCount})</option>
                 <option value="low">Low ({lowCount})</option>
                 <option value="critical">Critical ({critCount})</option>
+                <option value="expiring">Expiring / Expired ({expiringCount})</option>
               </select>
               <svg
                 width="14"
