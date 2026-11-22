@@ -74,5 +74,9 @@
   "e8fa8c29-253c-419e-aca7-b249a36cddfa": {
     "expiration_date": "2026-11-30",
     "lead_time_days": 2
+  },
+  "61d595ee-31ae-4b56-b5cd-ddbd7b0b4ecc": {
+    "expiration_date": "2026-12-03",
+    "lead_time_days": 2
   }
 }
