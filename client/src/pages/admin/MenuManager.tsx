@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase'
 import { dispatchNotification } from '@/lib/notifications'
 import { useIsCompact } from '@/hooks/useMediaQuery'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import SuccessDialog from '@/components/ui/SuccessDialog'
 import FoodImage from '@/components/ui/FoodImage'
 import type { Product, ProductCategory, InventoryItem, ProductRecipe } from '@/types'
 
@@ -722,6 +723,7 @@ export default function MenuManager() {
   /** Product awaiting delete confirmation, set from the row action. */
   const [pendingDelete, setPendingDelete] = useState<Product | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deletedProductName, setDeletedProductName] = useState<string | null>(null)
 
   async function runDeleteProduct() {
     if (!pendingDelete) return
@@ -730,7 +732,7 @@ export default function MenuManager() {
     try {
       await apiDeleteProduct(prod.id)
       setProducts(prev => prev.filter(p => p.id !== prod.id))
-      showBanner('success', `"${prod.name}" deleted from menu.`)
+      setDeletedProductName(prod.name)
     } catch (err: unknown) {
       showBanner('error', err instanceof Error ? err.message : 'Failed to delete product')
     } finally {
@@ -1983,10 +1985,24 @@ export default function MenuManager() {
         busy={deleteBusy}
         tone="danger"
         title={`Delete "${pendingDelete?.name ?? ''}"?`}
-        message="This removes the item from the menu permanently. Products with past order records cannot be deleted — mark them &quot;Unavailable&quot; instead."
-        confirmLabel="Delete"
+        message='This removes the item from the menu permanently. Products with past order records cannot be deleted — mark them "Unavailable" instead.'
+        confirmLabel={deleteBusy ? 'Deleting…' : 'Yes, Delete'}
         onConfirm={runDeleteProduct}
-        onCancel={() => setPendingDelete(null)}
+        onCancel={() => { if (!deleteBusy) setPendingDelete(null) }}
+      />
+
+      {/* Delete product success modal */}
+      <SuccessDialog
+        open={deletedProductName !== null}
+        title="Deleted Successfully"
+        message={
+          deletedProductName ? (
+            <>
+              <strong style={{ color: 'var(--foreground)' }}>{deletedProductName}</strong> has been permanently deleted from the menu.
+            </>
+          ) : null
+        }
+        onClose={() => setDeletedProductName(null)}
       />
     </div>
   )

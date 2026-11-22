@@ -7,6 +7,7 @@ import { dispatchNotification } from '@/lib/notifications'
 import { useIsCompact } from '@/hooks/useMediaQuery'
 import EmptyState, { EMPTY_ICONS } from '@/components/ui/EmptyState'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import SuccessDialog from '@/components/ui/SuccessDialog'
 import type { InventoryItem, InventoryAdjustmentPayload, InventoryMovement } from '@/types'
 
 const CATS = ['All', 'Proteins', 'Sauces', 'Sides', 'Produce', 'Cooking', 'Spices', 'Staples', 'Packaging']
@@ -333,10 +334,11 @@ export default function Inventory() {
   const [addLoading, setAddLoading] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
 
-  // Delete confirmation modal state
+  // Delete confirmation & success modal state
   const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deletedItemInfo, setDeletedItemInfo] = useState<{ name: string; category: string } | null>(null)
 
   // Export state
   const [exportFilter, setExportFilter] = useState<'week' | 'month'>('week')
@@ -530,6 +532,7 @@ export default function Inventory() {
       await apiDeleteInventoryItem(removed.id)
       setItems(prev => prev.filter(i => i.id !== removed.id))
       setDeleteTarget(null)
+      setDeletedItemInfo({ name: removed.name, category: removed.category })
       dispatchNotification({
         category: 'inventory',
         title: 'Inventory Item Deleted',
@@ -1538,6 +1541,20 @@ export default function Inventory() {
         cancelLabel="Cancel"
         onConfirm={handleConfirmDelete}
         onCancel={() => { if (!deleteLoading) { setDeleteTarget(null); setDeleteError(null) } }}
+      />
+
+      {/* Delete Inventory Item Success Modal */}
+      <SuccessDialog
+        open={deletedItemInfo !== null}
+        title="Deleted Successfully"
+        message={
+          deletedItemInfo ? (
+            <>
+              <strong style={{ color: 'var(--foreground)' }}>{deletedItemInfo.name}</strong> ({deletedItemInfo.category}) has been permanently deleted from inventory.
+            </>
+          ) : null
+        }
+        onClose={() => setDeletedItemInfo(null)}
       />
     </div>
   )
