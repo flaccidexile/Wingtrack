@@ -596,9 +596,19 @@ export default function OrdersList() {
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
           <div className="scroll-x">
-            <div style={{ display: 'grid', gridTemplateColumns: '62px 115px minmax(0, 1fr) 76px 90px 105px 84px 118px', gap: 0, padding: '12px 20px', borderBottom: '1px solid var(--border)', minWidth: 840 }}>
-              {['Order #', 'Date & Time', 'Items Summary', 'Payment', 'Total', 'Net Profit', 'Status', 'Actions'].map(h => (
-                <span key={h} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 0.5fr) minmax(145px, 1fr) minmax(220px, 1.8fr) minmax(95px, 0.75fr) minmax(105px, 0.85fr) minmax(115px, 0.9fr) minmax(105px, 0.8fr) minmax(140px, 0.9fr)', gap: 20, padding: '13px 24px', borderBottom: '1px solid var(--border)', minWidth: 1040, alignItems: 'center' }}>
+              {['Order #', 'Date & Time', 'Items Summary', 'Payment', 'Total', 'Net Profit', 'Status', 'Actions'].map((h, idx) => (
+                <span
+                  key={h}
+                  style={{
+                    fontSize: 11,
+                    fontFamily: 'IBM Plex Mono',
+                    color: 'var(--muted-foreground)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    textAlign: idx === 6 ? 'center' : idx === 7 ? 'right' : 'left',
+                  }}
+                >
                   {h}
                 </span>
               ))}
@@ -623,24 +633,24 @@ export default function OrdersList() {
                   key={order.id}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '62px 115px minmax(0, 1fr) 76px 90px 105px 84px 118px',
-                    gap: 0,
-                    padding: '14px 20px',
+                    gridTemplateColumns: 'minmax(72px, 0.5fr) minmax(145px, 1fr) minmax(220px, 1.8fr) minmax(95px, 0.75fr) minmax(105px, 0.85fr) minmax(115px, 0.9fr) minmax(105px, 0.8fr) minmax(140px, 0.9fr)',
+                    gap: 20,
+                    padding: '14px 24px',
                     borderBottom: i < filteredOrders.length - 1 ? '1px solid var(--muted)' : 'none',
                     alignItems: 'center',
                     background: isVoid ? 'rgba(254, 242, 242, 0.4)' : 'transparent',
-                    minWidth: 840,
+                    minWidth: 1040,
                   }}
                 >
                   <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 700, fontSize: 13, color: 'var(--foreground)' }}>
                     #{order.order_number}
                   </span>
 
-                  <span style={{ fontSize: 12, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}>
+                  <span style={{ fontSize: 12, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', whiteSpace: 'nowrap' }}>
                     {dateStr}
                   </span>
 
-                  <div style={{ paddingRight: 16, minWidth: 0 }}>
+                  <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
                       <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'var(--muted)', color: 'var(--foreground)', fontFamily: 'IBM Plex Mono', fontWeight: 600 }}>
                         {order.order_type === 'take_out'
@@ -699,28 +709,29 @@ export default function OrdersList() {
                     )}
                   </div>
 
-                  <div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
                     <span
                       style={{
                         fontSize: 11,
-                        padding: '3px 8px',
+                        padding: '4px 10px',
                         borderRadius: 12,
                         fontWeight: 600,
                         background: isVoid ? '#fee2e2' : '#e8f5e9',
                         color: isVoid ? '#b91c1c' : '#15803d',
                         textTransform: 'uppercase',
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       {order.status}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                     <button
                       onClick={() => setSelectedReceiptOrder(order)}
                       style={{
                         fontSize: 12,
-                        padding: '5px 9px',
+                        padding: '6px 11px',
                         borderRadius: 6,
                         border: '1px solid var(--border)',
                         background: 'var(--card)',
@@ -738,7 +749,7 @@ export default function OrdersList() {
                         onClick={() => openVoid(order)}
                         style={{
                           fontSize: 12,
-                          padding: '5px 9px',
+                          padding: '6px 11px',
                           borderRadius: 6,
                           border: '1px solid #fecaca',
                           background: '#fef2f2',

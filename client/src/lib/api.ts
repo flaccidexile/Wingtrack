@@ -8,6 +8,7 @@ import type {
   OrderSummary,
   Product,
   StaffProfile,
+  StaffRole,
   StaffUpdatePayload,
 } from '@/types'
 
@@ -15,21 +16,50 @@ const API_BASE = import.meta.env.VITE_API_URL ?? '/api'
 
 /**
  * Get the current Supabase access token for Express API auth.
+ * Refreshes automatically when expiring soon (or when `forceRefresh` is true).
  */
-async function getAuthHeader(): Promise<Record<string, string>> {
+async function getAuthHeader(forceRefresh = false): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession()
   let token = session?.access_token
+  const expiresAtMs = session?.expires_at ? session.expires_at * 1000 : 0
+  const isExpired = expiresAtMs > 0 && expiresAtMs <= Date.now()
+  const needsRefresh = forceRefresh || (expiresAtMs > 0 && expiresAtMs < Date.now() + 60000)
 
-  // If session is expired or expires within 60s, refresh it
-  if (session?.expires_at && session.expires_at * 1000 < Date.now() + 60000) {
-    const { data: refreshData } = await supabase.auth.refreshSession()
+  if (needsRefresh) {
+    const { data: refreshData, error: refreshErr } = await supabase.auth.refreshSession()
     if (refreshData?.session?.access_token) {
       token = refreshData.session.access_token
+    } else if (refreshErr && (isExpired || forceRefresh)) {
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+      throw new Error('Your session has expired. Please sign in again.')
     }
   }
 
   if (!token) throw new Error('Not authenticated')
   return { Authorization: `Bearer ${token}` }
+}
+
+/**
+ * Authenticated fetch that retries once with a forced session refresh if the
+ * API rejects the token with 401 (e.g. stale/revoked JWT after a password or
+ * email change). If the refreshed token is still rejected, clears the dead
+ * local session so the UI returns cleanly to Sign In.
+ */
+async function fetchAuthed(url: string, init: RequestInit = {}): Promise<Response> {
+  const headers = await getAuthHeader(false)
+  let res = await fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), ...headers } })
+  if (res.status === 401) {
+    try {
+      const freshHeaders = await getAuthHeader(true)
+      res = await fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), ...freshHeaders } })
+      if (res.status === 401) {
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+      }
+    } catch {
+      // getAuthHeader already cleared the dead session; return the original 401
+    }
+  }
+  return res
 }
 
 /**
@@ -155,8 +185,7 @@ export async function apiReactivateStaff(staffId: string) {
  * been applied.
  */
 export async function apiGetStaff(): Promise<StaffProfile[]> {
-  const headers = await getAuthHeader()
-  const res = await fetch(`${API_BASE}/staff`, { method: 'GET', headers })
+  const res = await fetchAuthed(`${API_BASE}/staff`, { method: 'GET' })
   if (!res.ok) {
     throw await toApiError(res, 'Failed to load staff')
   }
@@ -171,10 +200,9 @@ export async function apiGetStaff(): Promise<StaffProfile[]> {
  * and mirrors an email change onto the underlying auth account.
  */
 export async function apiUpdateStaff(staffId: string, payload: StaffUpdatePayload) {
-  const headers = await getAuthHeader()
-  const res = await fetch(`${API_BASE}/staff/${staffId}`, {
+  const res = await fetchAuthed(`${API_BASE}/staff/${staffId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
@@ -185,13 +213,18 @@ export async function apiUpdateStaff(staffId: string, payload: StaffUpdatePayloa
 
 /**
  * PATCH /api/staff/me (Authenticated)
- * Updates the caller's own display name.
+ * Updates the caller's own display name; admins may also update their own email and role.
  */
-export async function apiUpdateMyProfile(payload: { full_name: string }) {
-  const headers = await getAuthHeader()
-  const res = await fetch(`${API_BASE}/staff/me`, {
+export async function apiUpdateMyProfile(payload: {
+  full_name: string
+  email?: string
+  role?: StaffRole
+  /** 6-digit code emailed to the new address; required when email changes. */
+  email_code?: string
+}) {
+  const res = await fetchAuthed(`${API_BASE}/staff/me`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
@@ -293,15 +326,57 @@ export async function apiRemoveStaffAvatar(staffId: string): Promise<StaffProfil
   return res.json()
 }
 
+/** Response from the step-up verification code endpoints. */
+export interface VerificationCodeResponse {
+  sent: boolean
+  /** False only in development when SMTP is not configured. */
+  delivered: boolean
+  email: string
+  /** Present only in development without SMTP — never in production. */
+  dev_code?: string
+}
+
+/**
+ * POST /api/staff/me/email-change/code (Admin only)
+ * Emails a 6-digit code to the NEW address before the sign-in email changes.
+ */
+export async function apiRequestEmailChangeCode(email: string): Promise<VerificationCodeResponse> {
+  const res = await fetchAuthed(`${API_BASE}/staff/me/email-change/code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  if (!res.ok) throw await toApiError(res, 'Could not send the verification code')
+  return res.json()
+}
+
+/**
+ * POST /api/staff/me/password-change/code (Authenticated)
+ * Confirms the current password, then emails a 6-digit code to the current address.
+ */
+export async function apiRequestPasswordChangeCode(currentPassword: string): Promise<VerificationCodeResponse> {
+  const res = await fetchAuthed(`${API_BASE}/staff/me/password-change/code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ current_password: currentPassword }),
+  })
+  if (!res.ok) throw await toApiError(res, 'Could not send the verification code')
+  return res.json()
+}
+
 /**
  * PATCH /api/staff/update-password (Authenticated users)
+ * Requires the current password and the emailed 6-digit verification code.
  */
-export async function apiUpdatePassword(password: string) {
-  const headers = await getAuthHeader()
-  const res = await fetch(`${API_BASE}/staff/update-password`, {
+export async function apiUpdatePassword(payload: {
+  password: string
+  current_password: string
+  code: string
+}) {
+  const res = await fetchAuthed(`${API_BASE}/staff/update-password`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify({ password }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: 'Failed to update password' }))
@@ -530,6 +605,20 @@ export async function apiCreateInventoryItem(payload: {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: 'Failed to create inventory item' }))
     throw new Error(err.message ?? 'Failed to create inventory item')
+  }
+  return res.json()
+}
+
+/**
+ * DELETE /api/inventory/:id (Admin or Inventory Personnel)
+ * Permanently removes an inventory item along with its movement log and recipe links.
+ */
+export async function apiDeleteInventoryItem(id: string): Promise<{ deleted: boolean; id: string; name: string }> {
+  const res = await fetchAuthed(`${API_BASE}/inventory/${id}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    throw await toApiError(res, 'Failed to delete inventory item')
   }
   return res.json()
 }

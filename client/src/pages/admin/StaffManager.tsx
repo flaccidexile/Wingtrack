@@ -34,8 +34,8 @@ const LIST_REFRESH_MS = 60_000
  * the space comes out of Email and Activity — both of which already truncate
  * or read fine when narrower — rather than by widening the table.
  */
-const GRID = '1fr 190px 160px 88px 138px 210px'
-const GRID_MIN_WIDTH = 990
+const GRID = 'minmax(180px, 1.35fr) minmax(210px, 1.55fr) minmax(145px, 1fr) minmax(90px, 0.65fr) minmax(150px, 1.05fr) minmax(215px, 1.15fr)'
+const GRID_MIN_WIDTH = 1090
 
 // ============================================================
 // Small building blocks
@@ -609,9 +609,21 @@ export default function StaffManager() {
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
           <div className="scroll-x">
-            <div style={{ display: 'grid', gridTemplateColumns: GRID, padding: '12px 22px', borderBottom: '1px solid var(--border)', minWidth: GRID_MIN_WIDTH }}>
-              {['Name', 'Email', 'Role', 'Account', 'Activity', 'Actions'].map(h => (
-                <span key={h} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</span>
+            <div style={{ display: 'grid', gridTemplateColumns: GRID, gap: 20, padding: '13px 24px', borderBottom: '1px solid var(--border)', minWidth: GRID_MIN_WIDTH, alignItems: 'center' }}>
+              {['Name', 'Email', 'Role', 'Account', 'Activity', 'Actions'].map((h, idx) => (
+                <span
+                  key={h}
+                  style={{
+                    fontSize: 11,
+                    fontFamily: 'IBM Plex Mono',
+                    color: 'var(--muted-foreground)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    textAlign: idx === 3 ? 'center' : idx === 5 ? 'right' : 'left',
+                  }}
+                >
+                  {h}
+                </span>
               ))}
             </div>
 
@@ -621,15 +633,15 @@ export default function StaffManager() {
                 <div
                   key={s.id}
                   style={{
-                    display: 'grid', gridTemplateColumns: GRID,
-                    padding: '14px 22px',
+                    display: 'grid', gridTemplateColumns: GRID, gap: 20,
+                    padding: '14px 24px',
                     borderBottom: i < staff.length - 1 ? '1px solid var(--muted)' : 'none',
                     alignItems: 'center', transition: 'background 0.1s', minWidth: GRID_MIN_WIDTH,
                   }}
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--muted)'}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0, paddingRight: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
                     <Avatar
                       name={s.full_name}
                       src={s.avatar_url}
@@ -657,15 +669,15 @@ export default function StaffManager() {
                     </div>
                   </div>
 
-                  <span style={{ fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>
+                  <span title={s.email} style={{ fontSize: 13, color: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {s.email}
                   </span>
 
                   <div><RoleBadge role={s.role} /></div>
-                  <div><AccountBadge isActive={s.is_active} /></div>
-                  <div><ActivityCell staff={s} /></div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}><AccountBadge isActive={s.is_active} /></div>
+                  <div style={{ minWidth: 0 }}><ActivityCell staff={s} /></div>
 
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                     <RowButton
                       id={`btn-view-${s.id}`}
                       label="View"

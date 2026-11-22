@@ -19,3 +19,21 @@ if (!supabaseUrl || !serviceRoleKey) {
 export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 })
+
+/**
+ * Checks an email/password pair without touching the shared admin client.
+ *
+ * A throwaway client is used so the sign-in session never leaks into
+ * `supabaseAdmin`. The probe session is then revoked with `scope: 'local'`,
+ * which ends only that session — the user's real browser session is untouched.
+ */
+export async function verifyUserPassword(email: string, password: string): Promise<boolean> {
+  if (!email || !password) return false
+  const probe = createClient(supabaseUrl as string, serviceRoleKey as string, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  const { data, error } = await probe.auth.signInWithPassword({ email, password })
+  if (error || !data.session) return false
+  await probe.auth.signOut({ scope: 'local' }).catch(() => undefined)
+  return true
+}

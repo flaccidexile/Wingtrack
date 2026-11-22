@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { apiRemoveStaffAvatar, apiUpdateStaff, apiUploadStaffAvatar } from '@/lib/api'
-import { STAFF_ROLES } from '@/lib/staff'
+import { STAFF_ROLES, roleLabel } from '@/lib/staff'
 import Avatar from '@/components/ui/Avatar'
 import type { StaffProfile, StaffRole } from '@/types'
 
@@ -42,6 +42,10 @@ export default function EditStaffModal({ staff, self, onClose, onSaved }: EditSt
   const [isActive, setIsActive] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [savedResult, setSavedResult] = useState<{
+    staff: StaffProfile
+    changes: Array<{ label: string; value: string }>
+  } | null>(null)
 
   // The photo is tracked separately from the form fields because it is saved
   // on its own, immediately.
@@ -64,6 +68,7 @@ export default function EditStaffModal({ staff, self, onClose, onSaved }: EditSt
     setPhotoError(null)
     setSaving(false)
     setPhotoBusy(false)
+    setSavedResult(null)
   }, [staff])
 
   // Lock background scroll and close on Escape.
@@ -145,10 +150,23 @@ export default function EditStaffModal({ staff, self, onClose, onSaved }: EditSt
     // Send only what actually changed, so an untouched email never triggers a
     // needless auth-account update.
     const payload: Parameters<typeof apiUpdateStaff>[1] = {}
-    if (fullName.trim() !== staff.full_name) payload.full_name = fullName.trim()
-    if (email.trim().toLowerCase() !== staff.email.toLowerCase()) payload.email = email.trim().toLowerCase()
-    if (role !== staff.role) payload.role = role
-    if (isActive !== staff.is_active) payload.is_active = isActive
+    const changes: Array<{ label: string; value: string }> = []
+    if (fullName.trim() !== staff.full_name) {
+      payload.full_name = fullName.trim()
+      changes.push({ label: 'Full Name', value: fullName.trim() })
+    }
+    if (email.trim().toLowerCase() !== staff.email.toLowerCase()) {
+      payload.email = email.trim().toLowerCase()
+      changes.push({ label: 'Email', value: email.trim().toLowerCase() })
+    }
+    if (role !== staff.role) {
+      payload.role = role
+      changes.push({ label: 'Role', value: roleLabel(role) })
+    }
+    if (isActive !== staff.is_active) {
+      payload.is_active = isActive
+      changes.push({ label: 'Account Status', value: isActive ? 'Active' : 'Deactivated' })
+    }
 
     if (Object.keys(payload).length === 0) { onClose(); return }
 
@@ -156,7 +174,7 @@ export default function EditStaffModal({ staff, self, onClose, onSaved }: EditSt
     try {
       const updated = await apiUpdateStaff(staff.id, payload)
       onSaved(updated)
-      onClose()
+      setSavedResult({ staff: updated, changes })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not save these changes.')
     } finally {
@@ -172,6 +190,80 @@ export default function EditStaffModal({ staff, self, onClose, onSaved }: EditSt
     fontSize: 12, color: 'var(--muted-foreground)', marginTop: 6, lineHeight: 1.5,
   }
   const busy = saving || photoBusy
+
+  if (savedResult) {
+    return createPortal(
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="staff-saved-title"
+        style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
+          backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, padding: 20,
+        }}
+        onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      >
+        <div
+          className="card fade-in dialog-card"
+          style={{
+            width: '100%', maxWidth: 420, padding: '30px 26px 26px',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.35)', textAlign: 'center',
+          }}
+        >
+          <div
+            style={{
+              width: 56, height: 56, borderRadius: '50%',
+              background: '#dcfce7', color: '#16a34a',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px',
+            }}
+          >
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
+
+          <h2 id="staff-saved-title" style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', margin: 0 }}>
+            Changes Saved Successfully
+          </h2>
+          <p style={{ fontSize: 13.5, color: 'var(--muted-foreground)', marginTop: 8, marginBottom: 18, lineHeight: 1.55 }}>
+            <strong style={{ color: 'var(--foreground)' }}>{savedResult.staff.full_name}</strong>&apos;s staff profile has been updated.
+          </p>
+
+          {savedResult.changes.length > 0 && (
+            <div
+              style={{
+                background: 'var(--muted)', border: '1px solid var(--border)',
+                borderRadius: 10, padding: '12px 14px', marginBottom: 22,
+                textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 8,
+              }}
+            >
+              {savedResult.changes.map(item => (
+                <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13 }}>
+                  <span style={{ color: 'var(--muted-foreground)', flexShrink: 0 }}>{item.label}</span>
+                  <span style={{ color: 'var(--foreground)', fontWeight: 600, textAlign: 'right', overflowWrap: 'anywhere' }}>{item.value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button
+            id="btn-staff-saved-done"
+            type="button"
+            className="btn-primary"
+            autoFocus
+            onClick={onClose}
+            style={{ width: '100%', padding: '12px', fontSize: 14 }}
+          >
+            Done
+          </button>
+        </div>
+      </div>,
+      document.body,
+    )
+  }
 
   return createPortal(
     <div

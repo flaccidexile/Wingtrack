@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabase'
 import {
   apiRemoveAvatar,
+  apiRequestEmailChangeCode,
+  apiRequestPasswordChangeCode,
   apiUpdateMyProfile,
   apiUpdatePassword,
   apiUploadAvatar,
@@ -9,6 +12,8 @@ import {
 import { MIN_PASSWORD_LENGTH } from '@/lib/validation'
 import { roleLabel } from '@/lib/staff'
 import Avatar from '@/components/ui/Avatar'
+import VerificationCodeStep from '@/components/auth/VerificationCodeStep'
+import type { StaffRole } from '@/types'
 
 /** Mirrors the copy shown under the Upload photo button. */
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024
@@ -95,41 +100,83 @@ function PwdInput({
 
 // ── Change Password Modal ─────────────────────────────────
 function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { profile } = useAuth()
+  const [step, setStep] = useState<'form' | 'code'>('form')
   const [currentPwd, setCurrentPwd] = useState('')
   const [newPwd, setNewPwd] = useState('')
   const [confirmPwd, setConfirmPwd] = useState('')
   const [showCurrent, setShowCurrent] = useState(false)
   const [showNew, setShowNew] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [code, setCode] = useState('')
+  const [sentTo, setSentTo] = useState('')
+  const [devCode, setDevCode] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     if (!open) {
+      setStep('form'); setCode(''); setSentTo(''); setDevCode(undefined)
       setCurrentPwd(''); setNewPwd(''); setConfirmPwd('')
       setShowCurrent(false); setShowNew(false); setShowConfirm(false)
       setError(null); setSaved(false); setBusy(false)
     }
   }, [open])
 
+  async function requestCode() {
+    const sent = await apiRequestPasswordChangeCode(currentPwd)
+    setSentTo(sent.email)
+    setDevCode(sent.dev_code)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setSaved(false)
 
-    if (!currentPwd) { setError('Please enter your current password.'); return }
-    if (newPwd.length < MIN_PASSWORD_LENGTH) {
-      setError(`New password must be at least ${MIN_PASSWORD_LENGTH} characters.`); return
+    if (step === 'form') {
+      if (!currentPwd) { setError('Please enter your current password.'); return }
+      if (newPwd.length < MIN_PASSWORD_LENGTH) {
+        setError(`New password must be at least ${MIN_PASSWORD_LENGTH} characters.`); return
+      }
+      if (newPwd !== confirmPwd) { setError('New passwords do not match.'); return }
+      if (currentPwd === newPwd) {
+        setError('New password must be different from your current password.'); return
+      }
+
+      // Step 1: confirm the current password and email a verification code.
+      setBusy(true)
+      try {
+        await requestCode()
+        setCode('')
+        setStep('code')
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Could not send the verification code.')
+      } finally {
+        setBusy(false)
+      }
+      return
     }
-    if (newPwd !== confirmPwd) { setError('New passwords do not match.'); return }
-    if (currentPwd === newPwd) {
-      setError('New password must be different from your current password.'); return
-    }
+
+    // Step 2: submit the code together with the new password.
+    if (!/^\d{6}$/.test(code)) { setError('Enter the 6-digit code from your email.'); return }
 
     setBusy(true)
     try {
-      await apiUpdatePassword(newPwd)
+      await apiUpdatePassword({ password: newPwd, current_password: currentPwd, code })
+      // Updating the password via Supabase Admin revokes existing sessions.
+      // Re-sign in seamlessly with the new password so the browser immediately
+      // receives a fresh JWT and never hits "Invalid or expired token."
+      if (profile?.email) {
+        const { error: reauthErr } = await supabase.auth.signInWithPassword({
+          email: profile.email,
+          password: newPwd,
+        })
+        if (reauthErr) {
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+        }
+      }
       setSaved(true)
       setTimeout(() => onClose(), 1600)
     } catch (err: unknown) {
@@ -174,7 +221,9 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
               Change Password
             </h2>
             <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginTop: 4, marginBottom: 0 }}>
-              Choose a strong password of at least {MIN_PASSWORD_LENGTH} characters.
+              {step === 'form'
+                ? `Step 1 of 2 · Choose a strong password of at least ${MIN_PASSWORD_LENGTH} characters.`
+                : 'Step 2 of 2 · Enter the verification code we emailed you.'}
             </p>
           </div>
           <button
@@ -195,16 +244,32 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
         </div>
 
         {/* Info banner */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12,
-          background: 'var(--muted)', borderRadius: 10, padding: '11px 14px', marginBottom: 22,
-        }}>
-          <p style={{ fontSize: 13, color: 'var(--muted-foreground)', margin: 0 }}>
-            You'll be signed out after updating your password.
-          </p>
-        </div>
+        {step === 'form' && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            background: 'var(--muted)', borderRadius: 10, padding: '11px 14px', marginBottom: 22,
+          }}>
+            <p style={{ fontSize: 13, color: 'var(--muted-foreground)', margin: 0, lineHeight: 1.5 }}>
+              For your security, we&apos;ll email a 6-digit verification code to{' '}
+              <strong style={{ color: 'var(--foreground)', overflowWrap: 'anywhere' }}>{profile?.email ?? 'your email'}</strong>{' '}
+              to confirm this change.
+            </p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {step === 'code' ? (
+            <VerificationCodeStep
+              inputId="modal-password-code"
+              email={sentTo}
+              devCode={devCode}
+              code={code}
+              onCodeChange={setCode}
+              onResend={requestCode}
+              disabled={busy || saved}
+            />
+          ) : (
+          <>
           <PwdInput
             id="modal-current-password"
             label="Current Password"
@@ -237,6 +302,8 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
             show={showConfirm}
             onToggle={() => setShowConfirm(p => !p)}
           />
+          </>
+          )}
 
           {error && (
             <div role="alert" style={{
@@ -262,7 +329,9 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
             <button
               type="button"
               id="btn-cancel-change-pwd"
-              onClick={onClose}
+              onClick={() => {
+                if (step === 'code') { setStep('form'); setCode(''); setError(null) } else onClose()
+              }}
               disabled={busy}
               style={{
                 padding: '10px 20px', fontSize: 14, borderRadius: 8, fontWeight: 600,
@@ -270,7 +339,7 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
                 color: 'var(--foreground)', cursor: 'pointer',
               }}
             >
-              Cancel
+              {step === 'code' ? 'Back' : 'Cancel'}
             </button>
             <button
               id="btn-submit-change-pwd"
@@ -279,7 +348,93 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
               disabled={busy || saved}
               style={{ padding: '10px 22px', fontSize: 14 }}
             >
-              {busy ? 'Updating…' : saved ? 'Updated!' : 'Update Password'}
+              {busy
+                ? (step === 'form' ? 'Sending code…' : 'Updating…')
+                : saved ? 'Updated!' : step === 'form' ? 'Send Verification Code' : 'Verify & Update'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Verify New Email Modal ────────────────────────────────
+function VerifyEmailModal({
+  open, email, devCode, onResend, onVerify, onCancel,
+}: {
+  open: boolean
+  email: string
+  devCode?: string
+  onResend: () => Promise<void>
+  onVerify: (code: string) => Promise<void>
+  onCancel: () => void
+}) {
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) { setCode(''); setBusy(false); setError(null) }
+  }, [open])
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (!/^\d{6}$/.test(code)) { setError('Enter the 6-digit code sent to your new email.'); return }
+    setBusy(true)
+    try {
+      await onVerify(code)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not verify the code.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) return null
+
+  return (
+    <div role="dialog" aria-modal="true" aria-labelledby="verify-email-title"
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={busy ? undefined : onCancel}
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }} />
+      <div style={{
+        position: 'relative', zIndex: 1, background: 'var(--card)', border: '1px solid var(--border)',
+        borderRadius: 16, padding: '32px 32px 28px', width: '100%', maxWidth: 460,
+        boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
+      }}>
+        <h2 id="verify-email-title" style={{ fontFamily: 'Inter', fontSize: 20, fontWeight: 700, color: 'var(--foreground)', margin: 0 }}>
+          Verify Your New Email
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginTop: 4, marginBottom: 20 }}>
+          Your sign-in email will only change after you confirm this code.
+        </p>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <VerificationCodeStep
+            inputId="verify-email-code"
+            email={email}
+            devCode={devCode}
+            code={code}
+            onCodeChange={setCode}
+            onResend={onResend}
+            disabled={busy}
+          />
+
+          {error && (
+            <div role="alert" style={{ background: 'var(--danger-bg)', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--danger)', fontWeight: 500 }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button type="button" id="btn-cancel-verify-email" onClick={onCancel} disabled={busy}
+              style={{ padding: '10px 20px', fontSize: 14, borderRadius: 8, fontWeight: 600, background: 'transparent', border: '1px solid var(--border)', color: 'var(--foreground)', cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button type="submit" id="btn-submit-verify-email" className="btn-primary" disabled={busy} style={{ padding: '10px 22px', fontSize: 14 }}>
+              {busy ? 'Verifying…' : 'Verify & Save'}
             </button>
           </div>
         </form>
@@ -293,7 +448,10 @@ export default function Settings() {
   const { profile, refreshProfile } = useAuth()
 
   // ── My Profile ────────────────────────────────────────────
+  const isAdmin = profile?.role === 'admin'
   const [fullName, setFullName] = useState(profile?.full_name ?? '')
+  const [email, setEmail] = useState(profile?.email ?? '')
+  const [selectedRole, setSelectedRole] = useState<StaffRole>(profile?.role ?? 'cashier')
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
   const [profileSaved, setProfileSaved] = useState(false)
@@ -304,8 +462,18 @@ export default function Settings() {
   // ── Change Password Modal ─────────────────────────────────
   const [pwdModalOpen, setPwdModalOpen] = useState(false)
 
-  // Re-seed the name field whenever the profile is re-read.
+  // ── Email change verification (admins only) ───────────────
+  const [pendingEmailChange, setPendingEmailChange] = useState<{
+    full_name: string
+    email: string
+    role: StaffRole
+    devCode?: string
+  } | null>(null)
+
+  // Re-seed fields whenever the profile is re-read.
   useEffect(() => { setFullName(profile?.full_name ?? '') }, [profile?.full_name])
+  useEffect(() => { setEmail(profile?.email ?? '') }, [profile?.email])
+  useEffect(() => { if (profile?.role) setSelectedRole(profile.role) }, [profile?.role])
 
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault()
@@ -313,11 +481,21 @@ export default function Settings() {
     setProfileSaved(false)
 
     const clean = fullName.trim()
+    const cleanEmail = email.trim().toLowerCase()
     if (clean.length < 2) {
       setProfileError('Full name must be at least 2 characters.')
       return
     }
-    if (clean === profile?.full_name) {
+    if (isAdmin && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setProfileError('Please enter a valid email address.')
+      return
+    }
+
+    const nameUnchanged = clean === profile?.full_name
+    const emailUnchanged = !isAdmin || cleanEmail === (profile?.email ?? '').toLowerCase()
+    const roleUnchanged = !isAdmin || selectedRole === profile?.role
+
+    if (nameUnchanged && emailUnchanged && roleUnchanged) {
       setProfileSaved(true)
       setTimeout(() => setProfileSaved(false), 2000)
       return
@@ -325,8 +503,20 @@ export default function Settings() {
 
     setProfileBusy(true)
     try {
-      await apiUpdateMyProfile({ full_name: clean })
-      // Re-read so the sidebar, receipts and audit log all pick up the new name.
+      // A new sign-in email must be verified first: email a code to the new
+      // address and finish the save from the verification modal.
+      if (isAdmin && !emailUnchanged) {
+        const sent = await apiRequestEmailChangeCode(cleanEmail)
+        setPendingEmailChange({ full_name: clean, email: cleanEmail, role: selectedRole, devCode: sent.dev_code })
+        return
+      }
+
+      await apiUpdateMyProfile(
+        isAdmin
+          ? { full_name: clean, email: cleanEmail, role: selectedRole }
+          : { full_name: clean }
+      )
+      // Re-read so the sidebar, receipts and audit log all pick up the new details.
       await refreshProfile()
       setProfileSaved(true)
       setTimeout(() => setProfileSaved(false), 2500)
@@ -335,6 +525,28 @@ export default function Settings() {
     } finally {
       setProfileBusy(false)
     }
+  }
+
+  async function resendEmailChangeCode() {
+    if (!pendingEmailChange) return
+    const sent = await apiRequestEmailChangeCode(pendingEmailChange.email)
+    setPendingEmailChange(prev => (prev ? { ...prev, devCode: sent.dev_code } : prev))
+  }
+
+  async function confirmEmailChange(code: string) {
+    if (!pendingEmailChange) return
+    await apiUpdateMyProfile({
+      full_name: pendingEmailChange.full_name,
+      email: pendingEmailChange.email,
+      role: pendingEmailChange.role,
+      email_code: code,
+    })
+    setPendingEmailChange(null)
+    // Refresh the browser JWT so the new email claim takes effect immediately.
+    await supabase.auth.refreshSession().catch(() => undefined)
+    await refreshProfile()
+    setProfileSaved(true)
+    setTimeout(() => setProfileSaved(false), 2500)
   }
 
   async function handleAvatarPicked(e: React.ChangeEvent<HTMLInputElement>) {
@@ -444,14 +656,50 @@ export default function Settings() {
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                <LockedField label="Email" value={profile?.email ?? '—'} flex={2} />
-                <LockedField label="Role" value={roleLabel(profile?.role)} flex={1} />
-              </div>
-
-              <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: -6 }}>
-                Email and role are identity fields — ask an administrator to change them.
-              </p>
+              {isAdmin ? (
+                <>
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                    <div style={{ flex: 2, minWidth: 200 }}>
+                      <label htmlFor="settings-email" style={labelStyle}>Email</label>
+                      <input
+                        id="settings-email"
+                        className="input"
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        style={{ padding: '11px 14px', fontSize: 14 }}
+                      />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 160 }}>
+                      <label htmlFor="settings-role" style={labelStyle}>Role</label>
+                      <select
+                        id="settings-role"
+                        className="input"
+                        value={selectedRole}
+                        onChange={e => setSelectedRole(e.target.value as StaffRole)}
+                        style={{ padding: '11px 14px', fontSize: 14 }}
+                      >
+                        <option value="admin">Admin / Manager</option>
+                        <option value="cashier">Cashier</option>
+                        <option value="inventory_personnel">Inventory Personnel</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: -6 }}>
+                    As an Admin / Manager, you can edit your email and role here (at least one active admin must remain). A new email must be confirmed with a 6-digit code sent to that address. Cashiers and Inventory Personnel must ask an administrator to change theirs.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                    <LockedField label="Email" value={profile?.email ?? '—'} flex={2} />
+                    <LockedField label="Role" value={roleLabel(profile?.role)} flex={1} />
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: -6 }}>
+                    Email and role are identity fields — ask an administrator to change them.
+                  </p>
+                </>
+              )}
 
               {uploadError && (
                 <div role="alert" style={{ background: 'var(--danger-bg)', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--danger)', fontWeight: 500 }}>
@@ -509,6 +757,16 @@ export default function Settings() {
 
       {/* ── Change Password Modal ────────────────────────── */}
       <ChangePasswordModal open={pwdModalOpen} onClose={() => setPwdModalOpen(false)} />
+
+      {/* ── Verify New Email Modal ───────────────────────── */}
+      <VerifyEmailModal
+        open={pendingEmailChange !== null}
+        email={pendingEmailChange?.email ?? ''}
+        devCode={pendingEmailChange?.devCode}
+        onResend={resendEmailChangeCode}
+        onVerify={confirmEmailChange}
+        onCancel={() => setPendingEmailChange(null)}
+      />
     </div>
   )
 }

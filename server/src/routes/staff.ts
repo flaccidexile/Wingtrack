@@ -1,8 +1,17 @@
 import express, { Router, type Response } from 'express'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
-import { supabaseAdmin } from '../lib/supabase'
+import { supabaseAdmin, verifyUserPassword } from '../lib/supabase'
 import { validatePassword } from '../lib/validation'
+import { issueVerificationCode, consumeVerificationCode } from '../lib/verificationCodes'
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** Resolves the caller's current sign-in email from Supabase Auth. */
+async function currentAuthEmail(userId: string, fallback?: string): Promise<string> {
+  const { data } = await supabaseAdmin.auth.admin.getUserById(userId)
+  return String(data?.user?.email ?? fallback ?? '').trim().toLowerCase()
+}
 
 const router = Router()
 
@@ -457,12 +466,20 @@ router.post(
 // by `/:id` and the handler would receive "me" as an id.
 // ============================================================
 
-// PATCH /api/staff/me — Any authenticated user: update their own display name
+// PATCH /api/staff/me — Authenticated users update their own display name;
+// administrators may also update their own sign-in email and role (provided at
+// least one active administrator remains). Cashiers and inventory personnel
+// cannot modify email or role themselves.
 router.patch(
   '/me',
   requireAuth,
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { full_name } = req.body as { full_name?: unknown }
+    const { full_name, email, role, email_code } = req.body as {
+      full_name?: unknown
+      email?: unknown
+      role?: unknown
+      email_code?: unknown
+    }
 
     if (typeof full_name !== 'string') {
       res.status(400).json({ message: 'full_name is required.' })
@@ -475,22 +492,186 @@ router.patch(
       return
     }
 
+    const { data: current, error: lookupError } = await supabaseAdmin
+      .from('staff_profiles')
+      .select('*')
+      .eq('user_id', req.userId!)
+      .maybeSingle()
+
+    if (lookupError) { res.status(500).json({ message: lookupError.message }); return }
+    if (!current) { res.status(404).json({ message: 'No staff profile is linked to this account.' }); return }
+
+    const isAdmin = current.role === 'admin'
+    const patch: Record<string, unknown> = { full_name: cleanName }
+    let newEmail: string | null = null
+    let newRole: StaffRole | null = null
+
+    // Only administrators may change email or role from Settings.
+    if (email !== undefined || role !== undefined) {
+      if (!isAdmin) {
+        res.status(403).json({
+          message: 'Only an administrator can change email or role. Please ask your manager.',
+        })
+        return
+      }
+    }
+
+    if (email !== undefined) {
+      if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        res.status(400).json({ message: 'Enter a valid email address.' })
+        return
+      }
+      const normalized = email.trim().toLowerCase()
+      if (normalized !== String(current.email ?? '').toLowerCase()) {
+        const { data: clash } = await supabaseAdmin
+          .from('staff_profiles')
+          .select('id')
+          .ilike('email', normalized)
+          .neq('id', current.id)
+          .maybeSingle()
+
+        if (clash) {
+          res.status(409).json({ message: 'Another staff member already uses that email.' })
+          return
+        }
+        newEmail = normalized
+      }
+    }
+
+    if (role !== undefined) {
+      if (!isStaffRole(role)) {
+        res.status(400).json({ message: 'Role must be admin, cashier, or inventory_personnel.' })
+        return
+      }
+      if (role !== current.role) {
+        if (current.role === 'admin' && current.is_active && await wouldRemoveLastAdmin(current.id)) {
+          res.status(400).json({ message: 'At least one active administrator must remain.' })
+          return
+        }
+        patch.role = role
+        newRole = role
+      }
+    }
+
+    if (newEmail) {
+      // Step-up verification: the new address must prove it can receive mail
+      // before the sign-in email is switched (prevents typo lockouts/takeover).
+      const verified = consumeVerificationCode(req.userId!, 'email_change', newEmail, email_code)
+      if (!verified.ok) {
+        res.status(verified.status).json({ message: verified.message, code_required: true })
+        return
+      }
+
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(req.userId!, {
+        email: newEmail,
+        email_confirm: true,
+        user_metadata: { full_name: cleanName, role: newRole ?? current.role },
+      })
+      if (authError) {
+        const duplicate = /already|exists|registered/i.test(authError.message)
+        res.status(duplicate ? 409 : 400).json({
+          message: duplicate
+            ? 'That email is already in use by another sign-in account.'
+            : `Could not update the sign-in address: ${authError.message}`,
+        })
+        return
+      }
+      patch.email = newEmail
+    } else {
+      // Keep the auth metadata in step so a re-provision never resurrects old values.
+      await supabaseAdmin.auth.admin
+        .updateUserById(req.userId!, {
+          user_metadata: { full_name: cleanName, role: newRole ?? current.role },
+        })
+        .catch(() => undefined)
+    }
+
     const { data, error } = await supabaseAdmin
       .from('staff_profiles')
-      .update({ full_name: cleanName })
-      .eq('user_id', req.userId!)
+      .update(patch)
+      .eq('id', current.id)
       .select()
       .maybeSingle()
 
     if (error) { res.status(500).json({ message: error.message }); return }
     if (!data) { res.status(404).json({ message: 'No staff profile is linked to this account.' }); return }
 
-    // Keep the auth metadata in step so a re-provision never resurrects the old name.
-    await supabaseAdmin.auth.admin
-      .updateUserById(req.userId!, { user_metadata: { full_name: cleanName } })
-      .catch(() => undefined)
-
+    if (newEmail) invalidateAuthDirectory()
     res.json(data)
+  }
+)
+
+// POST /api/staff/me/email-change/code — Admin only: email a 6-digit code to
+// the NEW address. The code must accompany PATCH /api/staff/me as `email_code`.
+router.post(
+  '/me/email-change/code',
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const raw = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+    if (!EMAIL_PATTERN.test(raw)) {
+      res.status(400).json({ message: 'Enter a valid email address.' })
+      return
+    }
+
+    const { data: current, error: lookupError } = await supabaseAdmin
+      .from('staff_profiles')
+      .select('id, email, role, is_active')
+      .eq('user_id', req.userId!)
+      .maybeSingle()
+
+    if (lookupError) { res.status(500).json({ message: lookupError.message }); return }
+    if (!current) { res.status(404).json({ message: 'No staff profile is linked to this account.' }); return }
+    if (current.role !== 'admin') {
+      res.status(403).json({ message: 'Only an administrator can change email or role. Please ask your manager.' })
+      return
+    }
+    if (raw === String(current.email ?? '').toLowerCase()) {
+      res.status(400).json({ message: 'That is already your sign-in email.' })
+      return
+    }
+
+    const { data: clash } = await supabaseAdmin
+      .from('staff_profiles')
+      .select('id')
+      .ilike('email', raw)
+      .neq('id', current.id)
+      .maybeSingle()
+    if (clash) {
+      res.status(409).json({ message: 'Another staff member already uses that email.' })
+      return
+    }
+
+    const issued = await issueVerificationCode(req.userId!, 'email_change', raw)
+    if (!issued.ok) { res.status(issued.status).json({ message: issued.message }); return }
+
+    res.json({ sent: true, delivered: issued.delivered, email: raw, dev_code: issued.devCode })
+  }
+)
+
+// POST /api/staff/me/password-change/code — Any authenticated user: confirm
+// the current password, then email a 6-digit code to the CURRENT address.
+router.post(
+  '/me/password-change/code',
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const currentPassword = typeof req.body?.current_password === 'string' ? req.body.current_password : ''
+    if (!currentPassword) {
+      res.status(400).json({ message: 'Please enter your current password.' })
+      return
+    }
+
+    const email = await currentAuthEmail(req.userId!, req.userEmail)
+    if (!email) { res.status(400).json({ message: 'This account has no email address on file.' }); return }
+
+    if (!(await verifyUserPassword(email, currentPassword))) {
+      res.status(400).json({ message: 'Your current password is incorrect.' })
+      return
+    }
+
+    const issued = await issueVerificationCode(req.userId!, 'password_change', email)
+    if (!issued.ok) { res.status(issued.status).json({ message: issued.message }); return }
+
+    res.json({ sent: true, delivered: issued.delivered, email, dev_code: issued.devCode })
   }
 )
 
@@ -660,16 +841,42 @@ router.delete(
   }
 )
 
-// PATCH /api/staff/update-password — Authenticated user updates their own password
+// PATCH /api/staff/update-password — Authenticated user updates their own
+// password. Requires the current password AND the 6-digit code emailed by
+// POST /api/staff/me/password-change/code (step-up verification).
 router.patch(
   '/update-password',
   requireAuth,
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { password } = req.body as { password?: string }
+    const { password, current_password, code } = req.body as {
+      password?: string
+      current_password?: unknown
+      code?: unknown
+    }
 
     const pwdError = validatePassword(password)
     if (pwdError) {
       res.status(400).json({ message: pwdError })
+      return
+    }
+    if (typeof current_password !== 'string' || !current_password) {
+      res.status(400).json({ message: 'Please enter your current password.' })
+      return
+    }
+    if (current_password === password) {
+      res.status(400).json({ message: 'New password must be different from your current password.' })
+      return
+    }
+
+    const email = await currentAuthEmail(req.userId!, req.userEmail)
+    if (!email || !(await verifyUserPassword(email, current_password))) {
+      res.status(400).json({ message: 'Your current password is incorrect.' })
+      return
+    }
+
+    const verified = consumeVerificationCode(req.userId!, 'password_change', email, code)
+    if (!verified.ok) {
+      res.status(verified.status).json({ message: verified.message, code_required: true })
       return
     }
 

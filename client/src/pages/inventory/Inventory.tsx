@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
-import { apiGetInventory, apiAdjustInventory, apiGetInventoryMovements, apiCreateInventoryItem } from '@/lib/api'
+import { apiGetInventory, apiAdjustInventory, apiGetInventoryMovements, apiCreateInventoryItem, apiDeleteInventoryItem } from '@/lib/api'
 import { downloadCsv } from '@/lib/csv'
 import { dispatchNotification } from '@/lib/notifications'
 import { useIsCompact } from '@/hooks/useMediaQuery'
 import EmptyState, { EMPTY_ICONS } from '@/components/ui/EmptyState'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import type { InventoryItem, InventoryAdjustmentPayload, InventoryMovement } from '@/types'
 
 const CATS = ['All', 'Proteins', 'Sauces', 'Sides', 'Produce', 'Cooking', 'Spices', 'Staples', 'Packaging']
@@ -158,9 +159,11 @@ function Field({ label, value, mono, color }: { label: string; value: React.Reac
 function InventoryCard({
   item,
   onAdjust,
+  onDelete,
 }: {
   item: InventoryItem
   onAdjust: () => void
+  onDelete: () => void
 }) {
   const status = getItemStatus(item)
   const s = STATUS_STYLES[status] ?? STATUS_STYLES.ok
@@ -201,18 +204,32 @@ function InventoryCard({
         </div>
       )}
 
-      <button
-        type="button"
-        id={`inv-restock-${item.id}`}
-        onClick={onAdjust}
-        style={{
-          width: '100%', fontSize: 13, padding: '10px 12px', borderRadius: 8,
-          border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--primary)',
-          cursor: 'pointer', fontWeight: 600,
-        }}
-      >
-        Adjust Stock
-      </button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          id={`inv-restock-${item.id}`}
+          onClick={onAdjust}
+          style={{
+            flex: 1, fontSize: 13, padding: '10px 12px', borderRadius: 8,
+            border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--primary)',
+            cursor: 'pointer', fontWeight: 600,
+          }}
+        >
+          Adjust Stock
+        </button>
+        <button
+          type="button"
+          id={`inv-delete-${item.id}`}
+          onClick={onDelete}
+          style={{
+            fontSize: 13, padding: '10px 14px', borderRadius: 8,
+            border: '1px solid #fecaca', background: '#fef2f2', color: '#b91c1c',
+            cursor: 'pointer', fontWeight: 600,
+          }}
+        >
+          Delete
+        </button>
+      </div>
     </div>
   )
 }
@@ -315,6 +332,11 @@ export default function Inventory() {
   const [newItemLeadTime, setNewItemLeadTime] = useState('2')
   const [addLoading, setAddLoading] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
+
+  // Delete confirmation modal state
+  const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // Export state
   const [exportFilter, setExportFilter] = useState<'week' | 'month'>('week')
@@ -496,6 +518,30 @@ export default function Inventory() {
       setAddError(err instanceof Error ? err.message : 'Failed to add item')
     } finally {
       setAddLoading(false)
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return
+    setDeleteLoading(true)
+    setDeleteError(null)
+    try {
+      const removed = deleteTarget
+      await apiDeleteInventoryItem(removed.id)
+      setItems(prev => prev.filter(i => i.id !== removed.id))
+      setDeleteTarget(null)
+      dispatchNotification({
+        category: 'inventory',
+        title: 'Inventory Item Deleted',
+        body: `${removed.name} (${removed.category}) was removed from inventory.`,
+      })
+      if (activeTab === 'movements') {
+        void fetchMovements(0)
+      }
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete inventory item.')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -982,6 +1028,7 @@ export default function Inventory() {
                   key={item.id}
                   item={item}
                   onAdjust={() => openAdjustModal(item)}
+                  onDelete={() => { setDeleteError(null); setDeleteTarget(item) }}
                 />
               ))}
               {filtered.length === 0 && (
@@ -996,11 +1043,11 @@ export default function Inventory() {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'minmax(170px, 1.35fr) minmax(60px, 0.55fr) minmax(80px, 0.65fr) minmax(150px, 1.15fr) minmax(85px, 0.65fr) minmax(125px, 0.95fr) minmax(125px, 0.95fr) minmax(90px, 0.65fr) minmax(80px, 0.55fr)',
+                  gridTemplateColumns: 'minmax(170px, 1.35fr) minmax(60px, 0.55fr) minmax(80px, 0.65fr) minmax(150px, 1.15fr) minmax(85px, 0.65fr) minmax(125px, 0.95fr) minmax(125px, 0.95fr) minmax(90px, 0.65fr) minmax(145px, 0.95fr)',
                   gap: 16,
                   padding: '13px 24px',
                   borderBottom: '1px solid var(--border)',
-                  minWidth: 1080,
+                  minWidth: 1140,
                   alignItems: 'center',
                 }}
               >
@@ -1031,13 +1078,13 @@ export default function Inventory() {
                     key={item.id}
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: 'minmax(170px, 1.35fr) minmax(60px, 0.55fr) minmax(80px, 0.65fr) minmax(150px, 1.15fr) minmax(85px, 0.65fr) minmax(125px, 0.95fr) minmax(125px, 0.95fr) minmax(90px, 0.65fr) minmax(80px, 0.55fr)',
+                      gridTemplateColumns: 'minmax(170px, 1.35fr) minmax(60px, 0.55fr) minmax(80px, 0.65fr) minmax(150px, 1.15fr) minmax(85px, 0.65fr) minmax(125px, 0.95fr) minmax(125px, 0.95fr) minmax(90px, 0.65fr) minmax(145px, 0.95fr)',
                       gap: 16,
                       padding: '14px 24px',
                       borderBottom: i < filtered.length - 1 ? '1px solid var(--muted)' : 'none',
                       alignItems: 'center',
                       transition: 'background 0.1s',
-                      minWidth: 1080,
+                      minWidth: 1140,
                     }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--muted)'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
@@ -1084,13 +1131,22 @@ export default function Inventory() {
                     <div style={{ display: 'flex', justifyContent: 'center' }}>
                       <span style={{ fontSize: 12, padding: '4px 12px', borderRadius: 20, fontWeight: 700, background: s.bg, color: s.color, textAlign: 'center', whiteSpace: 'nowrap' }}>{s.label}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
                       <button
                         id={`inv-restock-${item.id}`}
                         onClick={() => openAdjustModal(item)}
-                        style={{ fontSize: 12, padding: '6px 14px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--primary)', cursor: 'pointer', fontWeight: 600 }}
+                        style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--primary)', cursor: 'pointer', fontWeight: 600 }}
                       >
                         Adjust
+                      </button>
+                      <button
+                        id={`inv-delete-${item.id}`}
+                        type="button"
+                        onClick={() => { setDeleteError(null); setDeleteTarget(item) }}
+                        title={`Delete ${item.name}`}
+                        style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', color: '#b91c1c', cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        Delete
                       </button>
                     </div>
                   </div>
@@ -1452,6 +1508,37 @@ export default function Inventory() {
         </div>,
         document.body
       )}
+
+      {/* Delete Inventory Item Confirmation Modal */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        busy={deleteLoading}
+        tone="danger"
+        title={deleteTarget ? `Delete "${deleteTarget.name}"?` : 'Delete inventory item?'}
+        message={
+          deleteTarget ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <p style={{ margin: 0 }}>
+                Are you sure you want to permanently delete{' '}
+                <strong style={{ color: 'var(--foreground)' }}>{deleteTarget.name}</strong>{' '}
+                ({Number(deleteTarget.stock_qty).toLocaleString()} {deleteTarget.unit} in stock · {deleteTarget.category})?
+              </p>
+              <p style={{ margin: 0 }}>
+                This will also remove its stock movement history and unlink it from any menu item recipes. This action cannot be undone.
+              </p>
+              {deleteError && (
+                <div role="alert" style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '9px 12px', fontSize: 12.5, color: '#b91c1c', fontWeight: 500 }}>
+                  {deleteError}
+                </div>
+              )}
+            </div>
+          ) : null
+        }
+        confirmLabel={deleteLoading ? 'Deleting…' : 'Yes, Delete'}
+        cancelLabel="Cancel"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => { if (!deleteLoading) { setDeleteTarget(null); setDeleteError(null) } }}
+      />
     </div>
   )
 }

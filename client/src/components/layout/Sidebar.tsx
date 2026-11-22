@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import { useAuth } from '@/hooks/useAuth'
-import { apiUpdatePassword } from '@/lib/api'
-import { MIN_PASSWORD_LENGTH } from '@/lib/validation'
 import Avatar from '@/components/ui/Avatar'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import type { StaffRole } from '@/types'
@@ -150,14 +147,6 @@ interface SidebarProps {
 
 export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobile }: SidebarProps) {
   const { profile, role, signOut } = useAuth()
-  const [showPwdModal, setShowPwdModal] = useState(false)
-  const [newPwd, setNewPwd] = useState('')
-  const [showNewPwd, setShowNewPwd] = useState(false)
-  const [confirmPwd, setConfirmPwd] = useState('')
-  const [showConfirmPwd, setShowConfirmPwd] = useState(false)
-  const [pwdError, setPwdError] = useState<string | null>(null)
-  const [pwdSuccess, setPwdSuccess] = useState(false)
-  const [pwdLoading, setPwdLoading] = useState(false)
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
   /** True when the viewport is narrower than the drawer breakpoint. */
   const [isNarrow, setIsNarrow] = useState(
@@ -246,35 +235,6 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
     admin: 'Admin / Manager',
     cashier: 'Cashier',
     inventory_personnel: 'Inventory Personnel',
-  }
-
-  async function handlePasswordChange(e: React.FormEvent) {
-    e.preventDefault()
-    setPwdError(null)
-    if (newPwd.length < MIN_PASSWORD_LENGTH) {
-      setPwdError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`)
-      return
-    }
-    if (newPwd !== confirmPwd) {
-      setPwdError('Passwords do not match.')
-      return
-    }
-
-    setPwdLoading(true)
-    try {
-      await apiUpdatePassword(newPwd)
-      setPwdSuccess(true)
-      setTimeout(() => {
-        setShowPwdModal(false)
-        setPwdSuccess(false)
-        setNewPwd('')
-        setConfirmPwd('')
-      }, 1500)
-    } catch (err: unknown) {
-      setPwdError(err instanceof Error ? err.message : 'Failed to update password')
-    } finally {
-      setPwdLoading(false)
-    }
   }
 
   return (
@@ -486,160 +446,6 @@ export default function Sidebar({ page, setPage, mobileOpen = false, onCloseMobi
         onCancel={() => setShowSignOutConfirm(false)}
       />
 
-      {/* Change Password Modal — portalled for the same reason as the dialog
-          above: a fixed overlay rendered inside the rail's stacking context
-          paints behind the page, not over it. */}
-      {showPwdModal && typeof document !== 'undefined' && createPortal(
-        <div
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-            backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
-          }}
-          onClick={e => { if (e.target === e.currentTarget) setShowPwdModal(false) }}
-        >
-          <div className="card fade-in" style={{ width: '100%', maxWidth: 380, maxHeight: '90dvh', overflowY: 'auto', padding: '26px' }}>
-            <h3 style={{ fontFamily: 'Inter', fontSize: 18, color: 'var(--foreground)', marginBottom: 8 }}>
-              Change Your Password
-            </h3>
-            <p style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 16 }}>
-              Set a secure new password for your account.
-            </p>
-
-            <form onSubmit={handlePasswordChange} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--foreground)' }}>
-                  New Password
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    className="input"
-                    type={showNewPwd ? 'text' : 'password'}
-                    required
-                    placeholder={`Min ${MIN_PASSWORD_LENGTH} characters`}
-                    value={newPwd}
-                    onChange={e => setNewPwd(e.target.value)}
-                    style={{ width: '100%', padding: '9px 36px 9px 12px', fontSize: 13 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPwd(prev => !prev)}
-                    style={{
-                      position: 'absolute',
-                      right: 8,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: 4,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--muted-foreground)',
-                    }}
-                    title={showNewPwd ? 'Hide password' : 'Show password'}
-                    aria-label={showNewPwd ? 'Hide password' : 'Show password'}
-                  >
-                    {showNewPwd ? (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                        <line x1="1" y1="1" x2="23" y2="23" />
-                      </svg>
-                    ) : (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--foreground)' }}>
-                  Confirm Password
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    className="input"
-                    type={showConfirmPwd ? 'text' : 'password'}
-                    required
-                    placeholder="Re-type new password"
-                    value={confirmPwd}
-                    onChange={e => setConfirmPwd(e.target.value)}
-                    style={{ width: '100%', padding: '9px 36px 9px 12px', fontSize: 13 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPwd(prev => !prev)}
-                    style={{
-                      position: 'absolute',
-                      right: 8,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: 4,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--muted-foreground)',
-                    }}
-                    title={showConfirmPwd ? 'Hide password' : 'Show password'}
-                    aria-label={showConfirmPwd ? 'Hide password' : 'Show password'}
-                  >
-                    {showConfirmPwd ? (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                        <line x1="1" y1="1" x2="23" y2="23" />
-                      </svg>
-                    ) : (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {pwdError && (
-                <div style={{ padding: '8px 12px', background: '#fee2e2', color: '#991b1b', borderRadius: 6, fontSize: 12 }}>
-                  {pwdError}
-                </div>
-              )}
-
-              {pwdSuccess && (
-                <div style={{ padding: '8px 12px', background: '#e8f5e9', color: '#15803d', borderRadius: 6, fontSize: 12 }}>
-                  Password updated successfully.
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => setShowPwdModal(false)}
-                  className="btn-ghost"
-                  style={{ flex: 1, padding: '9px' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={pwdLoading || pwdSuccess}
-                  style={{ flex: 1, padding: '9px' }}
-                >
-                  {pwdLoading ? 'Saving...' : 'Update'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body,
-      )}
       </aside>
     </>
   )

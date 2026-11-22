@@ -24,6 +24,32 @@ function defaultShelfLifeDays(category: string, index: number): number | null {
   return 60
 }
 
+/** Formats a timestamp as a local YYYY-MM-DD calendar date (no UTC off-by-one). */
+function toLocalDateString(ms: number): string {
+  const d = new Date(ms)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/**
+ * Best-effort write of optional `expiration_date` / `lead_time_days` columns to
+ * Supabase's `inventory` table. Silently ignores missing-column errors when the
+ * optional migration (`20261117_add_rop_and_expiry.sql`) has not been run yet —
+ * local metadata (`setInventoryMeta`) still keeps the values persistent.
+ */
+async function tryPersistInventoryColumns(
+  id: string,
+  fields: { expiration_date?: string | null; lead_time_days?: number },
+): Promise<void> {
+  if (Object.keys(fields).length === 0) return
+  const { error } = await supabaseAdmin.from('inventory').update(fields).eq('id', id)
+  if (error && error.code !== '42703' && error.code !== 'PGRST204') {
+    console.warn('[inventory] Optional column update skipped:', error.message)
+  }
+}
+
 /** Movement types the audit log accepts. Anything else is rejected. */
 const MOVEMENT_TYPES = ['restock', 'adjustment', 'waste'] as const
 type MovementType = (typeof MOVEMENT_TYPES)[number]
@@ -86,16 +112,17 @@ router.get('/', requireAuth, requireRole('admin', 'inventory_personnel'), async 
 
   const metaMap = getAllInventoryMeta()
   const nowMs = Date.now()
+  const toPersist: Array<{ id: string; expiration_date: string | null }> = []
 
   const enriched = (data ?? []).map((item: any, idx: number) => {
     const meta = metaMap[item.id] ?? {}
     const stockQty = Number(item.stock_qty) || 0
     const minLevel = Number(item.min_stock_level) || 0
     const leadTimeDays =
-      typeof item.lead_time_days === 'number'
-        ? item.lead_time_days
-        : typeof meta.lead_time_days === 'number'
-          ? meta.lead_time_days
+      typeof meta.lead_time_days === 'number'
+        ? meta.lead_time_days
+        : typeof item.lead_time_days === 'number'
+          ? item.lead_time_days
           : defaultLeadTimeDays(item.category)
 
     // Average Daily Usage = 30-day deductions / 30, with a baseline of minLevel / 7
@@ -115,19 +142,29 @@ router.get('/', requireAuth, requireRole('admin', 'inventory_personnel'), async 
       ? Math.max(Math.ceil((targetStock - stockQty) * 10) / 10, Math.ceil(minLevel))
       : 0
 
-    // Expiration / Best-Before Date (explicit metadata/column or default perishable batch window)
+    // Expiration / Best-Before Date:
+    // 1. Prefer a non-empty date stored directly in Supabase (`inventory.expiration_date`).
+    // 2. Otherwise honor an explicitly saved metadata date (including `null` for non-perishable).
+    // 3. If never initialized yet, assign a concrete calendar date ONCE and persist it so
+    //    it genuinely counts down 1 day per real calendar day instead of resetting on reload.
+    const dbExp =
+      typeof item.expiration_date === 'string' && item.expiration_date.trim() !== ''
+        ? item.expiration_date.trim()
+        : null
+
     let expirationDate: string | null =
-      item.expiration_date !== undefined
-        ? item.expiration_date
+      dbExp !== null
+        ? dbExp
         : meta.expiration_date !== undefined
           ? meta.expiration_date
           : null
 
-    if (expirationDate === null && meta.expiration_date === undefined) {
+    if (dbExp === null && meta.expiration_date === undefined) {
       const shelfDays = defaultShelfLifeDays(item.category, idx)
-      if (shelfDays !== null) {
-        const exp = new Date(nowMs + shelfDays * 86_400_000)
-        expirationDate = exp.toISOString().split('T')[0]
+      expirationDate = shelfDays !== null ? toLocalDateString(nowMs + shelfDays * 86_400_000) : null
+      setInventoryMeta(item.id, { expiration_date: expirationDate })
+      if (expirationDate !== null) {
+        toPersist.push({ id: item.id, expiration_date: expirationDate })
       }
     }
 
@@ -140,6 +177,13 @@ router.get('/', requireAuth, requireRole('admin', 'inventory_personnel'), async 
       suggested_reorder_qty: suggestedReorderQty,
     }
   })
+
+  // Backfill newly initialized dates into Supabase in the background (if the column exists).
+  if (toPersist.length > 0) {
+    void Promise.all(
+      toPersist.map(entry => tryPersistInventoryColumns(entry.id, { expiration_date: entry.expiration_date }))
+    )
+  }
 
   res.json(enriched)
 })
@@ -256,16 +300,17 @@ router.patch(
       return
     }
 
-    // Persist batch expiration date / lead time metadata if supplied
+    // Persist batch expiration date / lead time to Supabase (if migrated) + local metadata
     if (rawExpDate !== undefined || rawLeadTime !== undefined) {
-      setInventoryMeta(id, {
-        ...(rawExpDate !== undefined
-          ? { expiration_date: typeof rawExpDate === 'string' && rawExpDate.trim() !== '' ? rawExpDate.trim() : null }
-          : {}),
-        ...(typeof rawLeadTime === 'number' && Number.isFinite(rawLeadTime)
-          ? { lead_time_days: rawLeadTime }
-          : {}),
-      })
+      const updates: { expiration_date?: string | null; lead_time_days?: number } = {}
+      if (rawExpDate !== undefined) {
+        updates.expiration_date = typeof rawExpDate === 'string' && rawExpDate.trim() !== '' ? rawExpDate.trim() : null
+      }
+      if (typeof rawLeadTime === 'number' && Number.isFinite(rawLeadTime) && rawLeadTime >= 1) {
+        updates.lead_time_days = Math.round(rawLeadTime)
+      }
+      setInventoryMeta(id, updates)
+      await tryPersistInventoryColumns(id, updates)
     }
 
     res.json({ id, previous_qty: currentQty, new_qty: newQty, qty_change: qtyChange })
@@ -417,14 +462,92 @@ router.post(
       }
     }
 
-    if (expiration_date !== undefined || lead_time_days !== undefined) {
-      setInventoryMeta(newItem.id, {
-        expiration_date: typeof expiration_date === 'string' && expiration_date.trim() !== '' ? expiration_date.trim() : null,
-        ...(typeof lead_time_days === 'number' && Number.isFinite(lead_time_days) ? { lead_time_days } : {}),
-      })
+    const cleanExp = typeof expiration_date === 'string' && expiration_date.trim() !== '' ? expiration_date.trim() : null
+    const cleanLead = typeof lead_time_days === 'number' && Number.isFinite(lead_time_days) && lead_time_days >= 1
+      ? Math.round(lead_time_days)
+      : undefined
+
+    if (expiration_date !== undefined || cleanLead !== undefined) {
+      const updates: { expiration_date?: string | null; lead_time_days?: number } = {
+        ...(expiration_date !== undefined ? { expiration_date: cleanExp } : {}),
+        ...(cleanLead !== undefined ? { lead_time_days: cleanLead } : {}),
+      }
+      setInventoryMeta(newItem.id, updates)
+      await tryPersistInventoryColumns(newItem.id, updates)
     }
 
-    res.status(201).json(newItem)
+    res.status(201).json({
+      ...newItem,
+      ...(expiration_date !== undefined ? { expiration_date: cleanExp } : {}),
+      ...(cleanLead !== undefined ? { lead_time_days: cleanLead } : {}),
+    })
+  }
+)
+
+// DELETE /api/inventory/:id — Admin + Inventory Personnel: permanently delete an inventory item
+router.delete(
+  '/:id',
+  requireAuth,
+  requireRole('admin', 'inventory_personnel'),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const id = String(req.params.id ?? '')
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      res.status(400).json({ message: 'Invalid inventory item ID.' })
+      return
+    }
+
+    const { data: existing, error: lookupError } = await supabaseAdmin
+      .from('inventory')
+      .select('id, name')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (lookupError) {
+      console.error('Inventory delete lookup error:', lookupError)
+      res.status(500).json({ message: 'Failed to look up inventory item.' })
+      return
+    }
+    if (!existing) {
+      res.status(404).json({ message: 'Inventory item not found.' })
+      return
+    }
+
+    // Remove dependent recipe links and movement audit rows before deleting the
+    // inventory item (both tables reference public.inventory(id) without CASCADE).
+    const { error: recipeErr } = await supabaseAdmin
+      .from('product_recipes')
+      .delete()
+      .eq('inventory_id', id)
+
+    if (recipeErr) {
+      console.error('Inventory delete recipe cleanup error:', recipeErr)
+      res.status(500).json({ message: 'Could not unlink this item from menu recipes.' })
+      return
+    }
+
+    const { error: moveErr } = await supabaseAdmin
+      .from('inventory_movements')
+      .delete()
+      .eq('inventory_id', id)
+
+    if (moveErr) {
+      console.error('Inventory delete movement cleanup error:', moveErr)
+      res.status(500).json({ message: 'Could not remove stock movement history for this item.' })
+      return
+    }
+
+    const { error: delErr } = await supabaseAdmin
+      .from('inventory')
+      .delete()
+      .eq('id', id)
+
+    if (delErr) {
+      console.error('Inventory delete error:', delErr)
+      res.status(500).json({ message: 'Failed to delete inventory item.' })
+      return
+    }
+
+    res.json({ deleted: true, id, name: existing.name })
   }
 )
 

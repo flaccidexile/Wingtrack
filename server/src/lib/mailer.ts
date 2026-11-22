@@ -180,6 +180,38 @@ export function buildOtpEmail(code: string): { subject: string; text: string } {
   }
 }
 
+/** Sensitive account changes that require an emailed verification code. */
+export type VerificationPurpose = 'email_change' | 'password_change'
+
+/** The email body for an account-change verification code. */
+export function buildVerificationEmail(
+  code: string,
+  purpose: VerificationPurpose,
+): { subject: string; text: string } {
+  const action = purpose === 'email_change'
+    ? 'change the sign-in email of a WINGTRACK account to this address'
+    : 'change the password of your WINGTRACK account'
+  const ignore = purpose === 'email_change'
+    ? 'If you did not request this, you can safely ignore this email — no change will be made.'
+    : 'If you did not request this, do NOT share this code. Your password will not change, but you should tell your administrator.'
+
+  return {
+    subject: `Your WINGTRACK verification code: ${code}`,
+    text: [
+      "WINGTRACK — Wing's Zone",
+      '',
+      `Someone asked to ${action}.`,
+      '',
+      `Your 6-digit verification code is: ${code}`,
+      '',
+      'This code expires in 5 minutes and can only be used once.',
+      ignore,
+      '',
+      '— WINGTRACK POS',
+    ].join('\n'),
+  }
+}
+
 /**
  * The email body for a password reset link.
  *
