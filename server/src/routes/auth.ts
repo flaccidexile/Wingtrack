@@ -69,6 +69,9 @@ const RESET_COOLDOWN_MS = 60_000
  */
 const resetCooldowns = new Map<string, number>()
 
+/** Per-address 60-second cooldown for login OTP requests. */
+const loginOtpCooldowns = new Map<string, number>()
+
 /** In-memory store for pending registration OTPs and profile data. */
 interface PendingRegistrationOtp {
   code: string
@@ -526,46 +529,30 @@ router.post('/send-login-otp', async (req: Request, res: Response): Promise<void
     }
 
     // 3. Cooldown: refuse a second code within 60 seconds for the same address.
-    const cooldownFloor = new Date(Date.now() - 60_000).toISOString()
-    const { data: recent, error: recentError } = await supabaseAdmin
-      .from('login_otps')
-      .select('created_at')
-      .ilike('email', email)
-      .gt('created_at', cooldownFloor)
-      .limit(1)
-      .maybeSingle()
-
-    if (recentError && recentError.code !== 'PGRST205') {
-      console.error('send-login-otp cooldown check error:', recentError)
-      res.status(500).json({ message: 'Unable to send a code right now. Please try again.' })
-      return
-    }
-    if (recent) {
-      res.status(429).json({ message: 'A code was just sent. Please wait a minute before requesting another.' })
+    const cooldownUntil = loginOtpCooldowns.get(email) ?? 0
+    if (cooldownUntil > Date.now()) {
+      const waitSec = Math.ceil((cooldownUntil - Date.now()) / 1000)
+      res.status(429).json({ message: `A code was just sent. Please wait ${waitSec}s before requesting another.` })
       return
     }
 
-    // 4. Mint, store (hashed), and mail the code.
-    const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0')
-    const codeHash = crypto.createHash('sha256').update(code).digest('hex')
-    const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString()
+    // 4. Ask Supabase Auth to mint a genuine 6-digit email_otp without invoking
+    //    Supabase's restricted built-in mailer. Because Supabase itself issues
+    //    the code, `supabase.auth.verifyOtp({ email, token, type: 'email' })`
+    //    verifies it directly on the client and establishes a real session.
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+    })
 
-    const { error: insertError } = await supabaseAdmin
-      .from('login_otps')
-      .insert({ email, code_hash: codeHash, expires_at: expiresAt })
-
-    if (insertError) {
-      // PGRST205 = table absent: report it plainly so setup is obvious.
-      if (insertError.code === 'PGRST205') {
-        console.error('send-login-otp: login_otps table is missing. Apply the schema.sql migration.')
-        res.json({ sent: false, reason: 'schema', message: 'The server database is missing its code table.' })
-        return
-      }
-      console.error('send-login-otp insert error:', insertError)
-      res.status(500).json({ message: 'Unable to send a code right now. Please try again.' })
+    const code = linkData?.properties?.email_otp
+    if (linkError || !code) {
+      console.error('send-login-otp generateLink error:', linkError)
+      res.status(500).json({ message: 'Unable to generate a sign-in code right now. Please try again.' })
       return
     }
 
+    // 5. Email the code through our own SMTP relay (e.g. Gmail App Password).
     const { subject, text } = buildOtpEmail(code)
     const delivery = await sendMail({ to: email, subject, text })
 
@@ -576,6 +563,16 @@ router.post('/send-login-otp', async (req: Request, res: Response): Promise<void
       })
       return
     }
+
+    loginOtpCooldowns.set(email, Date.now() + 60_000)
+
+    // Best-effort audit hash into `login_otps` if that optional table exists.
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex')
+    const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString()
+    void supabaseAdmin
+      .from('login_otps')
+      .insert({ email, code_hash: codeHash, expires_at: expiresAt })
+      .then(() => undefined, () => undefined)
 
     res.json({ sent: true })
   } catch (err: unknown) {
