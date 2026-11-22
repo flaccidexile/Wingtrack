@@ -475,6 +475,28 @@ export async function apiGetOrders(params?: {
 }
 
 /**
+ * POST /api/orders/import (Admin only)
+ *
+ * Records a sale from the previous system. No inventory is touched — this
+ * rebuilds history only. Imported orders come back tagged `note: 'inserted'`.
+ */
+export async function apiImportPreviousOrder(payload: import('@/types').ImportOrderPayload): Promise<{
+  id: string
+  order_number: number
+  total_amount: number
+  note: string
+}> {
+  const headers = await getAuthHeader()
+  const res = await fetch(`${API_BASE}/orders/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw await toApiError(res, 'Failed to import the previous order.')
+  return res.json()
+}
+
+/**
  * POST /api/orders/:id/void (Cashier or Admin)
  */
 export async function apiVoidOrder(orderId: string, reason?: string) {

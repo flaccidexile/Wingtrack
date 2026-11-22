@@ -4,6 +4,23 @@ import path from 'path'
 const DATA_DIR = path.resolve(__dirname, '../../data')
 const METADATA_FILE = path.join(DATA_DIR, 'product_metadata.json')
 
+/**
+ * Fallback caches can hold records that were inserted manually to represent
+ * previous (historical) data. Those records wrap their real value together
+ * with a `note: 'inserted'` marker, e.g. `{ value: 'cash', note: 'inserted' }`.
+ * Records written automatically at checkout stay plain scalars. Readers unwrap
+ * via `unwrapNoted()` so both shapes behave identically to the rest of the app.
+ */
+type NotedValue<T> = T | { value: T; note?: string }
+
+function unwrapNoted<T>(entry: NotedValue<T> | undefined | null): T | null {
+  if (entry === undefined || entry === null) return null
+  if (typeof entry === 'object' && entry !== null && 'value' in (entry as Record<string, unknown>)) {
+    return (entry as { value: T }).value
+  }
+  return entry as T
+}
+
 let cache: Record<string, string> | null = null
 
 function ensureLoaded(): Record<string, string> {
@@ -100,9 +117,9 @@ export function getAllProductCosts(): Record<string, number> {
 
 // ── Order Item Cost Persistence (Historical cost fallback) ──
 const ORDER_ITEM_COSTS_FILE = path.join(DATA_DIR, 'order_item_costs.json')
-let orderItemCostCache: Record<string, number> | null = null
+let orderItemCostCache: Record<string, NotedValue<number>> | null = null
 
-function ensureOrderItemCostsLoaded(): Record<string, number> {
+function ensureOrderItemCostsLoaded(): Record<string, NotedValue<number>> {
   if (orderItemCostCache) return orderItemCostCache
   try {
     if (!fs.existsSync(DATA_DIR)) {
@@ -133,7 +150,8 @@ function persistOrderItemCosts(): void {
 
 export function getOrderItemCost(orderItemId: string): number | null {
   const map = ensureOrderItemCostsLoaded()
-  return typeof map[orderItemId] === 'number' ? map[orderItemId] : null
+  const value = unwrapNoted(map[orderItemId])
+  return typeof value === 'number' ? value : null
 }
 
 export function setOrderItemCost(orderItemId: string, cost: number): void {
@@ -153,14 +171,20 @@ export function setOrderItemCosts(items: Array<{ id: string; cost: number }>): v
 }
 
 export function getAllOrderItemCosts(): Record<string, number> {
-  return { ...ensureOrderItemCostsLoaded() }
+  const map = ensureOrderItemCostsLoaded()
+  const out: Record<string, number> = {}
+  for (const [id, entry] of Object.entries(map)) {
+    const value = unwrapNoted(entry)
+    if (typeof value === 'number') out[id] = value
+  }
+  return out
 }
 
 // ── Order Payment Method Persistence (Distinguishes GCash vs Maya) ──
 const ORDER_PAYMENT_METHODS_FILE = path.join(DATA_DIR, 'order_payment_methods.json')
-let orderPaymentMethodCache: Record<string, string> | null = null
+let orderPaymentMethodCache: Record<string, NotedValue<string>> | null = null
 
-function ensureOrderPaymentMethodsLoaded(): Record<string, string> {
+function ensureOrderPaymentMethodsLoaded(): Record<string, NotedValue<string>> {
   if (orderPaymentMethodCache) return orderPaymentMethodCache
   try {
     if (!fs.existsSync(DATA_DIR)) {
@@ -191,7 +215,8 @@ function persistOrderPaymentMethods(): void {
 
 export function getOrderPaymentMethod(orderId: string): string | null {
   const map = ensureOrderPaymentMethodsLoaded()
-  return typeof map[orderId] === 'string' ? map[orderId] : null
+  const value = unwrapNoted(map[orderId])
+  return typeof value === 'string' ? value : null
 }
 
 export function setOrderPaymentMethod(orderId: string, method: string): void {
@@ -201,7 +226,13 @@ export function setOrderPaymentMethod(orderId: string, method: string): void {
 }
 
 export function getAllOrderPaymentMethods(): Record<string, string> {
-  return { ...ensureOrderPaymentMethodsLoaded() }
+  const map = ensureOrderPaymentMethodsLoaded()
+  const out: Record<string, string> = {}
+  for (const [id, entry] of Object.entries(map)) {
+    const value = unwrapNoted(entry)
+    if (typeof value === 'string') out[id] = value
+  }
+  return out
 }
 
 // ── Inventory Item Metadata Persistence (Expiration Date & Lead Time) ──
@@ -272,6 +303,8 @@ export interface OrderExtraMeta {
   discount_id?: string | null
   discount_amount?: number
   payment_reference?: string | null
+  /** Present ("inserted") on records manually back-filled to represent previous data. */
+  note?: string
 }
 
 const ORDER_META_FILE = path.join(DATA_DIR, 'order_metadata.json')
