@@ -7,6 +7,7 @@ import type { Order, OrderSummary } from '@/types'
 import { useAuth } from '@/hooks/useAuth'
 import { useIsCompact } from '@/hooks/useMediaQuery'
 import ReceiptModal from '@/components/receipt/ReceiptModal'
+import ImportPreviousOrderModal from '@/components/orders/ImportPreviousOrderModal'
 
 /** One figure in the running-totals strip. */
 function StatTile({ label, value, hint }: { label: string; value: string; hint: string }) {
@@ -88,20 +89,27 @@ function OrderCard({
         <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 700, fontSize: 15, color: 'var(--foreground)' }}>
           #{order.order_number}
         </span>
-        <span
-          style={{
-            fontSize: 10,
-            padding: '3px 8px',
-            borderRadius: 12,
-            fontWeight: 700,
-            background: isVoid ? '#fee2e2' : '#e8f5e9',
-            color: isVoid ? '#b91c1c' : '#15803d',
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
-          }}
-        >
-          {order.status}
-        </span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {order.note === 'inserted' && (
+            <span style={{ fontSize: 9, padding: '3px 7px', borderRadius: 10, fontWeight: 700, background: '#fef3c7', color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Inserted · Previous Data
+            </span>
+          )}
+          <span
+            style={{
+              fontSize: 10,
+              padding: '3px 8px',
+              borderRadius: 12,
+              fontWeight: 700,
+              background: isVoid ? '#fee2e2' : '#e8f5e9',
+              color: isVoid ? '#b91c1c' : '#15803d',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+            }}
+          >
+            {order.status}
+          </span>
+        </div>
       </div>
 
       {/* Row 2: when */}
@@ -238,8 +246,12 @@ export default function OrdersList() {
   const [summary, setSummary] = useState<OrderSummary | null>(null)
   /** Success toast shown briefly after a void completes. */
   const [voidSuccessMsg, setVoidSuccessMsg] = useState<string | null>(null)
+  /** Import modal + toast for transferring a previous-system sale. */
+  const [importOpen, setImportOpen] = useState(false)
+  const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null)
 
   const isCashier = role === 'cashier'
+  const isAdmin = role === 'admin'
 
   // Modals state
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<Order | null>(null)
@@ -400,6 +412,31 @@ export default function OrdersList() {
 
   return (
     <div className="page">
+      {/* Import success toast */}
+      {importSuccessMsg && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed', bottom: 28, right: 24, zIndex: 9999,
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '14px 18px', background: '#eff6ff', border: '1px solid #93c5fd',
+            borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.14)',
+            fontSize: 13, fontWeight: 600, color: '#1e40af', maxWidth: 420,
+            animation: 'toast-in 0.3s cubic-bezier(0.16,1,0.3,1)',
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <circle cx="12" cy="12" r="10" /><polyline points="9 12 11 14 15 10" />
+          </svg>
+          {importSuccessMsg}
+          <button type="button" onClick={() => setImportSuccessMsg(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#1e40af', padding: 2 }} aria-label="Dismiss">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      )}
       {/* Void success toast */}
       {voidSuccessMsg && (
         <div
@@ -462,7 +499,23 @@ export default function OrdersList() {
               : "All Wing's Zone customer orders and transaction audits"}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {isAdmin && (
+            <button
+              id="btn-import-previous-data"
+              type="button"
+              onClick={() => setImportOpen(true)}
+              className="btn-primary"
+              style={{ padding: '8px 14px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              Input Previous Data
+            </button>
+          )}
           <button
             id="btn-export-orders-csv"
             type="button"
@@ -656,6 +709,11 @@ export default function OrdersList() {
                           {order.discount_type === 'senior' ? 'SENIOR 20%' : 'PWD 20%'}
                         </span>
                       )}
+                      {order.note === 'inserted' && (
+                        <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', fontFamily: 'IBM Plex Mono', fontWeight: 700 }}>
+                          INSERTED · PREVIOUS DATA
+                        </span>
+                      )}
                     </div>
                     <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {itemsSummary || 'No items'}
@@ -798,6 +856,24 @@ export default function OrdersList() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Previous-data import modal */}
+      {importOpen && (
+        <ImportPreviousOrderModal
+          onClose={() => setImportOpen(false)}
+          onImported={async (orderNumber) => {
+            setImportOpen(false)
+            setImportSuccessMsg(`Previous order #${orderNumber} has been saved and marked as inserted (previous data).`)
+            setTimeout(() => setImportSuccessMsg(null), 5000)
+            await fetchOrders()
+            dispatchNotification({
+              category: 'order',
+              title: 'Previous Data Imported',
+              body: `Order #${orderNumber} was transferred from the previous system.`,
+            })
+          }}
+        />
       )}
 
       {/* Receipt Modal */}

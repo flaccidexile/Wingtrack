@@ -7,8 +7,12 @@ import {
   getAllProductCosts,
   getAllOrderPaymentMethods,
   getAllOrderExtraMeta,
+  setOrderExtraMeta,
+  setOrderPaymentMethod,
+  setOrderItemCosts,
   type OrderExtraMeta,
 } from '../lib/productMetadata'
+import { VAT_RATE } from '../lib/validation'
 
 const router = Router()
 
@@ -69,6 +73,293 @@ async function getRecipeCostsMap(): Promise<Record<string, number>> {
   }
   return map
 }
+
+// ────────────────────────────────────────────────────────────
+// POST /api/orders/import — Manually transfer a previous-system sale
+//
+// Admin-only. The Transactions page uses this to record an old sale from the
+// shop's previous system. It deliberately does NOT touch inventory: the stock
+// move happened back then in the old system, so this only reconstructs the
+// sales history. The order is backdated to `created_at` and tagged with
+// `note: 'inserted'` in its local metadata so it is visibly "previous data".
+// ────────────────────────────────────────────────────────────
+
+const IMPORT_PAYMENT_METHODS = ['cash', 'gcash', 'maya', 'card'] as const
+const IMPORT_ORDER_TYPES = ['dine_in', 'take_out', 'delivery'] as const
+const IMPORT_DISCOUNT_TYPES = ['none', 'senior', 'pwd'] as const
+const IMPORT_SC_PWD_RATE = 0.20
+
+interface ImportedLine {
+  name: string
+  quantity: number
+  unit_price: number
+  unit_cost: number
+  product_id: string | null
+}
+interface ValidatedImport {
+  createdAt: string
+  lines: ImportedLine[]
+  paymentMethod: string
+  orderType: string
+  tableNumber: string | null
+  discountType: string
+  discountId: string | null
+  paymentReference: string | null
+  notes: string | null
+}
+
+function validateImportBody(body: unknown):
+  | { ok: true; value: ValidatedImport }
+  | { ok: false; message: string } {
+  const b = (body ?? {}) as Record<string, unknown>
+
+  // A real, parseable timestamp is required — backdating is the whole point.
+  if (typeof b.created_at !== 'string' || b.created_at.trim() === '') {
+    return { ok: false, message: 'Date & time of the original sale is required.' }
+  }
+  const parsed = new Date(b.created_at)
+  if (Number.isNaN(parsed.getTime())) {
+    return { ok: false, message: 'The date & time is not valid.' }
+  }
+  // Guard against a typo like year 2099 or year 1 producing nonsense history.
+  const year = parsed.getUTCFullYear()
+  if (year < 2000 || year > new Date().getUTCFullYear() + 1) {
+    return { ok: false, message: 'The date must be between year 2000 and next year.' }
+  }
+
+  if (!Array.isArray(b.items) || b.items.length === 0) {
+    return { ok: false, message: 'At least one item is required.' }
+  }
+  if (b.items.length > 100) {
+    return { ok: false, message: 'A single order cannot have more than 100 item lines.' }
+  }
+
+  const lines: ImportedLine[] = []
+  for (let i = 0; i < b.items.length; i++) {
+    const raw = b.items[i] as Record<string, unknown> | null
+    const label = `Item ${i + 1}`
+    if (!raw || typeof raw !== 'object') return { ok: false, message: `${label} is malformed.` }
+    if (typeof raw.name !== 'string' || raw.name.trim() === '') {
+      return { ok: false, message: `${label} needs a name.` }
+    }
+    if (typeof raw.quantity !== 'number' || !Number.isInteger(raw.quantity) || raw.quantity < 1 || raw.quantity > 999) {
+      return { ok: false, message: `${label} quantity must be a whole number from 1 to 999.` }
+    }
+    if (typeof raw.unit_price !== 'number' || !Number.isFinite(raw.unit_price) || raw.unit_price < 0 || raw.unit_price > 1_000_000) {
+      return { ok: false, message: `${label} price must be a number between 0 and 1,000,000.` }
+    }
+    const rawCost = raw.unit_cost
+    const unitCost = typeof rawCost === 'number' && Number.isFinite(rawCost) && rawCost >= 0 ? rawCost : 0
+    const pid = typeof raw.product_id === 'string' && raw.product_id.trim() !== '' ? raw.product_id : null
+    lines.push({
+      name: raw.name.trim().slice(0, 200),
+      quantity: raw.quantity,
+      unit_price: Math.round(raw.unit_price * 100) / 100,
+      unit_cost: Math.round(unitCost * 100) / 100,
+      product_id: pid,
+    })
+  }
+
+  const paymentMethod = typeof b.payment_method === 'string' ? b.payment_method : 'cash'
+  if (!(IMPORT_PAYMENT_METHODS as readonly string[]).includes(paymentMethod)) {
+    return { ok: false, message: 'Invalid payment method.' }
+  }
+  const orderType = typeof b.order_type === 'string' && (IMPORT_ORDER_TYPES as readonly string[]).includes(b.order_type)
+    ? b.order_type : 'dine_in'
+  const discountType = typeof b.discount_type === 'string' && (IMPORT_DISCOUNT_TYPES as readonly string[]).includes(b.discount_type)
+    ? b.discount_type : 'none'
+
+  return {
+    ok: true,
+    value: {
+      createdAt: parsed.toISOString(),
+      lines,
+      paymentMethod,
+      orderType,
+      tableNumber: orderType === 'dine_in' && typeof b.table_number === 'string' && b.table_number.trim() !== ''
+        ? b.table_number.trim().slice(0, 32) : null,
+      discountType,
+      discountId: discountType !== 'none' && typeof b.discount_id === 'string' && b.discount_id.trim() !== ''
+        ? b.discount_id.trim().slice(0, 64) : null,
+      paymentReference: typeof b.payment_reference === 'string' && b.payment_reference.trim() !== ''
+        ? b.payment_reference.trim().slice(0, 80) : null,
+      notes: typeof b.notes === 'string' && b.notes.trim() !== '' ? b.notes.trim().slice(0, 500) : null,
+    },
+  }
+}
+
+/**
+ * Resolves a line to an existing product id, creating a hidden placeholder in
+ * a dedicated "Previous System" category when the old item name is not on the
+ * current menu. This keeps the order_items.product_id foreign key valid even
+ * when the previous system sold items that no longer exist.
+ */
+async function resolveImportProduct(
+  line: ImportedLine,
+  categoryId: string
+): Promise<string | null> {
+  if (line.product_id) {
+    const { data } = await supabaseAdmin
+      .from('products').select('id').eq('id', line.product_id).maybeSingle()
+    if (data) return data.id as string
+  }
+  const { data: existing } = await supabaseAdmin
+    .from('products').select('id').ilike('name', line.name).maybeSingle()
+  if (existing) return existing.id as string
+
+  const { data: created, error } = await supabaseAdmin
+    .from('products')
+    .insert({
+      name: line.name,
+      category_id: categoryId,
+      price: line.unit_price,
+      unit_cost: line.unit_cost,
+      is_available: false,
+    })
+    .select('id').single()
+  if (error || !created) {
+    // Some deployments have not applied the unit_cost migration yet.
+    const retry = await supabaseAdmin
+      .from('products')
+      .insert({ name: line.name, category_id: categoryId, price: line.unit_price, is_available: false })
+      .select('id').single()
+    return retry.data ? (retry.data.id as string) : null
+  }
+  return created.id as string
+}
+
+router.post(
+  '/import',
+  requireAuth,
+  requireRole('admin'),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const validation = validateImportBody(req.body)
+    if (!validation.ok) {
+      res.status(400).json({ message: validation.message })
+      return
+    }
+    const v = validation.value
+
+    const { data: staffProfile } = await supabaseAdmin
+      .from('staff_profiles').select('id').eq('user_id', req.userId!).maybeSingle()
+    if (!staffProfile) {
+      res.status(403).json({ message: 'Staff profile not found.' })
+      return
+    }
+
+    // Find or create the bucket for placeholder products from the old system.
+    const CATEGORY = 'Previous System (Imported)'
+    let { data: category } = await supabaseAdmin
+      .from('product_categories').select('id').ilike('name', CATEGORY).maybeSingle()
+    if (!category) {
+      const created = await supabaseAdmin
+        .from('product_categories')
+        .insert({ name: CATEGORY, sort_order: 9999 })
+        .select('id').single()
+      if (created.error || !created.data) {
+        console.error('[import] Failed to create placeholder category:', created.error)
+        res.status(500).json({ message: 'Could not prepare the import category. Try again.' })
+        return
+      }
+      category = created.data
+    }
+
+    const resolved: Array<ImportedLine & { productId: string }> = []
+    for (const line of v.lines) {
+      const productId = await resolveImportProduct(line, category.id as string)
+      if (!productId) {
+        res.status(500).json({ message: `Could not resolve product "${line.name}".` })
+        return
+      }
+      resolved.push({ ...line, productId })
+    }
+
+    const subtotal = Math.round(resolved.reduce((s, l) => s + l.unit_price * l.quantity, 0) * 100) / 100
+    const isScPwd = v.discountType === 'senior' || v.discountType === 'pwd'
+    const discountAmount = isScPwd ? Math.round(subtotal * IMPORT_SC_PWD_RATE * 100) / 100 : 0
+    const vatAmount = isScPwd ? 0 : Math.round(subtotal * VAT_RATE * 100) / 100
+    const totalAmount = Math.round((isScPwd ? subtotal - discountAmount : subtotal + vatAmount) * 100) / 100
+
+    // The DB enum lacks 'maya'; keep the exact label in local metadata.
+    const dbPaymentMethod: 'cash' | 'gcash' | 'card' = v.paymentMethod === 'maya' ? 'gcash' : v.paymentMethod as any
+
+    const importNotes = `[PREVIOUS DATA · IMPORTED]${v.notes ? ` ${v.notes}` : ''}`
+
+    const { data: order, error: orderError } = await supabaseAdmin
+      .from('orders')
+      .insert({
+        cashier_id: staffProfile.id,
+        status: 'completed',
+        payment_method: dbPaymentMethod,
+        subtotal,
+        vat_amount: vatAmount,
+        total_amount: totalAmount,
+        notes: importNotes,
+        created_at: v.createdAt,
+        updated_at: v.createdAt,
+      })
+      .select('id, order_number').single()
+
+    if (orderError || !order) {
+      console.error('[import] Order insert failed:', orderError)
+      res.status(500).json({ message: 'Failed to save the imported order.' })
+      return
+    }
+
+    const linePayload = resolved.map(l => ({
+      order_id: order.id,
+      product_id: l.productId,
+      product_name: l.name,
+      unit_price: l.unit_price,
+      unit_cost: l.unit_cost,
+      quantity: l.quantity,
+    }))
+    const itemsInsert = await supabaseAdmin
+      .from('order_items').insert(linePayload).select('id, product_id, unit_cost')
+    let insertedItems: Array<{ id: string; product_id?: string; unit_cost?: number | null }> | null =
+      itemsInsert.data as Array<{ id: string; product_id?: string; unit_cost?: number | null }> | null
+    if (itemsInsert.error && (itemsInsert.error.code === 'PGRST204' || itemsInsert.error.code === '42703' || /unit_cost/i.test(itemsInsert.error.message))) {
+      const retry = await supabaseAdmin
+        .from('order_items')
+        .insert(linePayload.map(({ unit_cost, ...rest }) => rest))
+        .select('id, product_id')
+      insertedItems = retry.data
+    }
+    if (itemsInsert.error && !insertedItems) {
+      // Compensate: remove the header so no phantom order survives.
+      await supabaseAdmin.from('orders').delete().eq('id', order.id)
+      console.error('[import] Line items insert failed:', itemsInsert.error)
+      res.status(500).json({ message: 'Failed to save the imported items. Nothing was recorded.' })
+      return
+    }
+
+    // Local fallback metadata — carries the "inserted" marker that means
+    // "this is previous data", plus all the order-type/discount detail.
+    setOrderPaymentMethod(order.id as string, v.paymentMethod)
+    setOrderExtraMeta(order.id as string, {
+      order_type: v.orderType as any,
+      table_number: v.tableNumber,
+      discount_type: v.discountType as any,
+      discount_id: v.discountId,
+      discount_amount: discountAmount,
+      payment_reference: v.paymentReference,
+      note: 'inserted',
+    })
+    if (insertedItems && Array.isArray(insertedItems)) {
+      setOrderItemCosts(insertedItems.map((it: any) => ({
+        id: it.id,
+        cost: it.unit_cost != null ? Number(it.unit_cost) : 0,
+      })))
+    }
+
+    res.status(201).json({
+      id: order.id,
+      order_number: order.order_number,
+      total_amount: totalAmount,
+      note: 'inserted',
+    })
+  }
+)
 
 /** Default and maximum number of orders returned in one page. */
 const DEFAULT_PAGE_SIZE = 100

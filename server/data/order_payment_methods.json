@@ -1,4 +1,14 @@
 {
-  "2daad1d2-ff78-4171-ab88-718dc5d7e592": "maya",
-  "4db252da-e618-403f-835e-ff19b4ce4f7c": "cash"
+  "2daad1d2-ff78-4171-ab88-718dc5d7e592": {
+    "value": "maya",
+    "note": "inserted"
+  },
+  "4db252da-e618-403f-835e-ff19b4ce4f7c": {
+    "value": "cash",
+    "note": "inserted"
+  },
+  "cbb9bed6-7f96-479e-baf4-ce09af197dc3": {
+    "value": "cash",
+    "note": "inserted"
+  }
 }

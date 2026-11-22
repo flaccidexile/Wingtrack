@@ -112,6 +112,8 @@ export interface Order {
   discount_amount?: number
   /** Optional GCash / Maya / Card reference or approval number. */
   payment_reference?: string | null
+  /** "inserted" when the order was manually transferred from a previous system. */
+  note?: string
 }
 
 export interface OrderItem {
@@ -153,6 +155,28 @@ export interface CheckoutPayload {
   discount_type?: DiscountType
   discount_id?: string | null
   payment_reference?: string | null
+}
+
+/** A single item line when transferring an old sale from the previous system. */
+export interface ImportOrderItemPayload {
+  name: string
+  quantity: number
+  unit_price: number
+  unit_cost?: number
+  product_id?: string | null
+}
+
+/** Payload for POST /api/orders/import — manually recording a previous-system sale. */
+export interface ImportOrderPayload {
+  created_at: string
+  items: ImportOrderItemPayload[]
+  payment_method: 'cash' | 'gcash' | 'maya' | 'card'
+  order_type?: OrderType
+  table_number?: string | null
+  discount_type?: DiscountType
+  discount_id?: string | null
+  payment_reference?: string | null
+  notes?: string
 }
 
 export interface InventoryAdjustmentPayload {

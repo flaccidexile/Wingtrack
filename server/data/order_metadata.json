@@ -5,6 +5,16 @@
     "discount_type": "none",
     "discount_id": null,
     "discount_amount": 0,
-    "payment_reference": null
+    "payment_reference": null,
+    "note": "inserted"
+  },
+  "cbb9bed6-7f96-479e-baf4-ce09af197dc3": {
+    "order_type": "dine_in",
+    "table_number": null,
+    "discount_type": "none",
+    "discount_id": null,
+    "discount_amount": 0,
+    "payment_reference": null,
+    "note": "inserted"
   }
 }

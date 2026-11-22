@@ -1,5 +1,18 @@
 {
-  "9af29239-c210-47d4-b17e-f7ad191d237e": 0,
-  "5275b6ac-6491-46aa-9f49-2d13028966a1": 0,
-  "e27a3ae8-76fd-49e3-983d-ac6beb3f91d7": 0
+  "9af29239-c210-47d4-b17e-f7ad191d237e": {
+    "value": 0,
+    "note": "inserted"
+  },
+  "5275b6ac-6491-46aa-9f49-2d13028966a1": {
+    "value": 0,
+    "note": "inserted"
+  },
+  "e27a3ae8-76fd-49e3-983d-ac6beb3f91d7": {
+    "value": 0,
+    "note": "inserted"
+  },
+  "59d892d6-ccb8-4f25-8d5e-1c44ae997a41": {
+    "value": 0,
+    "note": "inserted"
+  }
 }
