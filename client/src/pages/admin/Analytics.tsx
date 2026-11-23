@@ -204,10 +204,10 @@ export default function Analytics() {
               auto-fit + a 180px floor drops to two columns, then one. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 26 }}>
             {[
-              { label: 'Total Revenue',   val: `\u20B1${(totalRev/1000).toFixed(0)}k`, note: period,              color: '#9b5e28' },
-              { label: 'Total Orders',    val: totalOrd.toLocaleString(),              note: 'Completed',         color: '#c47a2e' },
-              { label: 'Avg Order Value', val: `\u20B1${avgOrder.toFixed(0)}`,         note: 'Per transaction',   color: '#7a4520' },
-              { label: 'Best Month',      val: bestMonth?.month ?? '-',                note: `\u20B1${bestMonth?.revenue.toLocaleString() ?? 0}`, color: '#4a7c4e' },
+              { label: 'Total Revenue',   val: `₱${totalRev.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, note: period, color: '#9b5e28' },
+              { label: 'Total Orders',    val: totalOrd.toLocaleString(), note: 'Completed', color: '#c47a2e' },
+              { label: 'Avg Order Value', val: `₱${avgOrder.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, note: 'Per transaction', color: '#7a4520' },
+              { label: 'Best Period',     val: bestMonth?.month ?? '-', note: `₱${(bestMonth?.revenue ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, color: '#4a7c4e' },
             ].map(k => (
               <div key={k.label} className="card" style={{ padding: '22px 24px', textAlign: 'center' }}>
                 <p style={{ fontSize: 11, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontFamily: 'IBM Plex Mono' }}>{k.label}</p>
@@ -225,7 +225,7 @@ export default function Analytics() {
               <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 18 }}>{period}</p>
               <div ref={trendRef} style={{ width: '100%', minWidth: 0 }}>
               <ResponsiveContainer width="100%" height={trendAngle ? 200 : 230}>
-                <AreaChart data={monthlyData}>
+                <AreaChart data={monthlyData} margin={{ top: 8, right: 24, left: 4, bottom: 8 }}>
                   <defs>
                     <linearGradient id="mrev" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%"  stopColor="#c47a2e" stopOpacity={0.3}/>
@@ -243,9 +243,21 @@ export default function Analytics() {
                     textAnchor={trendAngle ? 'end' : 'middle'}
                     height={trendAngle ? 46 : 26}
                     dy={trendAngle ? 6 : 0}
+                    padding={{ left: 8, right: 12 }}
                   />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} width={38} />
-                  <Tooltip contentStyle={{ background: 'var(--sidebar)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} labelStyle={{ color: 'var(--sidebar-muted)', fontSize: 12 }} formatter={(v) => [`₱${Number(v).toLocaleString()}`, 'Revenue']} itemStyle={{ color: 'var(--sidebar-foreground)', fontSize: 13 }} />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v: number) => {
+                      if (v === 0) return '₱0'
+                      if (Math.abs(v) < 1000) return `₱${Math.round(v)}`
+                      const k = v / 1000
+                      return `₱${Number.isInteger(k) ? k : k.toFixed(1)}k`
+                    }}
+                    width={50}
+                  />
+                  <Tooltip contentStyle={{ background: 'var(--sidebar)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} labelStyle={{ color: 'var(--sidebar-muted)', fontSize: 12 }} formatter={(v) => [`₱${Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Revenue']} itemStyle={{ color: 'var(--sidebar-foreground)', fontSize: 13 }} />
                   <Area type="monotone" dataKey="revenue" stroke="#c47a2e" strokeWidth={2.5} fill="url(#mrev)" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -290,7 +302,7 @@ export default function Analytics() {
                   <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--foreground)' }}>{p.name}</span>
                 </div>
                 <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--muted-foreground)' }}>{p.orders}</span>
-                <span style={{ fontSize: 14, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: 'var(--primary)' }}>₱{(p.revenue/1000).toFixed(0)}k</span>
+                <span style={{ fontSize: 14, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: 'var(--primary)' }}>₱{p.revenue.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             ))}
             {topProducts.length === 0 && (

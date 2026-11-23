@@ -78,5 +78,23 @@
   "61d595ee-31ae-4b56-b5cd-ddbd7b0b4ecc": {
     "expiration_date": "2026-12-03",
     "lead_time_days": 2
+  },
+  "8d539435-a3ff-47a2-933c-b641bd423650": {
+    "expiration_date": "2026-11-28"
+  },
+  "3e13144a-97c5-4fb3-8531-fa15f6feffb6": {
+    "expiration_date": "2026-12-02"
+  },
+  "00c29e2f-3e07-475e-8e44-9a10a8f325f0": {
+    "expiration_date": "2026-12-03"
+  },
+  "362559be-41fd-4c0a-8c1d-e219f614b852": {
+    "expiration_date": "2026-12-02"
+  },
+  "4de0157e-a50f-467d-99a6-bd5e9d4afcf6": {
+    "expiration_date": "2026-11-27"
+  },
+  "a5464e3b-31f8-4a5c-a882-ea277b94cb08": {
+    "expiration_date": "2026-12-27"
   }
 }

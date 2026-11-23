@@ -177,7 +177,7 @@ function OrderCard({
                 color: profit.netProfit >= 0 ? '#15803d' : '#b91c1c',
               }}
             >
-              Net Profit: {profit.netProfit >= 0 ? '+' : ''}₱{profit.netProfit.toFixed(2)} ({profit.marginPct.toFixed(0)}%)
+              Gross Profit: {profit.netProfit >= 0 ? '+' : ''}₱{profit.netProfit.toFixed(2)} ({profit.marginPct.toFixed(0)}%)
             </div>
           )}
         </div>
@@ -335,8 +335,8 @@ export default function OrdersList() {
       'VAT 12% (PHP)',
       'Total Amount (PHP)',
       'Total Cost (PHP)',
-      'Net Profit (PHP)',
-      'Margin (%)',
+      'Gross Profit (PHP)',
+      'Gross Margin (%)',
       'Status',
       'Notes',
     ]
@@ -650,7 +650,7 @@ export default function OrdersList() {
         <div className="card" style={{ overflow: 'hidden' }}>
           <div className="scroll-x">
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 0.5fr) minmax(145px, 1fr) minmax(220px, 1.8fr) minmax(95px, 0.75fr) minmax(105px, 0.85fr) minmax(115px, 0.9fr) minmax(105px, 0.8fr) minmax(140px, 0.9fr)', gap: 20, padding: '13px 24px', borderBottom: '1px solid var(--border)', minWidth: 1040, alignItems: 'center' }}>
-              {['Order #', 'Date & Time', 'Items Summary', 'Payment', 'Total', 'Net Profit', 'Status', 'Actions'].map((h, idx) => (
+              {['Order #', 'Date & Time', 'Items Summary', 'Payment', 'Total', 'Gross Profit', 'Status', 'Actions'].map((h, idx) => (
                 <span
                   key={h}
                   style={{

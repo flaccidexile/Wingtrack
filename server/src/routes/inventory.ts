@@ -8,6 +8,23 @@ const router = Router()
 
 const PERISHABLE_CATEGORIES = new Set(['Proteins', 'Dairy', 'Produce', 'Sides', 'Beverages', 'Sauces', 'Bakery'])
 
+/** Countable/discrete units that must never display fractional ROP or reorder quantities. */
+const DISCRETE_UNITS = new Set([
+  'pc', 'pcs', 'piece', 'pieces',
+  'bottle', 'bottles',
+  'can', 'cans',
+  'pack', 'packs',
+  'box', 'boxes',
+  'sack', 'sacks',
+  'bag', 'bags',
+  'tray', 'trays',
+  'dozen', 'unit', 'units',
+])
+
+function isDiscreteUnit(unit: unknown): boolean {
+  return typeof unit === 'string' && DISCRETE_UNITS.has(unit.trim().toLowerCase())
+}
+
 function defaultLeadTimeDays(category: string): number {
   if (category === 'Proteins' || category === 'Dairy' || category === 'Produce' || category === 'Bakery') {
     return 2
@@ -83,7 +100,7 @@ const MAX_INVENTORY_ROWS = 1000
 router.get('/', requireAuth, requireRole('admin', 'inventory_personnel'), async (_req, res: Response) => {
   const since30d = new Date(Date.now() - 30 * 86_400_000).toISOString()
 
-  const [{ data, error }, { data: deductions }] = await Promise.all([
+  const [{ data, error }, { data: deductions }, { data: allDeductionRows }, { data: recipeRows }] = await Promise.all([
     supabaseAdmin
       .from('inventory')
       .select('*')
@@ -94,6 +111,13 @@ router.get('/', requireAuth, requireRole('admin', 'inventory_personnel'), async 
       .select('inventory_id, qty_change')
       .eq('movement_type', 'deduction')
       .gte('created_at', since30d),
+    supabaseAdmin
+      .from('inventory_movements')
+      .select('inventory_id')
+      .eq('movement_type', 'deduction'),
+    supabaseAdmin
+      .from('product_recipes')
+      .select('inventory_id'),
   ])
 
   if (error) {
@@ -110,6 +134,18 @@ router.get('/', requireAuth, requireRole('admin', 'inventory_personnel'), async 
     usage30dMap.set(id, (usage30dMap.get(id) ?? 0) + qty)
   }
 
+  // Track recipe links & historical sales deductions for delete protection
+  const recipeCountMap = new Map<string, number>()
+  for (const r of recipeRows ?? []) {
+    const id = (r as { inventory_id: string }).inventory_id
+    recipeCountMap.set(id, (recipeCountMap.get(id) ?? 0) + 1)
+  }
+  const deductionCountMap = new Map<string, number>()
+  for (const d of allDeductionRows ?? []) {
+    const id = (d as { inventory_id: string }).inventory_id
+    deductionCountMap.set(id, (deductionCountMap.get(id) ?? 0) + 1)
+  }
+
   const metaMap = getAllInventoryMeta()
   const nowMs = Date.now()
   const toPersist: Array<{ id: string; expiration_date: string | null }> = []
@@ -118,6 +154,7 @@ router.get('/', requireAuth, requireRole('admin', 'inventory_personnel'), async 
     const meta = metaMap[item.id] ?? {}
     const stockQty = Number(item.stock_qty) || 0
     const minLevel = Number(item.min_stock_level) || 0
+    const discrete = isDiscreteUnit(item.unit)
     const leadTimeDays =
       typeof meta.lead_time_days === 'number'
         ? meta.lead_time_days
@@ -132,14 +169,20 @@ router.get('/', requireAuth, requireRole('admin', 'inventory_personnel'), async 
     const avgDailyUsage = Math.round(Math.max(observedDaily, baselineDaily) * 100) / 100
 
     // Standard ROP Formula: (Avg Daily Usage × Lead Time in Days) + Safety Stock
-    const safetyStock = minLevel * 0.5
-    const reorderPoint = Math.round(((avgDailyUsage * leadTimeDays) + safetyStock) * 100) / 100
+    // Minimum stock level serves as the safety stock buffer, guaranteeing ROP >= Min.
+    const safetyStock = minLevel
+    const rawRop = (avgDailyUsage * leadTimeDays) + safetyStock
+    const reorderPoint = discrete
+      ? Math.ceil(rawRop)
+      : Math.round(rawRop * 100) / 100
 
     // Suggested Reorder Quantity when stock is at/below ROP or min_stock_level
     const needsReorder = stockQty <= reorderPoint || stockQty <= minLevel
     const targetStock = Math.max(reorderPoint + minLevel, minLevel * 2)
     const suggestedReorderQty = needsReorder
-      ? Math.max(Math.ceil((targetStock - stockQty) * 10) / 10, Math.ceil(minLevel))
+      ? discrete
+        ? Math.max(Math.ceil(targetStock - stockQty), Math.ceil(minLevel))
+        : Math.max(Math.ceil((targetStock - stockQty) * 10) / 10, Math.ceil(minLevel))
       : 0
 
     // Expiration / Best-Before Date:
@@ -175,6 +218,8 @@ router.get('/', requireAuth, requireRole('admin', 'inventory_personnel'), async 
       avg_daily_usage: avgDailyUsage,
       reorder_point: reorderPoint,
       suggested_reorder_qty: suggestedReorderQty,
+      linked_recipe_count: recipeCountMap.get(item.id) ?? 0,
+      sales_deduction_count: deductionCountMap.get(item.id) ?? 0,
     }
   })
 
@@ -512,19 +557,51 @@ router.delete(
       return
     }
 
-    // Remove dependent recipe links and movement audit rows before deleting the
-    // inventory item (both tables reference public.inventory(id) without CASCADE).
-    const { error: recipeErr } = await supabaseAdmin
+    // Protect active menu recipes and historical sales audit trail from hard deletion.
+    const { data: linkedRecipes, error: recipeCheckErr } = await supabaseAdmin
       .from('product_recipes')
-      .delete()
+      .select('id, product:product_id(name)')
       .eq('inventory_id', id)
 
-    if (recipeErr) {
-      console.error('Inventory delete recipe cleanup error:', recipeErr)
-      res.status(500).json({ message: 'Could not unlink this item from menu recipes.' })
+    if (recipeCheckErr) {
+      console.error('Inventory delete recipe check error:', recipeCheckErr)
+      res.status(500).json({ message: 'Could not verify menu recipe dependencies.' })
       return
     }
 
+    if (linkedRecipes && linkedRecipes.length > 0) {
+      const names = linkedRecipes
+        .map((r: any) => r.product?.name)
+        .filter((n: unknown): n is string => typeof n === 'string' && n.length > 0)
+      const sample = names.slice(0, 3).join(', ')
+      const extra = names.length > 3 ? ` and ${names.length - 3} more` : ''
+      res.status(409).json({
+        message: `Cannot delete "${existing.name}" because it is linked to ${linkedRecipes.length} active menu recipe${linkedRecipes.length > 1 ? 's' : ''}${sample ? ` (${sample}${extra})` : ''}. Unlink it from Menu Items first, or adjust stock to 0 instead.`,
+      })
+      return
+    }
+
+    const { count: deductionCount, error: deductionCheckErr } = await supabaseAdmin
+      .from('inventory_movements')
+      .select('id', { count: 'exact', head: true })
+      .eq('inventory_id', id)
+      .eq('movement_type', 'deduction')
+
+    if (deductionCheckErr) {
+      console.error('Inventory delete audit check error:', deductionCheckErr)
+      res.status(500).json({ message: 'Could not verify movement audit trail.' })
+      return
+    }
+
+    if ((deductionCount ?? 0) > 0) {
+      res.status(409).json({
+        message: `Cannot delete "${existing.name}" because it has ${deductionCount} historical POS sales deduction record${deductionCount === 1 ? '' : 's'} in the Movement Audit Trail. Keeping it preserves audit integrity — adjust stock to 0 instead.`,
+      })
+      return
+    }
+
+    // Safe to remove: unused item with no recipe links or sales deduction history.
+    // Clean up any opening-balance / manual adjustment rows before deleting the item.
     const { error: moveErr } = await supabaseAdmin
       .from('inventory_movements')
       .delete()

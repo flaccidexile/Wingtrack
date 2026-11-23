@@ -10,7 +10,23 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import SuccessDialog from '@/components/ui/SuccessDialog'
 import type { InventoryItem, InventoryAdjustmentPayload, InventoryMovement } from '@/types'
 
-const CATS = ['All', 'Proteins', 'Sauces', 'Sides', 'Produce', 'Cooking', 'Spices', 'Staples', 'Packaging']
+const CATS = ['All', 'Proteins', 'Sauces', 'Sides', 'Produce', 'Beverages', 'Dairy', 'Cooking', 'Spices', 'Staples', 'Packaging']
+
+const DISCRETE_UNITS = new Set([
+  'pc', 'pcs', 'piece', 'pieces',
+  'bottle', 'bottles',
+  'can', 'cans',
+  'pack', 'packs',
+  'box', 'boxes',
+  'sack', 'sacks',
+  'bag', 'bags',
+  'tray', 'trays',
+  'dozen', 'unit', 'units',
+])
+
+function isDiscreteUnit(unit: unknown): boolean {
+  return typeof unit === 'string' && DISCRETE_UNITS.has(unit.trim().toLowerCase())
+}
 
 /** Rows per page of the audit trail. Matches the server's default window. */
 const MOVEMENTS_PAGE_SIZE = 100
@@ -40,6 +56,7 @@ function getItemStatus(item: InventoryItem): 'ok' | 'low' | 'critical' {
 function getItemRopMetrics(item: InventoryItem) {
   const stockQty = Number(item.stock_qty) || 0
   const minLevel = Number(item.min_stock_level) || 0
+  const discrete = isDiscreteUnit(item.unit)
   const leadTimeDays =
     typeof item.lead_time_days === 'number' && item.lead_time_days > 0
       ? item.lead_time_days
@@ -50,18 +67,23 @@ function getItemRopMetrics(item: InventoryItem) {
     typeof item.avg_daily_usage === 'number' && item.avg_daily_usage > 0
       ? item.avg_daily_usage
       : Math.round(Math.max(minLevel / 7, 0.5) * 100) / 100
-  const safetyStock = minLevel * 0.5
+  // Safety stock = minimum stock level, guaranteeing ROP >= Min.
+  const safetyStock = minLevel
+  const rawRop = (avgDailyUsage * leadTimeDays) + safetyStock
+  const computedRop = discrete ? Math.ceil(rawRop) : Math.round(rawRop * 100) / 100
   const reorderPoint =
     typeof item.reorder_point === 'number'
-      ? item.reorder_point
-      : Math.round(((avgDailyUsage * leadTimeDays) + safetyStock) * 100) / 100
+      ? (discrete ? Math.ceil(item.reorder_point) : item.reorder_point)
+      : computedRop
   const needsReorder = stockQty <= reorderPoint || stockQty <= minLevel
   const targetStock = Math.max(reorderPoint + minLevel, minLevel * 2)
   const suggestedReorderQty =
     typeof item.suggested_reorder_qty === 'number'
-      ? item.suggested_reorder_qty
+      ? (discrete ? Math.ceil(item.suggested_reorder_qty) : item.suggested_reorder_qty)
       : needsReorder
-      ? Math.max(Math.ceil((targetStock - stockQty) * 10) / 10, Math.ceil(minLevel))
+      ? (discrete
+          ? Math.max(Math.ceil(targetStock - stockQty), Math.ceil(minLevel))
+          : Math.max(Math.ceil((targetStock - stockQty) * 10) / 10, Math.ceil(minLevel)))
       : 0
 
   return { leadTimeDays, avgDailyUsage, reorderPoint, suggestedReorderQty }
@@ -445,6 +467,14 @@ export default function Inventory() {
     setAdjustExpDate(item.expiration_date ?? '')
     setAdjustLeadTime(String(rop.leadTimeDays))
   }
+
+  // Merge base categories with any custom/new categories present in loaded items
+  const availableCats = Array.from(
+    new Set([
+      ...CATS,
+      ...items.map(i => i.category).filter((c): c is string => Boolean(c && c.trim())),
+    ]),
+  )
 
   const filtered = items
     .filter(i => cat === 'All' || i.category === cat)
@@ -1198,7 +1228,7 @@ export default function Inventory() {
             )}
 
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 'auto' }}>
-              {CATS.map(c => (
+              {availableCats.map(c => (
                 <button
                   key={c}
                   id={`inv-cat-${c.toLowerCase()}`}
@@ -1725,9 +1755,22 @@ export default function Inventory() {
                 <strong style={{ color: 'var(--foreground)' }}>{deleteTarget.name}</strong>{' '}
                 ({Number(deleteTarget.stock_qty).toLocaleString()} {deleteTarget.unit} in stock · {deleteTarget.category})?
               </p>
-              <p style={{ margin: 0 }}>
-                This will also remove its stock movement history and unlink it from any menu item recipes. This action cannot be undone.
-              </p>
+              {((deleteTarget.linked_recipe_count ?? 0) > 0 || (deleteTarget.sales_deduction_count ?? 0) > 0) ? (
+                <div style={{ background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: '9px 12px', fontSize: 12.5, color: '#9a3412', lineHeight: 1.5 }}>
+                  <strong>Audit &amp; Recipe Safeguard:</strong>{' '}
+                  {(deleteTarget.linked_recipe_count ?? 0) > 0 && (
+                    <>Linked to <strong>{deleteTarget.linked_recipe_count}</strong> active menu recipe{(deleteTarget.linked_recipe_count ?? 0) > 1 ? 's' : ''}. </>
+                  )}
+                  {(deleteTarget.sales_deduction_count ?? 0) > 0 && (
+                    <>Has <strong>{deleteTarget.sales_deduction_count}</strong> historical POS deduction{(deleteTarget.sales_deduction_count ?? 0) > 1 ? 's' : ''} in the Movement Audit Trail. </>
+                  )}
+                  Protected items cannot be hard-deleted to preserve recipe and audit integrity.
+                </div>
+              ) : (
+                <p style={{ margin: 0 }}>
+                  This item has no active menu recipe links or POS sales deduction history. Deleting it permanently removes it from inventory and cannot be undone.
+                </p>
+              )}
               {deleteError && (
                 <div role="alert" style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '9px 12px', fontSize: 12.5, color: '#b91c1c', fontWeight: 500 }}>
                   {deleteError}

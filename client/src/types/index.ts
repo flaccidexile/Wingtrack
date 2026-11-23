@@ -82,6 +82,10 @@ export interface InventoryItem {
   reorder_point?: number
   /** Suggested restock quantity when stock is at or below ROP / min level. */
   suggested_reorder_qty?: number
+  /** Number of active menu recipes currently referencing this ingredient. */
+  linked_recipe_count?: number
+  /** Number of historical POS sales deduction movements tied to this ingredient. */
+  sales_deduction_count?: number
 }
 
 export type OrderType = 'dine_in' | 'take_out' | 'delivery'

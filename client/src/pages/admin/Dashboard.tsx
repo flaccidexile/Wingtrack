@@ -89,13 +89,36 @@ function KpiCard({ label, value, sub, color, trend, icon }: {
   )
 }
 
+/** Always formats a peso value with 2 decimal places (e.g. ₱159.20, ₱1,337.28). */
+function formatPeso(value: number): string {
+  const abs = Math.abs(value)
+  const formatted = abs.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return `${value < 0 ? '-' : ''}₱${formatted}`
+}
+
+/** Formats chart Y-axis ticks cleanly without duplicate rounded labels (₱0, ₱500, ₱1k, ₱1.5k, ₱2k). */
+function formatAxisPeso(v: number): string {
+  if (v === 0) return '₱0'
+  if (Math.abs(v) < 1000) return `₱${Math.round(v)}`
+  const k = v / 1000
+  return `₱${Number.isInteger(k) ? k : k.toFixed(1)}k`
+}
+
+/** Formats a Date as local YYYY-MM-DD (avoids UTC off-by-one shifts in PH timezone). */
+function toLocalDateKey(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) => {
   if (active && payload && payload.length) {
     return (
       <div style={{ background: 'var(--sidebar)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 14px' }}>
         <p style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 4 }}>{label}</p>
         <p style={{ fontFamily: 'Inter', fontSize: 16, fontWeight: 700, color: 'var(--sidebar-active)' }}>
-          ₱{payload[0].value.toLocaleString()}
+          {formatPeso(Number(payload[0].value) || 0)}
         </p>
         {payload[1] && <p style={{ fontSize: 11, color: 'var(--sidebar-foreground)' }}>{payload[1].value} orders</p>}
       </div>
@@ -106,7 +129,7 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
 
 // Format date as YYYY-MM-DD for <input type="date">
 function toDateInput(d: Date) {
-  return d.toISOString().split('T')[0]
+  return toLocalDateKey(d)
 }
 
 export default function Dashboard() {
@@ -119,7 +142,8 @@ export default function Dashboard() {
   const [topItems, setTopItems] = useState<TopItem[]>([])
   const [recentOrders, setRecentOrders] = useState<Order[]>([])
   const [lowStockCount, setLowStockCount] = useState(0)
-  const [periodNetProfit, setPeriodNetProfit] = useState(0)
+  const [periodNetSales, setPeriodNetSales] = useState(0)
+  const [periodGrossProfit, setPeriodGrossProfit] = useState(0)
   const [periodMarginPct, setPeriodMarginPct] = useState(0)
   const [loading, setLoading] = useState(true)
 
@@ -206,9 +230,11 @@ export default function Dashboard() {
     if (period === 'today') {
       since = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     } else if (period === 'week') {
-      since = new Date(now.getTime() - 7 * 86400000)
+      // Exactly 7 calendar days inclusive of today (e.g. Tue 11/17 through Mon 11/23)
+      since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)
     } else if (period === 'month') {
-      since = new Date(now.getTime() - 30 * 86400000)
+      // Exactly 30 calendar days inclusive of today
+      since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29)
     } else {
       // custom
       since = new Date(customFrom + 'T00:00:00')
@@ -248,7 +274,8 @@ export default function Dashboard() {
     })
     setLowStockCount((inventoryRes.data ?? []).length)
 
-    // Compute period Net Profit & Profit Margin (%) across all completed orders in the window
+    // Compute period Estimated Gross Profit (Net Sales ex-VAT minus Ingredient COGS)
+    // and Gross Margin (%) using Net Sales (ex-VAT) as the transparent denominator.
     let sumSubtotal = 0
     let sumCost = 0
     for (const o of orders) {
@@ -256,9 +283,11 @@ export default function Dashboard() {
       sumSubtotal += p.subtotal
       sumCost += p.totalCost
     }
-    const netProfit = Math.round((sumSubtotal - sumCost) * 100) / 100
-    const marginPct = sumSubtotal > 0 ? Math.round(((netProfit / sumSubtotal) * 100) * 10) / 10 : 0
-    setPeriodNetProfit(netProfit)
+    const netSales = Math.round(sumSubtotal * 100) / 100
+    const grossProfit = Math.round((sumSubtotal - sumCost) * 100) / 100
+    const marginPct = netSales > 0 ? Math.round(((grossProfit / netSales) * 100) * 10) / 10 : 0
+    setPeriodNetSales(netSales)
+    setPeriodGrossProfit(grossProfit)
     setPeriodMarginPct(marginPct)
 
     // Build chronological stats. Both label widths are stored so the chart can
@@ -292,8 +321,8 @@ export default function Dashboard() {
       const dayCount = Math.round((endDay.getTime() - startDay.getTime()) / msPerDay) + 1
 
       for (let i = 0; i < dayCount; i++) {
-        const d = new Date(startDay.getTime() + i * msPerDay)
-        const dateKey = d.toISOString().split('T')[0]
+        const d = new Date(startDay.getFullYear(), startDay.getMonth(), startDay.getDate() + i)
+        const dateKey = toLocalDateKey(d)
         // Build both label widths up front; the chart picks whichever fits.
         const dayFull = d.toLocaleDateString('en-US', dayCount > 14 ? { month: 'short', day: 'numeric' } : { weekday: 'short', month: 'numeric', day: 'numeric' })
         const dayShort = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
@@ -301,16 +330,12 @@ export default function Dashboard() {
       }
 
       for (const o of orders) {
-        const dateKey = new Date(o.created_at).toISOString().split('T')[0]
+        const d = new Date(o.created_at)
+        const dateKey = toLocalDateKey(d)
         const existing = statsMap.get(dateKey)
         if (existing) {
           existing.revenue += Number(o.total_amount)
           existing.orders += 1
-        } else {
-          const d = new Date(o.created_at)
-          const dayFull = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-          const dayShort = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
-          statsMap.set(dateKey, { dayFull, dayShort, revenue: Number(o.total_amount), orders: 1, timestamp: d.getTime() })
         }
       }
     }
@@ -513,19 +538,19 @@ export default function Dashboard() {
           {/* KPIs */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 28 }}>
             <KpiCard
-              label="Total Revenue"
-              value={`\u20B1${totalRevenue.toLocaleString('en-PH', { minimumFractionDigits: 0 })}`}
-              sub="Completed orders only"
+              label="Total Revenue (Incl. VAT)"
+              value={formatPeso(totalRevenue)}
+              sub={`Net of VAT: ${formatPeso(periodNetSales)}`}
               color="#ea580c"
               trend="up"
               icon={KPI_ICONS.revenue}
             />
             <KpiCard
-              label="Net Profit & Margin"
-              value={`${periodNetProfit >= 0 ? '' : '-'}₱${Math.abs(periodNetProfit).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-              sub={`${periodMarginPct.toFixed(1)}% profit margin`}
-              color={periodNetProfit < 0 ? '#b91c1c' : periodMarginPct < 20 ? '#b45309' : '#15803d'}
-              trend={periodNetProfit < 0 ? 'down' : periodMarginPct < 20 ? 'warn' : 'up'}
+              label="Estimated Gross Profit"
+              value={formatPeso(periodGrossProfit)}
+              sub={`${periodMarginPct.toFixed(1)}% gross margin (ex-VAT)`}
+              color={periodGrossProfit < 0 ? '#b91c1c' : periodMarginPct < 20 ? '#b45309' : '#15803d'}
+              trend={periodGrossProfit < 0 ? 'down' : periodMarginPct < 20 ? 'warn' : 'up'}
               icon={KPI_ICONS.profit}
             />
             <KpiCard
@@ -538,7 +563,7 @@ export default function Dashboard() {
             />
             <KpiCard
               label="Avg. Order Value"
-              value={`\u20B1${avgOrder.toFixed(2)}`}
+              value={formatPeso(avgOrder)}
               sub="Per completed order"
               color="#c2410c"
               trend={avgOrder > 150 ? 'up' : 'down'}
@@ -565,12 +590,12 @@ export default function Dashboard() {
                   <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 3 }}>{periodLabel}</p>
                 </div>
                 <span style={{ fontFamily: 'Inter', fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>
-                  ₱{totalRevenue.toLocaleString()}
+                  {formatPeso(totalRevenue)}
                 </span>
               </div>
               <div ref={revRef} style={{ width: '100%', minWidth: 0 }}>
               <ResponsiveContainer width="100%" height={revHeight}>
-                <AreaChart data={chartData} margin={{ bottom: 20 }}>
+                <AreaChart data={chartData} margin={{ top: 8, right: 32, left: 4, bottom: 20 }}>
                   <defs>
                     <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%"  stopColor="#ea580c" stopOpacity={0.28}/>
@@ -588,8 +613,9 @@ export default function Dashboard() {
                     textAnchor={revAxis.textAnchor}
                     height={revAxis.axisHeight}
                     dy={revAxis.dy}
+                    padding={{ left: 10, right: 16 }}
                   />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} tickFormatter={v => `\u20B1${(v/1000).toFixed(0)}k`} width={38} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} tickFormatter={formatAxisPeso} width={50} />
                   <Tooltip content={<CustomTooltip />} />
                   <Area type="monotone" dataKey="revenue" stroke="#ea580c" strokeWidth={2.2} fill="url(#rev)" />
                   <Area type="monotone" dataKey="orders" stroke="transparent" />
@@ -659,7 +685,7 @@ export default function Dashboard() {
                       <span style={{ fontSize: 12, color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {o.payment_method === 'gcash' ? 'GCash' : o.payment_method === 'maya' ? 'Maya' : o.payment_method === 'card' ? 'Card' : 'Cash'}
                       </span>
-                      <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>₱{Number(o.total_amount).toLocaleString()}</span>
+                      <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--foreground)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatPeso(Number(o.total_amount) || 0)}</span>
                       <span style={{ fontSize: 11, padding: '3px 7px', borderRadius: 20, background: o.status === 'void' ? '#fce8e8' : '#e8f5e9', color: o.status === 'void' ? '#c0392b' : '#2e7d32', fontWeight: 600, textAlign: 'center', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.status === 'void' ? 'Void' : 'Paid'}</span>
                     </div>
                   ))}
@@ -670,10 +696,10 @@ export default function Dashboard() {
             {/* Orders per day bar */}
             <div className="card" style={{ padding: '24px 26px' }}>
               <h3 style={{ fontFamily: 'Inter', fontSize: 17, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Orders by Day</h3>
-              <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 18 }}>{totalOrders} total · ₱{totalRevenue.toLocaleString()}</p>
+              <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 18 }}>{totalOrders} total · {formatPeso(totalRevenue)}</p>
               <div ref={ordRef} style={{ width: '100%', minWidth: 0 }}>
               <ResponsiveContainer width="100%" height={ordHeight}>
-                <BarChart data={chartData} barSize={barSize} margin={{ bottom: 20 }}>
+                <BarChart data={chartData} barSize={barSize} margin={{ top: 8, right: 20, left: 0, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="ordLabel"
